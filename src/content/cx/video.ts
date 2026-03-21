@@ -27,14 +27,19 @@ const DRAG_STORM_THRESHOLD = 100;
 const DRAG_HYSTERESIS_DELTA = 10;
 const DRAG_STORM_RESET_POINT = DRAG_STORM_THRESHOLD - DRAG_HYSTERESIS_DELTA;
 const DRAG_RESET_WINDOW_MS = 2000;
-// Keep pause cooldown longer than reset window so each drag burst can trigger
-// at most one recovery pause, reducing pause/play storms at >2x.
-const DRAG_PAUSE_COOLDOWN_MS = 3500;
 // Apply high-rate mitigation as soon as speed exceeds normal 2x usage.
 const HIGH_RATE_THRESHOLD = 2.01;
 const PLAY_FALLBACK_CLICK_COOLDOWN_MS = 4000;
 const PLAY_RETRY_DELAY_MS = 1200;
 const RATECHANGE_REAPPLY_COOLDOWN_MS = 350;
+// Maximum milliseconds between our rate write and the ratechange event
+// dispatch for us to consider them causally linked.  The Chaoxing player's
+// ratechange→pause call happens <2 ms after we write the rate; 100 ms gives
+// ample headroom while staying well clear of any user-initiated pause.
+const RATE_CHANGE_SUPPRESS_WINDOW_MS = 100;
+// Data attribute used to signal from the content-script world to the
+// page-context injection that we have just written the playback rate.
+const RATE_TS_ATTR = 'data-cx-rate-ts';
 
 // Selectors used in the Chaoxing ananas video player.
 const SEL = {
@@ -58,6 +63,7 @@ export class VideoManager {
   private desiredRate: number;
   private savedVolumeBeforeMute = 1;
   private highRatePatchInjected = false;
+  private rateChangeGuardInjected = false;
   private lastPlayFallbackClickTimestamp = 0;
   private isApplyingRateInternally = false;
   private lastRateApplyTimestamp = 0;
@@ -138,7 +144,7 @@ export class VideoManager {
 
   /**
    * Inject a small page-context patch inspired by OCSJS:
-   * patch seekBarControl so drag-log storms trigger a brief native pause.
+   * patch seekBarControl so drag-log storms are rate-limited.
    * This mirrors OCSJS' strategy for the "一直转圈/看似加载中" stuck state
    * that can occur at higher playback rates.
    */
@@ -161,14 +167,6 @@ export class VideoManager {
           constructor: function (videoExt, data) {
             let dragCount = 0;
             let lastDragAt = 0;
-            let lastPauseAt = 0;
-            const playerElement = typeof videoExt?.el === 'function'
-              ? videoExt.el()
-              // Fallback for older Chaoxing/videojs builds where player element
-              // is exposed as internal el_ instead of el().
-              // Note: this is an internal API and may change with videojs upgrades.
-              : videoExt?.el_ ?? null;
-            const media = playerElement?.querySelector?.('video') ?? null;
             const sendLog = data && data.sendLog;
             if (typeof sendLog === 'function') {
               data.sendLog = function (...args) {
@@ -180,20 +178,12 @@ export class VideoManager {
                   }
                   lastDragAt = now;
                   dragCount += 1;
-                  // OCSJS-style mitigation: when drag storms appear, briefly
-                  // pause to break player deadlock, then let autoplay guard resume.
+                  // Rate-limit drag log bursts that can freeze the renderer at
+                  // higher playback rates.  We simply drop extra drag events
+                  // rather than pausing (pausing re-introduces auto-pause loops).
                   if (dragCount > ${DRAG_STORM_THRESHOLD}) {
-                    // Add cooldown to avoid pause/play event storms that can
-                    // freeze the page at >2x under sustained drag spam.
-                    if (now - lastPauseAt >= ${DRAG_PAUSE_COOLDOWN_MS}) {
-                      lastPauseAt = now;
-                      dragCount = ${DRAG_STORM_RESET_POINT};
-                      if (media && typeof media.pause === 'function' && !media.paused) {
-                        media.pause();
-                      }
-                    } else {
-                      dragCount = ${DRAG_STORM_RESET_POINT};
-                    }
+                    dragCount = ${DRAG_STORM_RESET_POINT};
+                    return;
                   }
                   return;
                 }
@@ -209,6 +199,49 @@ export class VideoManager {
       patch();
       document.addEventListener('readystatechange', patch, { passive: true });
       window.addEventListener('load', patch, { once: true, passive: true });
+    })();`;
+    (document.head || document.documentElement).appendChild(script);
+    script.remove();
+  }
+
+  /**
+   * Inject a page-context script that intercepts `ratechange` events at the
+   * capture phase and stops them from reaching the Chaoxing player when they
+   * originate from our own rate writes.
+   *
+   * Root cause (Trace-20260321T231710): our speedGuard writes `playbackRate`
+   * every 1200 ms via the native setter → `ratechange` fires → the Chaoxing
+   * player's bubble-phase ratechange handler calls `video.pause()` → our pause
+   * listener resumes the video → 1200 ms later the loop repeats.
+   *
+   * Fix: just before each native setter call we stamp a timestamp on the video
+   * element (`data-cx-rate-ts`).  The capture-phase listener reads that stamp;
+   * if the ratechange arrived within RATE_CHANGE_SUPPRESS_WINDOW_MS it calls
+   * `stopImmediatePropagation()` so the player's handler never runs.
+   */
+  private injectRateChangeGuard(): void {
+    if (this.rateChangeGuardInjected) return;
+    this.rateChangeGuardInjected = true;
+    const script = document.createElement('script');
+    script.id = 'cx-plus-rate-guard';
+    script.textContent = `(() => {
+      if (window.__CX_PLUS_RATE_GUARD__) return;
+      window.__CX_PLUS_RATE_GUARD__ = true;
+      // Listen at the capture phase so we run before the Chaoxing player's
+      // bubble-phase ratechange listener.  When the ratechange was caused by
+      // our extension (indicated by a fresh '${RATE_TS_ATTR}' attribute on the
+      // video element) we stop all further propagation so the player's handler
+      // cannot call pause() in response.
+      document.addEventListener('ratechange', function (e) {
+        var el = e.target;
+        if (!el || typeof el.getAttribute !== 'function') return;
+        var ts = el.getAttribute('${RATE_TS_ATTR}');
+        if (!ts) return;
+        var n = Number(ts);
+        if (n > 0 && Date.now() - n < ${RATE_CHANGE_SUPPRESS_WINDOW_MS}) {
+          e.stopImmediatePropagation();
+        }
+      }, { capture: true, passive: false });
     })();`;
     (document.head || document.documentElement).appendChild(script);
     script.remove();
@@ -252,6 +285,7 @@ export class VideoManager {
   }
 
   private attachVideoListeners(video: HTMLVideoElement): void {
+    this.injectRateChangeGuard();
     // Keep desired rate stable across source reloads / player resets.
     video.addEventListener('ratechange', () => {
       if (this.isApplyingRateInternally) return;
@@ -344,6 +378,11 @@ export class VideoManager {
       // Start cooldown window before writing playbackRate because the write can
       // synchronously trigger a ratechange event in some runtimes.
       this.lastRateApplyTimestamp = Date.now();
+      // Stamp the video element so the page-context ratechange guard can
+      // identify ratechange events caused by our writes and stop them from
+      // reaching the Chaoxing player's handler (which calls pause() in
+      // response to every ratechange, causing the ~1200 ms auto-pause loop).
+      video.setAttribute(RATE_TS_ATTR, String(this.lastRateApplyTimestamp));
       NATIVE_RATE_DESCRIPTOR?.set?.call(video, rate);
     } catch (err) {
       // Player transitions can briefly reject writes; guard intervals retry.
