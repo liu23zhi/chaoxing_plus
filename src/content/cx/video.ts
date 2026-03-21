@@ -92,6 +92,11 @@ export class VideoManager {
    */
   start(onComplete?: () => void): void {
     if (onComplete) this.onComplete = onComplete;
+    // Inject page-world interceptors as early as possible — before the first
+    // Chaoxing timer fires (~1200 ms after player init).  Both calls are
+    // idempotent so the MutationObserver below cannot double-inject.
+    this.injectRateChangeGuard();
+    this.injectRateEnforcer();
     this.findAndSetupVideo();
 
     // Also watch for dynamically inserted videos (SPAs swap content).
@@ -272,10 +277,25 @@ export class VideoManager {
    *   3. In steady state the rate never actually changes → no `ratechange` fires
    *      at all → the Chaoxing handler never sees it → no spurious `pause()`.
    *
+   * Three previous failure modes that this revision addresses:
+   *   A. The earlier version captured `nativeSetter` from the CURRENT prototype,
+   *      which may already be Chaoxing's own override (Chaoxing loads before our
+   *      content script at `document_idle`).  Using a fresh about:blank iframe
+   *      guarantees we get the TRUE browser-native setter regardless of what the
+   *      Chaoxing player has done to `HTMLMediaElement.prototype`.
+   *   B. `configurable: true` let Chaoxing re-override the property descriptor
+   *      after our enforcer ran.  We now use `configurable: false`.
+   *   C. The enforcer was only injected after the video element was found.  It
+   *      is now injected at `start()` time so it is in place before the first
+   *      Chaoxing timer fires (~1200 ms after player init).
+   *
+   * Additionally we install an own-property descriptor on each <video> element
+   * (via `applyToVideoElement`) so that even a prototype-level reset by Chaoxing
+   * cannot bypass our intercept — own properties always shadow prototype ones.
+   *
    * The content script's own `NATIVE_RATE_DESCRIPTOR?.set` (captured before this
-   * injection) is the true native setter and bypasses this override entirely,
-   * because the content script runs in Chrome's isolated-world JavaScript heap
-   * which has its own `HTMLMediaElement.prototype`.
+   * injection in Chrome's isolated-world heap) is the true native setter and
+   * bypasses this override entirely.
    */
   private injectRateEnforcer(): void {
     if (this.rateEnforcerInjected) return;
@@ -288,28 +308,78 @@ export class VideoManager {
       var RATE_TS_ATTR = '${RATE_TS_ATTR}';
       var RATE_DESIRED_ATTR = '${RATE_DESIRED_ATTR}';
       var EPSILON = ${RATE_EPSILON};
-      var nativeDesc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'playbackRate');
-      var nativeSetter = nativeDesc && nativeDesc.set;
-      var nativeGetter = nativeDesc && nativeDesc.get;
-      if (!nativeSetter || !nativeGetter) return;
-      Object.defineProperty(HTMLMediaElement.prototype, 'playbackRate', {
-        get: nativeGetter,
-        set: function (rate) {
-          var desiredStr = this.getAttribute(RATE_DESIRED_ATTR);
-          var desired = desiredStr ? parseFloat(desiredStr) : null;
-          if (desired !== null && Math.abs(rate - desired) > EPSILON) {
-            // Third-party code (e.g. Chaoxing timer) is trying to reset the
-            // rate; redirect the write to our desired rate instead.
-            rate = desired;
-          }
-          // Stamp the timestamp so the ratechange guard can suppress any
-          // resulting ratechange event before the Chaoxing player sees it.
-          this.setAttribute(RATE_TS_ATTR, String(Date.now()));
-          nativeSetter.call(this, rate);
-        },
-        configurable: true,
-        enumerable: true,
-      });
+      // ── Step 1: obtain the TRUE native playbackRate accessor ───────────────
+      // We spin up a temporary about:blank iframe whose HTMLMediaElement.prototype
+      // is guaranteed to be pristine (no page scripts can run inside it before
+      // we extract the descriptor).  This bypasses any override Chaoxing may
+      // have already applied to the MAIN window's HTMLMediaElement.prototype.
+      var trueNativeSet, trueNativeGet;
+      try {
+        var iframe = document.createElement('iframe');
+        document.documentElement.appendChild(iframe);
+        var iframeDesc = Object.getOwnPropertyDescriptor(
+          iframe.contentWindow.HTMLMediaElement.prototype, 'playbackRate'
+        );
+        trueNativeSet = iframeDesc && iframeDesc.set;
+        trueNativeGet = iframeDesc && iframeDesc.get;
+        iframe.remove();
+      } catch (_) {
+        // Fallback: take whatever is currently on the prototype.
+        var fallbackDesc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'playbackRate');
+        trueNativeSet = fallbackDesc && fallbackDesc.set;
+        trueNativeGet = fallbackDesc && fallbackDesc.get;
+      }
+      if (!trueNativeSet || !trueNativeGet) return;
+      // ── Step 2: shared interceptor logic ───────────────────────────────────
+      function interceptSet(el, rate) {
+        var desiredStr = el.getAttribute(RATE_DESIRED_ATTR);
+        var desired = desiredStr !== null ? parseFloat(desiredStr) : null;
+        if (desired !== null && !isNaN(desired) && Math.abs(rate - desired) > EPSILON) {
+          // Third-party write (e.g. Chaoxing timer) trying to reset rate.
+          rate = desired;
+        }
+        // Stamp so the ratechange guard can suppress any resulting event.
+        el.setAttribute(RATE_TS_ATTR, String(Date.now()));
+        trueNativeSet.call(el, rate);
+      }
+      // ── Step 3: prototype-level override (configurable:false prevents re-override) ──
+      try {
+        Object.defineProperty(HTMLMediaElement.prototype, 'playbackRate', {
+          get: trueNativeGet,
+          set: function (rate) { interceptSet(this, rate); },
+          configurable: false,
+          enumerable: true,
+        });
+      } catch (_) { /* already non-configurable — that is fine */ }
+      // ── Step 4: instance-level override per <video> element ────────────────
+      // Own-property descriptors shadow prototype ones, so this wins even if
+      // Chaoxing re-defines HTMLMediaElement.prototype.playbackRate later.
+      function applyToVideoElement(el) {
+        if (el.__cxPlusRateOverride) return;
+        try {
+          Object.defineProperty(el, 'playbackRate', {
+            get: function () { return trueNativeGet.call(this); },
+            set: function (rate) { interceptSet(this, rate); },
+            configurable: false,
+            enumerable: true,
+          });
+          el.__cxPlusRateOverride = true;
+        } catch (_) {}
+      }
+      // Patch any <video> elements already in the DOM.
+      document.querySelectorAll('video').forEach(applyToVideoElement);
+      // Watch for dynamically inserted <video> elements (player may swap src).
+      new MutationObserver(function (mutations) {
+        mutations.forEach(function (m) {
+          m.addedNodes.forEach(function (node) {
+            if (node.nodeType !== 1) return;
+            if (node.tagName === 'VIDEO') applyToVideoElement(node);
+            if (typeof node.querySelectorAll === 'function') {
+              node.querySelectorAll('video').forEach(applyToVideoElement);
+            }
+          });
+        });
+      }).observe(document.documentElement, { childList: true, subtree: true });
     })();`;
     (document.head || document.documentElement).appendChild(script);
     script.remove();
@@ -353,6 +423,7 @@ export class VideoManager {
   }
 
   private attachVideoListeners(video: HTMLVideoElement): void {
+    // Guards were already injected in start(); calls here are idempotent no-ops.
     this.injectRateChangeGuard();
     this.injectRateEnforcer();
     // Keep desired rate stable across source reloads / player resets.
