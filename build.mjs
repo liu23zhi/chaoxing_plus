@@ -1,7 +1,17 @@
-import { build } from 'vite';
+import { createRequire } from 'module';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { copyFileSync, mkdirSync, readdirSync, statSync, existsSync } from 'fs';
+
+// Use createRequire so that the CommonJS resolver locates vite's package.json
+// via its `main` field rather than the ESM exports map.  This avoids a known
+// Node.js 24 regression on Windows/WSL where the ESM exports-map matching
+// fails for packages accessed through Windows-style filesystem paths
+// (e.g. C:\...), causing the build to crash with "Cannot find package …/index.js".
+// Silence vite's deprecation notice for this intentional CJS fallback.
+process.env.VITE_CJS_IGNORE_WARNING = '1';
+const _require = createRequire(import.meta.url);
+const { build } = _require('vite');
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
