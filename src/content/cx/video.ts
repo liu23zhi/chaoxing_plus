@@ -40,6 +40,9 @@ const RATE_CHANGE_SUPPRESS_WINDOW_MS = 100;
 // Data attribute used to signal from the content-script world to the
 // page-context injection that we have just written the playback rate.
 const RATE_TS_ATTR = 'data-cx-rate-ts';
+// Data attribute used to communicate the desired playback rate to the
+// page-context rate-enforcer so it can redirect third-party writes.
+const RATE_DESIRED_ATTR = 'data-cx-desired-rate';
 
 // Selectors used in the Chaoxing ananas video player.
 const SEL = {
@@ -64,6 +67,7 @@ export class VideoManager {
   private savedVolumeBeforeMute = 1;
   private highRatePatchInjected = false;
   private rateChangeGuardInjected = false;
+  private rateEnforcerInjected = false;
   private lastPlayFallbackClickTimestamp = 0;
   private isApplyingRateInternally = false;
   private lastRateApplyTimestamp = 0;
@@ -248,6 +252,70 @@ export class VideoManager {
   }
 
   /**
+   * Inject a page-context script that overrides `HTMLMediaElement.prototype.playbackRate`
+   * setter so ALL rate writes — including those from the Chaoxing player's own
+   * internal timers — are intercepted.
+   *
+   * Root cause (Trace-20260321T231710): the Chaoxing player has three repeating
+   * timers (IDs 21, 22, 23 in its obfuscated script) that fire every ~1200 ms
+   * and write `playbackRate = 1.0`, resetting the rate back to normal speed.
+   * Each such write triggers a `ratechange` event.  The existing
+   * `injectRateChangeGuard()` only suppresses events stamped by OUR content
+   * script, so Chaoxing's own timer-triggered ratechanges slip through →
+   * Chaoxing's handler calls `pause()` → ~800 ms pause/resume loop.
+   *
+   * Fix: override the `playbackRate` setter in the page-context world so that:
+   *   1. Any write that would move the rate away from our desired value is silently
+   *      redirected to the desired rate.
+   *   2. Every write (redirected or not) stamps `data-cx-rate-ts` so the
+   *      ratechange guard can suppress the resulting event.
+   *   3. In steady state the rate never actually changes → no `ratechange` fires
+   *      at all → the Chaoxing handler never sees it → no spurious `pause()`.
+   *
+   * The content script's own `NATIVE_RATE_DESCRIPTOR?.set` (captured before this
+   * injection) is the true native setter and bypasses this override entirely,
+   * because the content script runs in Chrome's isolated-world JavaScript heap
+   * which has its own `HTMLMediaElement.prototype`.
+   */
+  private injectRateEnforcer(): void {
+    if (this.rateEnforcerInjected) return;
+    this.rateEnforcerInjected = true;
+    const script = document.createElement('script');
+    script.id = 'cx-plus-rate-enforcer';
+    script.textContent = `(() => {
+      if (window.__CX_PLUS_RATE_ENFORCER__) return;
+      window.__CX_PLUS_RATE_ENFORCER__ = true;
+      var RATE_TS_ATTR = '${RATE_TS_ATTR}';
+      var RATE_DESIRED_ATTR = '${RATE_DESIRED_ATTR}';
+      var EPSILON = ${RATE_EPSILON};
+      var nativeDesc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'playbackRate');
+      var nativeSetter = nativeDesc && nativeDesc.set;
+      var nativeGetter = nativeDesc && nativeDesc.get;
+      if (!nativeSetter || !nativeGetter) return;
+      Object.defineProperty(HTMLMediaElement.prototype, 'playbackRate', {
+        get: nativeGetter,
+        set: function (rate) {
+          var desiredStr = this.getAttribute(RATE_DESIRED_ATTR);
+          var desired = desiredStr ? parseFloat(desiredStr) : null;
+          if (desired !== null && Math.abs(rate - desired) > EPSILON) {
+            // Third-party code (e.g. Chaoxing timer) is trying to reset the
+            // rate; redirect the write to our desired rate instead.
+            rate = desired;
+          }
+          // Stamp the timestamp so the ratechange guard can suppress any
+          // resulting ratechange event before the Chaoxing player sees it.
+          this.setAttribute(RATE_TS_ATTR, String(Date.now()));
+          nativeSetter.call(this, rate);
+        },
+        configurable: true,
+        enumerable: true,
+      });
+    })();`;
+    (document.head || document.documentElement).appendChild(script);
+    script.remove();
+  }
+
+  /**
    * Attempt to play the video using the native `play()` to bypass any
    * overriding by the Chaoxing player.  Falls back to clicking the player's
    * play button when the promise rejects (browser autoplay policy or player
@@ -286,6 +354,7 @@ export class VideoManager {
 
   private attachVideoListeners(video: HTMLVideoElement): void {
     this.injectRateChangeGuard();
+    this.injectRateEnforcer();
     // Keep desired rate stable across source reloads / player resets.
     video.addEventListener('ratechange', () => {
       if (this.isApplyingRateInternally) return;
@@ -382,6 +451,9 @@ export class VideoManager {
       // identify ratechange events caused by our writes and stop them from
       // reaching the Chaoxing player's handler (which calls pause() in
       // response to every ratechange, causing the ~1200 ms auto-pause loop).
+      // Also publish the desired rate so the rate-enforcer can redirect any
+      // third-party writes (e.g. Chaoxing's own timer callbacks) back to it.
+      video.setAttribute(RATE_DESIRED_ATTR, String(rate));
       video.setAttribute(RATE_TS_ATTR, String(this.lastRateApplyTimestamp));
       NATIVE_RATE_DESCRIPTOR?.set?.call(video, rate);
     } catch (err) {
