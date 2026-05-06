@@ -2,88 +2,83 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Rebuild `chaoxing_plus` from an MV3 extension into a single-platform script-style project whose structure and behavior closely mirror `ocsjs`'s Chaoxing module while preserving only Chaoxing functionality.
+**Goal:** Rebuild `chaoxing_plus` into a single-platform, script-style project whose runtime shape and behavior are close to `ocsjs`'s Chaoxing module while removing the old MV3-centered architecture.
 
-**Architecture:** Replace the current `background + content + popup` extension-centered entrypoints with an `ocsjs`-style `src/index.ts` + `src/projects/cx.ts` centered runtime. Introduce a minimal local runtime that can host `Project`/`Script`-style modules, then migrate Chaoxing study, work, redirect, compatibility, and UI support logic in stages until the old MV3-only structure can be removed.
+**Architecture:** Execute the refactor in working vertical slices instead of trying to drop all of `cx.ts` onto a weak scaffold. First replace the build target and introduce a realistic local runtime, then port only the `ocsjs` core/common pieces that `cx.ts` truly depends on, then migrate Chaoxing study/work/compatibility flows in stages, and only remove the old MV3 tree after the new path builds cleanly.
 
-**Tech Stack:** TypeScript, Vite build script, local script runtime, DOM APIs, SweetAlert2, lodash, md5, typr.js, lightweight Node build tooling.
+**Tech Stack:** TypeScript, Vite, SweetAlert2, lodash, md5, typr.js, DOM APIs, local script runtime, local ports of selected `ocsjs` core/scripts modules.
 
 ---
 
 ## File Structure
 
-### Files to create
+### New files to create
 
-- `docs/superpowers/plans/2026-05-02-chaoxing-plus-ocsjs-cx-only-implementation.md` — this implementation plan.
-- `src/index.ts` — new script-style application entry that wires runtime + projects.
-- `src/runtime/project.ts` — `Project` registration abstraction.
-- `src/runtime/script.ts` — `Script` abstraction with match/config/lifecycle support.
-- `src/runtime/start.ts` — runtime bootstrap for matching and activating scripts.
-- `src/runtime/store.ts` — local storage/config state layer.
-- `src/runtime/message.ts` — notification / modal wrapper layer.
-- `src/runtime/dom.ts` — common DOM helpers needed by runtime and migrated modules.
-- `src/runtime/cors.ts` — top-window and cross-frame helpers.
-- `src/runtime/gm.ts` — local compatibility layer for `unsafeWindow`, metadata, and request shims.
-- `src/projects/cx.ts` — Chaoxing project port and orchestration center.
-- `src/projects/common.ts` — shared single-platform scripts/settings/workflow support.
-- `src/projects/background.ts` — local logging/debug support used by cx/common.
-- `src/projects/index.ts` — exports for defined local projects.
-- `src/core/index.ts` — local core exports.
-- `src/core/answer-wrapper/index.ts` — local answer-wrapper entry.
-- `src/core/answer-wrapper/interface.ts` — answer-wrapper types.
-- `src/core/answer-wrapper/answer.wrapper.parser.ts` — parser logic port.
-- `src/core/answer-wrapper/answer.wrapper.handler.ts` — answer-wrapper handler logic port.
-- `src/core/worker/index.ts` — worker exports.
-- `src/core/worker/interface.ts` — worker types.
-- `src/core/worker/worker.ts` — local `OCSWorker` implementation.
-- `src/core/worker/question.resolver.ts` — question resolver port.
-- `src/core/worker/utils.ts` — worker helpers.
-- `src/core/utils/index.ts` — core utility exports.
-- `src/core/utils/dom.ts` — core DOM search helpers.
-- `src/core/utils/request.ts` — request helpers.
-- `src/core/utils/string.ts` — string helpers.
-- `src/utils/index.ts` — shared script utility exports.
-- `src/utils/configs.ts` — reusable config descriptors.
-- `src/utils/study.ts` — wait-for-media / wait-for-element helpers.
-- `src/utils/work.ts` — work-control/result simplification helpers.
-- `src/utils/render.ts` — render/panel helper layer.
-- `src/utils/markdown.ts` — markdown helper if required by common UI.
-- `src/render.ts` — `RenderScript` equivalent.
-- `src/elements/search.infos.ts` — local custom element for answer search results.
-- `src/types/global.d.ts` — runtime globals for injected / page-bound access.
-- `scripts/build-userscript-manifest.mjs` — optional builder that outputs script-style metadata/assets if needed.
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\index.ts` — new single-entry script bootstrap.
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\runtime\types.ts` — runtime types shared by project/script/config code.
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\runtime\project.ts` — project registration helper.
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\runtime\script.ts` — script factory and instance wrapper.
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\runtime\start.ts` — runtime startup and URL/domain matching.
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\runtime\store.ts` — persistent config store.
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\runtime\message.ts` — message/modal wrapper.
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\runtime\logger.ts` — unified logging helpers.
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\runtime\dom.ts` — generic DOM helpers used by runtime and migrated code.
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\runtime\panel.ts` — minimal floating panel + render hooks.
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\runtime\cors.ts` — top-window bridge helpers.
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\runtime\gm.ts` — local `unsafeWindow` / request compatibility layer.
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\runtime\index.ts` — runtime exports.
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\projects\index.ts` — project exports and registration order.
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\projects\background.ts` — logging/debug project.
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\projects\common.ts` — settings/results/cache/panel support project.
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\projects\cx.ts` — main Chaoxing project port.
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\render.ts` — `RenderScript` equivalent.
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\core\...` — local ports of the `ocsjs` core files actually needed by `cx.ts`.
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\utils\configs.ts` — reusable config descriptors.
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\utils\study.ts` — wait-for-element/media helpers.
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\utils\work.ts` — work control/result helpers.
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\utils\index.ts` — shared utility exports.
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\elements\search.infos.ts` — result-list custom element.
 
-### Files to modify
+### Existing files to modify
 
-- `package.json` — replace extension-oriented scripts/deps with script-style runtime/build dependencies.
-- `tsconfig.json` — align compilation targets, includes, and path layout with the new source tree.
-- `build.mjs` — replace MV3 content/background/popup pipeline with script-style bundle pipeline.
-- `README.md` — update from extension usage to script-style architecture and usage.
-- `public/manifest.json` — remove when MV3 output is retired, or stop referencing it from the build.
-- `public/page-hooks.js` — keep only if still required by migrated Chaoxing hacks.
-- `public/vendor/swal-bridge.js` — keep/remove based on final message layer choice.
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\package.json`
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\package-lock.json`
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\tsconfig.json`
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\build.mjs`
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\README.md`
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\public\page-hooks.js` (keep only if the migrated rate/doc hooks still need it)
 
-### Files to delete
+### Old files to remove only near the end
 
-- `src/background/index.ts`
-- `src/content/index.ts`
-- `src/content/cx/video.ts`
-- `src/content/cx/study.ts`
-- `src/content/cx/work.ts`
-- `src/content/panel/panel.ts`
-- `src/content/utils/dom.ts`
-- `src/content/utils/logger.ts`
-- `src/popup/index.html`
-- `src/popup/popup.ts`
-- `src/popup/popup.css`
-- `src/shared/constants.ts`
-- `src/shared/types.ts`
-- `src/shared/swal.ts`
-- `public/manifest.json` (if the build fully stops targeting MV3)
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\background\index.ts`
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\content\index.ts`
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\content\cx\video.ts`
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\content\cx\study.ts`
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\content\cx\work.ts`
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\content\panel\panel.ts`
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\content\utils\dom.ts`
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\content\utils\logger.ts`
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\popup\index.html`
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\popup\popup.css`
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\popup\popup.ts`
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\shared\constants.ts`
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\shared\swal.ts`
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\shared\types.ts`
+- `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\public\manifest.json`
 
 ---
 
-### Task 1: Reframe the package as a script-style project
+## Execution rules for this plan
+
+- Do **not** create a worktree.
+- Do **not** create git commits unless the human explicitly asks for them later.
+- Keep the old MV3 source tree in place until the new script-style entry builds successfully.
+- After each task, always run the verification command(s) listed for that task before moving on.
+- If a copied `ocsjs` file imports more dependencies than the current task has introduced, stop and add the missing dependency/file in the same task before continuing.
+
+---
+
+### Task 1: Pivot the build from MV3 extension output to script-style entry output
 
 **Files:**
 - Modify: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\package.json`
@@ -91,26 +86,14 @@
 - Modify: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\build.mjs`
 - Test: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\package.json`
 
-- [ ] **Step 1: Write the failing package-shape check as a manual diff target**
-
-Create a scratch checklist in your notes before editing:
-
-```text
-Expected package changes:
-- remove popup/background/extension wording from scripts
-- add script-style build entry
-- add runtime dependencies needed by local ocsjs-style port
-- keep TypeScript + Vite buildability
-```
-
-- [ ] **Step 2: Run the current build to capture the old extension assumption**
+- [ ] **Step 1: Run the current build to capture the old baseline**
 
 Run: `npm run build`
-Expected: PASS, producing MV3 extension output under `dist/`, confirming the current build is still extension-oriented.
+Expected: PASS, with extension-oriented output under `dist/`.
 
-- [ ] **Step 3: Rewrite `package.json` for the new architecture**
+- [ ] **Step 2: Replace `package.json` scripts and dependencies so the repo targets a single script entry**
 
-Replace `package.json` with:
+Update `package.json` to this shape:
 
 ```json
 {
@@ -141,7 +124,7 @@ Replace `package.json` with:
 }
 ```
 
-- [ ] **Step 4: Rewrite `tsconfig.json` to target the new source layout**
+- [ ] **Step 3: Update `tsconfig.json` so new source files live under the new runtime tree**
 
 Replace `tsconfig.json` with:
 
@@ -170,9 +153,9 @@ Replace `tsconfig.json` with:
 }
 ```
 
-- [ ] **Step 5: Replace `build.mjs` with a single-entry script build**
+- [ ] **Step 4: Replace `build.mjs` so the build targets `src/index.ts` instead of MV3 content/background/popup entrypoints**
 
-Replace `build.mjs` with:
+Replace the file with:
 
 ```js
 import { createRequire } from 'module';
@@ -241,53 +224,297 @@ main().catch((err) => {
 });
 ```
 
-- [ ] **Step 6: Install the new dependencies**
+- [ ] **Step 5: Install the updated dependencies**
 
 Run: `npm install`
-Expected: PASS, `package-lock.json` updated with lodash/md5/typr.js/node types.
+Expected: PASS and `package-lock.json` updates.
 
-- [ ] **Step 7: Run typecheck to confirm the repo now fails for missing new entry/runtime files**
+- [ ] **Step 6: Run typecheck to verify the expected temporary failure is only “new entry missing”**
 
 Run: `npm run typecheck`
-Expected: FAIL with errors such as `Cannot find module './index.ts'` or missing imports because the new runtime tree has not been created yet.
+Expected: FAIL because `src/index.ts` does not exist yet.
 
-- [ ] **Step 8: Commit the package/build pivot**
+---
 
-```bash
-git add package.json package-lock.json tsconfig.json build.mjs
-git commit -m "refactor: pivot build toward script runtime"
-```
-
-### Task 2: Create the runtime skeleton and new application entry
+### Task 2: Introduce a realistic local runtime, not a placeholder skeleton
 
 **Files:**
 - Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\index.ts`
+- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\runtime\types.ts`
 - Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\runtime\project.ts`
 - Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\runtime\script.ts`
 - Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\runtime\start.ts`
+- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\runtime\store.ts`
+- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\runtime\message.ts`
+- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\runtime\logger.ts`
+- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\runtime\dom.ts`
+- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\runtime\panel.ts`
+- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\runtime\cors.ts`
+- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\runtime\gm.ts`
+- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\runtime\index.ts`
 - Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\projects\index.ts`
-- Test: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\index.ts`
+- Test: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\runtime\*.ts`
 
-- [ ] **Step 1: Write the failing typecheck target by referencing the future runtime API**
-
-Put this target shape in your notes:
+- [ ] **Step 1: Create `src/runtime/types.ts` with the runtime contracts that later `common.ts` and `cx.ts` will actually use**
 
 ```ts
-start(definedProjects());
-```
+export type MatchRule = [label: string, pattern: string | RegExp];
 
-Expected failure before implementation: `definedProjects` / `start` do not exist.
+export interface ConfigDefinition<T = unknown> {
+  defaultValue: T;
+  label?: string;
+  attrs?: Record<string, string | number | boolean>;
+  options?: Array<[string, string, string?]>;
+  elementClassName?: string;
+  providerClassName?: string;
+  labelClassName?: string;
+  showIf?: string;
+  separator?: string;
+}
 
-- [ ] **Step 2: Create `src/runtime/project.ts`**
+export type ConfigMap = Record<string, ConfigDefinition>;
 
-```ts
-import type { ScriptInstanceMap } from './script.js';
+export interface ScriptLifecycleContext {
+  projectName: string;
+  url: string;
+  hostname: string;
+}
+
+export interface ScriptPanel {
+  root: HTMLElement;
+  body: HTMLElement;
+  lockWrapper: HTMLElement;
+  configsContainer: HTMLElement;
+}
+
+export interface ScriptInstance {
+  name: string;
+  namespace?: string;
+  cfg: Record<string, unknown>;
+  panel?: ScriptPanel;
+  methods: Record<string, (...args: any[]) => any>;
+  onConfigChange(key: string, listener: (value: any) => void): number;
+  offConfigChange(id?: number): void;
+}
+
+export interface ScriptDefinition {
+  name: string;
+  namespace?: string;
+  matches: MatchRule[];
+  hideInPanel?: boolean | (() => boolean);
+  configs?: ConfigMap;
+  methods?: (this: ScriptInstance) => Record<string, (...args: any[]) => any>;
+  onstart?: (this: ScriptInstance, ctx: ScriptLifecycleContext) => void | Promise<void>;
+  onactive?: (this: ScriptInstance, ctx: ScriptLifecycleContext) => void | Promise<void>;
+  oncomplete?: (this: ScriptInstance, ctx: ScriptLifecycleContext) => void | Promise<void>;
+  onrender?: (this: ScriptInstance, ctx: ScriptLifecycleContext & { panel: ScriptPanel }) => void | Promise<void>;
+}
 
 export interface ProjectDefinition {
   name: string;
   domains: string[];
-  scripts: ScriptInstanceMap;
+  scripts: Record<string, ScriptDefinition>;
 }
+```
+
+- [ ] **Step 2: Create `src/runtime/store.ts` with persistent JSON-backed config helpers**
+
+```ts
+const memoryStore = new Map<string, unknown>();
+
+function readLocal<T>(key: string, fallback: T): T {
+  const raw = localStorage.getItem(key);
+  if (raw === null) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+export const runtimeStore = {
+  get<T>(key: string, fallback: T): T {
+    if (memoryStore.has(key)) {
+      return memoryStore.get(key) as T;
+    }
+    const value = readLocal(key, fallback);
+    memoryStore.set(key, value);
+    return value;
+  },
+  set<T>(key: string, value: T): void {
+    memoryStore.set(key, value);
+    localStorage.setItem(key, JSON.stringify(value));
+  },
+  remove(key: string): void {
+    memoryStore.delete(key);
+    localStorage.removeItem(key);
+  }
+};
+```
+
+- [ ] **Step 3: Create `src/runtime/message.ts`, `logger.ts`, and `dom.ts`**
+
+`src/runtime/message.ts`
+
+```ts
+import Swal from 'sweetalert2';
+
+function toast(icon: 'info' | 'success' | 'warning' | 'error', text: string, timer = 3000) {
+  void Swal.fire({
+    toast: true,
+    position: 'top-end',
+    timer,
+    showConfirmButton: false,
+    icon,
+    title: text
+  });
+}
+
+export const $message = {
+  info(args: { content: string; duration?: number } | string) {
+    const content = typeof args === 'string' ? args : args.content;
+    const duration = typeof args === 'string' ? 3000 : args.duration ?? 3000;
+    toast('info', content, duration);
+  },
+  success(args: { content: string; duration?: number } | string) {
+    const content = typeof args === 'string' ? args : args.content;
+    const duration = typeof args === 'string' ? 3000 : args.duration ?? 3000;
+    toast('success', content, duration);
+  },
+  warn(args: { content: string; duration?: number } | string) {
+    const content = typeof args === 'string' ? args : args.content;
+    const duration = typeof args === 'string' ? 5000 : args.duration ?? 5000;
+    toast('warning', content, duration);
+  },
+  error(args: { content: string; duration?: number } | string) {
+    const content = typeof args === 'string' ? args : args.content;
+    const duration = typeof args === 'string' ? 5000 : args.duration ?? 5000;
+    toast('error', content, duration);
+  }
+};
+
+export const $modal = {
+  async alert(args: { content: string } | string): Promise<void> {
+    const content = typeof args === 'string' ? args : args.content;
+    await Swal.fire({ icon: 'info', text: content, confirmButtonText: '知道了' });
+  },
+  async confirm(args: { content: string } | string): Promise<boolean> {
+    const content = typeof args === 'string' ? args : args.content;
+    const result = await Swal.fire({
+      icon: 'question',
+      text: content,
+      showCancelButton: true,
+      confirmButtonText: '确认',
+      cancelButtonText: '取消'
+    });
+    return result.isConfirmed;
+  }
+};
+```
+
+`src/runtime/logger.ts`
+
+```ts
+export type LogType = 'log' | 'info' | 'debug' | 'warn' | 'error';
+
+export function runtimeLog(type: LogType, ...args: unknown[]): void {
+  const method = type === 'debug' ? 'log' : type;
+  console[method]('[chaoxing-plus]', ...args);
+}
+```
+
+`src/runtime/dom.ts`
+
+```ts
+export function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export function observeDOM(target: ParentNode, callback: () => void): () => void {
+  const observer = new MutationObserver(() => callback());
+  observer.observe(target, { childList: true, subtree: true, attributes: true });
+  return () => observer.disconnect();
+}
+
+export function cleanText(input: Element | string): string {
+  const value = typeof input === 'string' ? input : input.textContent ?? '';
+  return value.replace(/\s+/g, ' ').trim();
+}
+```
+
+- [ ] **Step 4: Create `src/runtime/panel.ts`, `cors.ts`, and `gm.ts`**
+
+`src/runtime/panel.ts`
+
+```ts
+import type { ScriptPanel } from './types.js';
+
+export function createPanelRoot(id = 'chaoxing-plus-runtime-panel'): ScriptPanel {
+  let root = document.getElementById(id);
+  if (!root) {
+    root = document.createElement('div');
+    root.id = id;
+    root.style.position = 'fixed';
+    root.style.top = '16px';
+    root.style.right = '16px';
+    root.style.zIndex = '2147483646';
+    root.style.width = '360px';
+    root.style.maxHeight = '80vh';
+    root.style.overflow = 'auto';
+    root.style.background = '#fff';
+    root.style.border = '1px solid #ddd';
+    root.style.boxShadow = '0 8px 24px rgba(0,0,0,0.12)';
+    root.style.borderRadius = '12px';
+    root.style.padding = '12px';
+    document.body.appendChild(root);
+  }
+
+  const lockWrapper = document.createElement('div');
+  const configsContainer = document.createElement('div');
+  const body = document.createElement('div');
+  root.replaceChildren(lockWrapper, configsContainer, body);
+
+  return { root, lockWrapper, configsContainer, body };
+}
+```
+
+`src/runtime/cors.ts`
+
+```ts
+export const cors = {
+  defineTopFunction<TArgs extends unknown[]>(fn: (...args: TArgs) => void) {
+    return (...args: TArgs) => {
+      fn(...args);
+    };
+  }
+};
+```
+
+`src/runtime/gm.ts`
+
+```ts
+export const $gm = {
+  unsafeWindow: window,
+  getInfos(): undefined {
+    return undefined;
+  },
+  getMetadataFromScriptHead(_key: string): string[] {
+    return [];
+  }
+};
+
+export async function gmRequest<T>(url: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(url, init);
+  return (await response.json()) as T;
+}
+```
+
+- [ ] **Step 5: Create `src/runtime/project.ts` and `src/runtime/script.ts` with config-aware instances**
+
+`src/runtime/project.ts`
+
+```ts
+import type { ProjectDefinition } from './types.js';
 
 export class Project {
   static create(definition: ProjectDefinition): ProjectDefinition {
@@ -296,44 +523,54 @@ export class Project {
 }
 ```
 
-- [ ] **Step 3: Create `src/runtime/script.ts`**
+`src/runtime/script.ts`
 
 ```ts
-export type MatchRule = [string, string | RegExp];
+import { createPanelRoot } from './panel.js';
+import { runtimeStore } from './store.js';
+import type { ConfigMap, ScriptDefinition, ScriptInstance } from './types.js';
 
-export interface ScriptConfigMap {
-  [key: string]: unknown;
+function buildDefaultConfig(namespace: string, configs: ConfigMap = {}): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, definition] of Object.entries(configs)) {
+    result[key] = runtimeStore.get(`${namespace}.${key}`, definition.defaultValue);
+  }
+  return result;
 }
 
-export interface ScriptContext {
-  projectName: string;
-}
+export function createScriptInstance(definition: ScriptDefinition, projectName: string): ScriptInstance {
+  const namespace = definition.namespace ?? `${projectName}.${definition.name}`;
+  const listeners = new Map<number, { key: string; listener: (value: any) => void }>();
+  let nextListenerId = 1;
 
-export interface ScriptDefinition<TConfig extends ScriptConfigMap = ScriptConfigMap> {
-  name: string;
-  namespace?: string;
-  matches: MatchRule[];
-  hideInPanel?: boolean | (() => boolean);
-  configs?: TConfig;
-  methods?: () => Record<string, unknown>;
-  onstart?: (ctx: ScriptContext) => void | Promise<void>;
-  onactive?: (ctx: ScriptContext) => void | Promise<void>;
-  oncomplete?: (ctx: ScriptContext) => void | Promise<void>;
-  onrender?: (ctx: ScriptContext) => void | Promise<void>;
-}
+  const instance: ScriptInstance = {
+    name: definition.name,
+    namespace,
+    cfg: buildDefaultConfig(namespace, definition.configs),
+    panel: createPanelRoot(`panel-${namespace.replace(/[^a-z0-9_-]/gi, '-')}`),
+    methods: {},
+    onConfigChange(key, listener) {
+      const id = nextListenerId++;
+      listeners.set(id, { key, listener });
+      return id;
+    },
+    offConfigChange(id) {
+      if (typeof id === 'number') listeners.delete(id);
+    }
+  };
 
-export type ScriptInstanceMap = Record<string, ScriptDefinition>;
-
-export class Script<TConfig extends ScriptConfigMap = ScriptConfigMap> {
-  constructor(public definition: ScriptDefinition<TConfig>) {}
+  instance.methods = definition.methods?.call(instance) ?? {};
+  return instance;
 }
 ```
 
-- [ ] **Step 4: Create `src/runtime/start.ts`**
+- [ ] **Step 6: Create `src/runtime/start.ts`, `src/runtime/index.ts`, `src/projects/index.ts`, and `src/index.ts`**
+
+`src/runtime/start.ts`
 
 ```ts
-import type { ProjectDefinition } from './project.js';
-import type { MatchRule, ScriptDefinition } from './script.js';
+import { createScriptInstance } from './script.js';
+import type { MatchRule, ProjectDefinition, ScriptDefinition } from './types.js';
 
 function matchesRule(rule: MatchRule, url: string): boolean {
   const [, pattern] = rule;
@@ -356,31 +593,51 @@ export async function start(projects: ProjectDefinition[]): Promise<void> {
   for (const project of projects) {
     if (!matchesDomain(project, hostname)) continue;
 
-    for (const script of Object.values(project.scripts)) {
-      if (!matchesScript(script, url)) continue;
-      const ctx = { projectName: project.name };
-      await script.onstart?.(ctx);
-      await script.onactive?.(ctx);
-      await script.oncomplete?.(ctx);
+    for (const scriptDefinition of Object.values(project.scripts)) {
+      if (!matchesScript(scriptDefinition, url)) continue;
+      const script = createScriptInstance(scriptDefinition, project.name);
+      const ctx = { projectName: project.name, url, hostname };
+      await scriptDefinition.onstart?.call(script, ctx);
+      await scriptDefinition.onactive?.call(script, ctx);
+      await scriptDefinition.oncomplete?.call(script, ctx);
+      if (script.panel) {
+        await scriptDefinition.onrender?.call(script, { ...ctx, panel: script.panel });
+      }
     }
   }
 }
 ```
 
-- [ ] **Step 5: Create `src/projects/index.ts`**
+`src/runtime/index.ts`
 
 ```ts
-import type { ProjectDefinition } from '../runtime/project.js';
+export * from './types.js';
+export * from './project.js';
+export * from './script.js';
+export * from './start.js';
+export * from './store.js';
+export * from './message.js';
+export * from './logger.js';
+export * from './dom.js';
+export * from './panel.js';
+export * from './cors.js';
+export * from './gm.js';
+```
+
+`src/projects/index.ts`
+
+```ts
+import type { ProjectDefinition } from '../runtime/index.js';
 
 export function definedProjects(): ProjectDefinition[] {
   return [];
 }
 ```
 
-- [ ] **Step 6: Create `src/index.ts`**
+`src/index.ts`
 
 ```ts
-import { start } from './runtime/start.js';
+import { start } from './runtime/index.js';
 import { definedProjects } from './projects/index.js';
 
 start(definedProjects()).catch((err) => {
@@ -388,248 +645,46 @@ start(definedProjects()).catch((err) => {
 });
 ```
 
-- [ ] **Step 7: Run typecheck to verify the new runtime skeleton passes**
+- [ ] **Step 7: Verify the runtime baseline builds cleanly before porting any `ocsjs` code**
 
-Run: `npm run typecheck`
-Expected: PASS.
+Run: `npm run typecheck && npm run build`
+Expected: PASS and `dist/chaoxing-plus.js` exists.
 
-- [ ] **Step 8: Run build to verify `dist/chaoxing-plus.js` is generated**
+---
 
-Run: `npm run build`
-Expected: PASS with `dist/chaoxing-plus.js` present.
-
-- [ ] **Step 9: Commit the runtime skeleton**
-
-```bash
-git add src/index.ts src/runtime/project.ts src/runtime/script.ts src/runtime/start.ts src/projects/index.ts dist
-git commit -m "feat: add local script runtime skeleton"
-```
-
-### Task 3: Add storage, message, and utility runtime layers
-
-**Files:**
-- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\runtime\store.ts`
-- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\runtime\message.ts`
-- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\runtime\dom.ts`
-- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\runtime\cors.ts`
-- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\runtime\gm.ts`
-- Test: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\runtime\*.ts`
-
-- [ ] **Step 1: Write the failing typecheck target for the utility exports**
-
-Use this target import block in your notes:
-
-```ts
-import { runtimeStore } from './runtime/store.js';
-import { $message, $modal } from './runtime/message.js';
-import { defineTopFunction } from './runtime/cors.js';
-import { $gm } from './runtime/gm.js';
-```
-
-Expected failure before implementation: modules do not exist.
-
-- [ ] **Step 2: Create `src/runtime/store.ts`**
-
-```ts
-const memoryStore = new Map<string, unknown>();
-
-export const runtimeStore = {
-  get<T>(key: string, fallback?: T): T | undefined {
-    if (memoryStore.has(key)) {
-      return memoryStore.get(key) as T;
-    }
-
-    const raw = localStorage.getItem(key);
-    if (raw === null) return fallback;
-
-    try {
-      return JSON.parse(raw) as T;
-    } catch {
-      return (raw as T) ?? fallback;
-    }
-  },
-  set<T>(key: string, value: T): void {
-    memoryStore.set(key, value);
-    localStorage.setItem(key, JSON.stringify(value));
-  },
-  remove(key: string): void {
-    memoryStore.delete(key);
-    localStorage.removeItem(key);
-  }
-};
-```
-
-- [ ] **Step 3: Create `src/runtime/message.ts`**
-
-```ts
-import Swal from 'sweetalert2';
-
-function toast(icon: 'info' | 'success' | 'warning' | 'error', content: string, duration = 3000) {
-  console[icon === 'warning' ? 'warn' : icon === 'error' ? 'error' : 'log'](`[chaoxing-plus] ${content}`);
-  void Swal.fire({
-    toast: true,
-    position: 'top-end',
-    timer: duration,
-    showConfirmButton: false,
-    icon,
-    title: content
-  });
-}
-
-export const $message = {
-  info(content: string) {
-    toast('info', content);
-  },
-  success(content: string) {
-    toast('success', content);
-  },
-  warn(content: string) {
-    toast('warning', content, 5000);
-  },
-  error(content: string) {
-    toast('error', content, 5000);
-  }
-};
-
-export const $modal = {
-  async alert(content: string): Promise<void> {
-    await Swal.fire({ icon: 'info', text: content, confirmButtonText: '知道了' });
-  },
-  async confirm(content: string): Promise<boolean> {
-    const result = await Swal.fire({
-      icon: 'question',
-      text: content,
-      showCancelButton: true,
-      confirmButtonText: '确认',
-      cancelButtonText: '取消'
-    });
-    return result.isConfirmed;
-  }
-};
-```
-
-- [ ] **Step 4: Create `src/runtime/dom.ts`**
-
-```ts
-export function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-export function observeDOM(target: ParentNode, callback: () => void): () => void {
-  const observer = new MutationObserver(() => callback());
-  observer.observe(target, { childList: true, subtree: true, attributes: true });
-  return () => observer.disconnect();
-}
-
-export function cleanText(input: Element | string): string {
-  const value = typeof input === 'string' ? input : input.textContent ?? '';
-  return value.replace(/\s+/g, ' ').trim();
-}
-```
-
-- [ ] **Step 5: Create `src/runtime/cors.ts`**
-
-```ts
-export function defineTopFunction<TArgs extends unknown[]>(fn: (...args: TArgs) => void) {
-  return (...args: TArgs) => {
-    try {
-      if (window.top && window.top !== window) {
-        fn(...args);
-        return;
-      }
-    } catch {
-      // ignore and fall through
-    }
-    fn(...args);
-  };
-}
-```
-
-- [ ] **Step 6: Create `src/runtime/gm.ts`**
-
-```ts
-export const $gm = {
-  unsafeWindow: window,
-  getInfos(): undefined {
-    return undefined;
-  },
-  getMetadataFromScriptHead(_key: string): string[] {
-    return [];
-  }
-};
-```
-
-- [ ] **Step 7: Run typecheck to verify the utility layer compiles**
-
-Run: `npm run typecheck`
-Expected: PASS.
-
-- [ ] **Step 8: Commit the runtime utilities**
-
-```bash
-git add src/runtime/store.ts src/runtime/message.ts src/runtime/dom.ts src/runtime/cors.ts src/runtime/gm.ts
-git commit -m "feat: add runtime storage and ui helpers"
-```
-
-### Task 4: Port the local core answer-wrapper and worker modules
+### Task 3: Port only the `ocsjs` core files that `cx.ts` really needs
 
 **Files:**
 - Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\core\index.ts`
-- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\core\answer-wrapper\index.ts`
-- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\core\answer-wrapper\interface.ts`
-- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\core\answer-wrapper\answer.wrapper.parser.ts`
-- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\core\answer-wrapper\answer.wrapper.handler.ts`
-- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\core\worker\index.ts`
-- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\core\worker\interface.ts`
-- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\core\worker\worker.ts`
-- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\core\worker\question.resolver.ts`
-- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\core\worker\utils.ts`
-- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\core\utils\index.ts`
-- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\core\utils\dom.ts`
-- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\core\utils\request.ts`
-- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\core\utils\string.ts`
+- Create / Copy: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\core\answer-wrapper\*`
+- Create / Copy: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\core\worker\*`
+- Create / Copy: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\core\utils\*`
 - Test: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\core\**\*.ts`
 
-- [ ] **Step 1: Copy the OCSJS core source files into the local `src/core/` tree**
+- [ ] **Step 1: Copy the exact source files from `ocsjs/packages/core/src/core/` into the local `src/core/` tree**
 
-Source files to port directly from `C:\Users\Zelly\Documents\GitHub\ocsjs\packages\core\src\`:
+Run these copy commands:
 
-```text
-core/answer-wrapper/answer.wrapper.handler.ts
-core/answer-wrapper/answer.wrapper.parser.ts
-core/answer-wrapper/index.ts
-core/answer-wrapper/interface.ts
-core/worker/index.ts
-core/worker/interface.ts
-core/worker/question.resolver.ts
-core/worker/utils.ts
-core/worker/worker.ts
-core/utils/dom.ts
-core/utils/index.ts
-core/utils/request.ts
-core/utils/string.ts
-index.ts
-utils/common.ts
-utils/const.ts
-utils/index.ts
-utils/string.ts
+```bash
+mkdir -p "C:/Users/Zelly/Documents/GitHub/chaoxing_plus/src/core/answer-wrapper"
+mkdir -p "C:/Users/Zelly/Documents/GitHub/chaoxing_plus/src/core/worker"
+mkdir -p "C:/Users/Zelly/Documents/GitHub/chaoxing_plus/src/core/utils"
+cp "C:/Users/Zelly/Documents/GitHub/ocsjs/packages/core/src/core/answer-wrapper/answer.wrapper.handler.ts" "C:/Users/Zelly/Documents/GitHub/chaoxing_plus/src/core/answer-wrapper/answer.wrapper.handler.ts"
+cp "C:/Users/Zelly/Documents/GitHub/ocsjs/packages/core/src/core/answer-wrapper/answer.wrapper.parser.ts" "C:/Users/Zelly/Documents/GitHub/chaoxing_plus/src/core/answer-wrapper/answer.wrapper.parser.ts"
+cp "C:/Users/Zelly/Documents/GitHub/ocsjs/packages/core/src/core/answer-wrapper/index.ts" "C:/Users/Zelly/Documents/GitHub/chaoxing_plus/src/core/answer-wrapper/index.ts"
+cp "C:/Users/Zelly/Documents/GitHub/ocsjs/packages/core/src/core/answer-wrapper/interface.ts" "C:/Users/Zelly/Documents/GitHub/chaoxing_plus/src/core/answer-wrapper/interface.ts"
+cp "C:/Users/Zelly/Documents/GitHub/ocsjs/packages/core/src/core/worker/index.ts" "C:/Users/Zelly/Documents/GitHub/chaoxing_plus/src/core/worker/index.ts"
+cp "C:/Users/Zelly/Documents/GitHub/ocsjs/packages/core/src/core/worker/interface.ts" "C:/Users/Zelly/Documents/GitHub/chaoxing_plus/src/core/worker/interface.ts"
+cp "C:/Users/Zelly/Documents/GitHub/ocsjs/packages/core/src/core/worker/question.resolver.ts" "C:/Users/Zelly/Documents/GitHub/chaoxing_plus/src/core/worker/question.resolver.ts"
+cp "C:/Users/Zelly/Documents/GitHub/ocsjs/packages/core/src/core/worker/utils.ts" "C:/Users/Zelly/Documents/GitHub/chaoxing_plus/src/core/worker/utils.ts"
+cp "C:/Users/Zelly/Documents/GitHub/ocsjs/packages/core/src/core/worker/worker.ts" "C:/Users/Zelly/Documents/GitHub/chaoxing_plus/src/core/worker/worker.ts"
+cp "C:/Users/Zelly/Documents/GitHub/ocsjs/packages/core/src/core/utils/dom.ts" "C:/Users/Zelly/Documents/GitHub/chaoxing_plus/src/core/utils/dom.ts"
+cp "C:/Users/Zelly/Documents/GitHub/ocsjs/packages/core/src/core/utils/index.ts" "C:/Users/Zelly/Documents/GitHub/chaoxing_plus/src/core/utils/index.ts"
+cp "C:/Users/Zelly/Documents/GitHub/ocsjs/packages/core/src/core/utils/request.ts" "C:/Users/Zelly/Documents/GitHub/chaoxing_plus/src/core/utils/request.ts"
+cp "C:/Users/Zelly/Documents/GitHub/ocsjs/packages/core/src/core/utils/string.ts" "C:/Users/Zelly/Documents/GitHub/chaoxing_plus/src/core/utils/string.ts"
 ```
 
-When copying, place them under `src/core/` and keep filenames aligned with the spec.
-
-- [ ] **Step 2: Rewrite any workspace-package imports to local relative imports**
-
-Example replacement pattern to apply in copied files:
-
-```ts
-// before
-import { request } from '@ocsjs/core';
-
-// after
-import { request } from '../utils/request.js';
-```
-
-And for index exports:
+- [ ] **Step 2: Create `src/core/index.ts` as a local export surface**
 
 ```ts
 export * from './answer-wrapper/index.js';
@@ -637,55 +692,59 @@ export * from './worker/index.js';
 export * from './utils/index.js';
 ```
 
-- [ ] **Step 3: Add `src/core/index.ts` as the local public surface**
-
-```ts
-export * from './answer-wrapper/index.js';
-export * from './worker/index.js';
-export * from './utils/index.js';
-```
-
-- [ ] **Step 4: Run typecheck to capture the first wave of unresolved local dependencies**
+- [ ] **Step 3: Run typecheck to identify the real dependency gaps before editing the copied files**
 
 Run: `npm run typecheck`
-Expected: FAIL with unresolved imports from the newly copied core modules, which identifies remaining path rewrites or missing helper files.
+Expected: FAIL with concrete import/type errors inside `src/core/**/*`.
 
-- [ ] **Step 5: Finish path rewrites and remove unusable dependencies one file at a time**
+- [ ] **Step 4: Fix copied core imports using these exact rewrite rules**
 
-Apply these concrete rules while editing copied files:
+Apply these edits across the copied files:
 
 ```text
-- replace '@ocsjs/core' imports with relative local imports under src/core
-- remove playwright-only imports and code paths not used by cx.ts runtime
-- keep answer-wrapper, worker, request, dom-search, and string utilities intact
-- export only APIs that cx/common/work code will actually consume
+- Replace any '@ocsjs/core' self-imports with relative imports inside src/core.
+- Replace imports from 'easy-us' or browser-only helper packages if present; if the file only needs a utility that is not used by cx.ts, remove that dead branch instead of emulating the whole dependency.
+- Replace request helpers that rely on GM APIs with fetch/gmRequest-backed local code under src/core/utils/request.ts.
+- Keep only exports that are referenced later by src/projects/common.ts, src/projects/cx.ts, src/utils/study.ts, or src/utils/work.ts.
 ```
 
-- [ ] **Step 6: Re-run typecheck until the local core passes**
+- [ ] **Step 5: If `src/core/utils/request.ts` still depends on unavailable `GM_xmlhttpRequest`, replace it with this local implementation**
+
+```ts
+export async function request<T>(url: string, options?: { method?: string; responseType?: 'json' | 'text' }) {
+  const response = await fetch(url, { method: options?.method ?? 'GET' });
+  if (options?.responseType === 'text') {
+    return (await response.text()) as T;
+  }
+  return (await response.json()) as T;
+}
+```
+
+- [ ] **Step 6: Verify the core layer compiles before moving on**
 
 Run: `npm run typecheck`
 Expected: PASS.
 
-- [ ] **Step 7: Commit the local core port**
+---
 
-```bash
-git add src/core
-git commit -m "feat: port local ocsjs-style core modules"
-```
-
-### Task 5: Port reusable config, study, work, render, and element helpers
+### Task 4: Build the local support layer that `cx.ts` expects: common, background, render, utils, and result element
 
 **Files:**
-- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\utils\index.ts`
+- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\render.ts`
+- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\elements\search.infos.ts`
 - Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\utils\configs.ts`
 - Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\utils\study.ts`
 - Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\utils\work.ts`
-- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\utils\render.ts`
-- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\render.ts`
-- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\elements\search.infos.ts`
-- Test: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\utils\*.ts`
+- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\utils\index.ts`
+- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\projects\background.ts`
+- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\projects\common.ts`
+- Modify: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\projects\index.ts`
+- Modify: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\index.ts`
+- Test: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\projects\common.ts`
 
-- [ ] **Step 1: Create `src/render.ts` as the local render-script placeholder**
+- [ ] **Step 1: Create `src/render.ts` and `src/elements/search.infos.ts`**
+
+`src/render.ts`
 
 ```ts
 export const RenderScript = {
@@ -693,14 +752,36 @@ export const RenderScript = {
 };
 ```
 
-- [ ] **Step 2: Port `src/utils/configs.ts` with simplified local config objects**
+`src/elements/search.infos.ts`
 
-Create `src/utils/configs.ts` with:
+```ts
+export class SearchInfosElement extends HTMLElement {
+  infos: Array<{ name: string; homepage: string; results: Array<[string, string, Record<string, unknown>]>; error?: string }> = [];
+  question = '';
+
+  connectedCallback(): void {
+    this.innerHTML = `
+      <div class="search-info-title">${this.question || '无题目'}</div>
+      ${this.infos.map((info) => `
+        <details open>
+          <summary><a href="${info.homepage}" target="_blank">${info.name}</a></summary>
+          ${info.error ? `<div class="error">${info.error}</div>` : ''}
+          ${(info.results || []).map((item) => `<div><strong>答案：</strong><code>${item[1]}</code></div>`).join('')}
+        </details>
+      `).join('')}
+    `;
+  }
+}
+```
+
+- [ ] **Step 2: Create `src/utils/configs.ts`, `src/utils/study.ts`, and `src/utils/index.ts`**
+
+`src/utils/configs.ts`
 
 ```ts
 export const playbackRate = {
   label: '视频倍速',
-  options: [1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3, 3.5, 4, 6, 8, 16],
+  options: [1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3, 3.5, 4, 6, 8, 16].map((rate) => [rate.toString(), `${rate} x`] as [string, string]),
   defaultValue: '1'
 };
 
@@ -710,7 +791,7 @@ export const volume = {
 };
 
 export const workNotes = {
-  defaultValue: '自动答题前请在题库配置中设置可用题库。'
+  defaultValue: '自动答题前请先配置题库。'
 };
 
 export const dropdownStyle = {
@@ -719,9 +800,7 @@ export const dropdownStyle = {
 };
 ```
 
-- [ ] **Step 3: Port `src/utils/study.ts`**
-
-Create `src/utils/study.ts` with:
+`src/utils/study.ts`
 
 ```ts
 import { sleep } from '../runtime/dom.js';
@@ -760,20 +839,44 @@ export async function waitForElement(
 }
 ```
 
-- [ ] **Step 4: Port `src/utils/work.ts` with the minimum helpers required by `cx.ts`**
-
-Create `src/utils/work.ts` with:
+`src/utils/index.ts`
 
 ```ts
-import type { SimplifyWorkResultLike } from './index.js';
+export * from './configs.js';
+export * from './study.js';
+export * from './work.js';
 
+export async function playMedia(playFunction: () => Promise<void> | undefined | void): Promise<boolean> {
+  try {
+    const result = playFunction();
+    if (result) await result;
+    return true;
+  } catch (err) {
+    console.error('[chaoxing-plus] 播放失败', err);
+    return false;
+  }
+}
+
+export function enableCopy(elements: Array<HTMLElement | Document>) {
+  for (const target of elements) {
+    target.onselectstart = () => true;
+    target.oncopy = () => true;
+    target.onpaste = () => true;
+    target.onkeydown = () => true;
+  }
+}
+```
+
+- [ ] **Step 3: Create `src/utils/work.ts` with only the helpers that `cx.ts` consumes**
+
+```ts
 export function optimizationElementWithImage(root: HTMLElement, cloneNode = false): HTMLElement {
   const clone = cloneNode ? (root.cloneNode(true) as HTMLElement) : root;
   for (const img of Array.from(clone.querySelectorAll('img'))) {
-    const span = document.createElement('span');
-    span.innerText = img.src;
-    span.style.fontSize = '0px';
-    img.after(span);
+    const src = document.createElement('span');
+    src.innerText = img.src;
+    src.style.fontSize = '0px';
+    img.after(src);
   }
   return clone;
 }
@@ -786,134 +889,46 @@ export function splitAnswer(answer: string): string[] {
   return answer.split(/[#,，;；\n]/).map((item) => item.trim()).filter(Boolean);
 }
 
-export function simplifyWorkResult(results: SimplifyWorkResultLike[]): SimplifyWorkResultLike[] {
+export function simplifyWorkResult<T>(results: T[]): T[] {
   return results;
 }
 
 export function answerWrapperEmptyWarning(_duration: number) {
-  console.warn('[chaoxing-plus] answer wrappers are empty');
+  console.warn('[chaoxing-plus] 当前未配置题库');
 }
 
-export const workNotes = { defaultValue: '自动答题前请配置题库。' };
-```
+export interface CommonWorkStarterOptions<T> {
+  workerProvider: (opts: T) => unknown;
+  enable_control_panel?: boolean;
+}
 
-- [ ] **Step 5: Create `src/utils/render.ts` and `src/elements/search.infos.ts`**
-
-`src/utils/render.ts`
-
-```ts
-export function ensurePanelRoot(id = 'chaoxing-plus-panel-root'): HTMLElement {
-  let root = document.getElementById(id);
-  if (!root) {
-    root = document.createElement('div');
-    root.id = id;
-    document.body.appendChild(root);
-  }
-  return root;
+export function commonWork<T>(_script: unknown, options: CommonWorkStarterOptions<T>, workOptions: T): void {
+  options.workerProvider(workOptions);
 }
 ```
 
-`src/elements/search.infos.ts`
+- [ ] **Step 4: Create `src/projects/background.ts` and `src/projects/common.ts`**
+
+`src/projects/background.ts`
 
 ```ts
-export class SearchInfosElement extends HTMLElement {
-  infos: Array<{ name: string; homepage: string; results: Array<[string, string, Record<string, unknown>]>; error?: string }> = [];
-  question = '';
-  connectedCallback(): void {
-    this.innerHTML = `
-      <div class="search-info-title">${this.question || '无题目'}</div>
-      ${this.infos.map((info) => `
-        <details open>
-          <summary><a href="${info.homepage}" target="_blank">${info.name}</a></summary>
-          ${(info.results || []).map((item) => `<div><strong>答案：</strong><code>${item[1]}</code></div>`).join('')}
-        </details>
-      `).join('')}
-    `;
-  }
-}
-```
-
-- [ ] **Step 6: Create `src/utils/index.ts` to expose shared local helper types**
-
-```ts
-export interface SimplifyWorkResultLike {
-  requested?: boolean;
-  resolved?: boolean;
-  error?: string;
-  type?: string;
-  question?: string;
-  finish?: boolean;
-  searchInfos?: Array<{
-    name: string;
-    homepage: string;
-    error?: string;
-    results: Array<[string, string, Record<string, unknown>]>;
-  }>;
-}
-
-export * from './configs.js';
-export * from './study.js';
-export * from './work.js';
-export * from './render.js';
-```
-
-- [ ] **Step 7: Register the custom element in `src/index.ts`**
-
-Add this block near the top of `src/index.ts`:
-
-```ts
-import { SearchInfosElement } from './elements/search.infos.js';
-
-if (!customElements.get('search-infos')) {
-  customElements.define('search-infos', SearchInfosElement);
-}
-```
-
-- [ ] **Step 8: Run typecheck and build**
-
-Run: `npm run typecheck && npm run build`
-Expected: PASS.
-
-- [ ] **Step 9: Commit the local helper layer**
-
-```bash
-git add src/render.ts src/utils src/elements/search.infos.ts src/index.ts
-git commit -m "feat: add shared cx helper modules"
-```
-
-### Task 6: Implement the local background/common project scaffolding
-
-**Files:**
-- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\projects\background.ts`
-- Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\projects\common.ts`
-- Modify: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\projects\index.ts`
-- Test: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\projects\*.ts`
-
-- [ ] **Step 1: Create `src/projects/background.ts`**
-
-```ts
-import { Project } from '../runtime/project.js';
+import { Project } from '../runtime/index.js';
 import { $message } from '../runtime/message.js';
-
-type LogType = 'log' | 'info' | 'debug' | 'warn' | 'error';
-
-function pushLog(type: LogType, content: string): void {
-  console[type === 'debug' ? 'log' : type](`[chaoxing-plus] ${content}`);
-}
+import { runtimeLog } from '../runtime/logger.js';
 
 export const $console = {
-  log(content: string) {
-    pushLog('log', content);
+  log(content: string, ...extra: unknown[]) {
+    runtimeLog('log', content, ...extra);
   },
-  info(content: string) {
-    pushLog('info', content);
+  info(content: string, ...extra: unknown[]) {
+    runtimeLog('info', content, ...extra);
   },
-  warn(content: string) {
-    pushLog('warn', content);
+  warn(content: string, ...extra: unknown[]) {
+    runtimeLog('warn', content, ...extra);
     $message.warn(content);
   },
-  error(content: string) {
-    pushLog('error', content);
+  error(content: string, ...extra: unknown[]) {
+    runtimeLog('error', content, ...extra);
     $message.error(content);
   }
 };
@@ -925,11 +940,10 @@ export const BackgroundProject = Project.create({
 });
 ```
 
-- [ ] **Step 2: Create `src/projects/common.ts` with single-platform settings support**
+`src/projects/common.ts`
 
 ```ts
-import { Project } from '../runtime/project.js';
-import { runtimeStore } from '../runtime/store.js';
+import { Project, runtimeStore } from '../runtime/index.js';
 
 export interface CommonWorkOptions {
   period: number;
@@ -942,7 +956,7 @@ export interface CommonWorkOptions {
   answerMatchMode: 'exact' | 'includes' | 'similar';
 }
 
-const SETTINGS_KEY = 'cx.common.settings';
+const WORK_OPTIONS_KEY = 'common.settings.work-options';
 
 const defaultWorkOptions: CommonWorkOptions = {
   period: 3,
@@ -955,8 +969,10 @@ const defaultWorkOptions: CommonWorkOptions = {
   answerMatchMode: 'includes'
 };
 
+const answerCache = new Map<string, unknown>();
+
 function getWorkOptions(): CommonWorkOptions {
-  return runtimeStore.get<CommonWorkOptions>(SETTINGS_KEY, defaultWorkOptions) ?? defaultWorkOptions;
+  return runtimeStore.get(WORK_OPTIONS_KEY, defaultWorkOptions);
 }
 
 export const CommonProject = Project.create({
@@ -967,379 +983,192 @@ export const CommonProject = Project.create({
       name: '⚙️ 全局设置',
       matches: [['所有页面', /.*/]],
       namespace: 'common.settings',
-      methods: () => ({
-        getWorkOptions,
-        notificationBySetting(content: string) {
-          console.info(`[chaoxing-plus] ${content}`);
-        }
-      })
+      methods() {
+        return {
+          getWorkOptions,
+          notificationBySetting(content: string) {
+            console.info('[chaoxing-plus]', content);
+          }
+        };
+      }
     },
     workResults: {
       name: '📄 答题结果',
       matches: [['所有页面', /.*/]],
       namespace: 'common.work-results',
-      methods: () => ({
-        init() {},
-        setResults() {},
-        appendResults() {},
-        updateWorkStateByResults() {},
-        createWorkResultsPanel() {
-          const div = document.createElement('div');
-          div.textContent = '答题结果面板';
-          return div;
-        }
-      })
+      methods() {
+        return {
+          init() {},
+          setResults() {},
+          appendResults() {},
+          updateWorkStateByResults() {},
+          createWorkResultsPanel() {
+            const div = document.createElement('div');
+            div.textContent = '答题结果面板';
+            return div;
+          }
+        };
+      }
     },
     render: {
       name: '🖼️ 渲染',
       matches: [['所有页面', /.*/]],
       namespace: 'common.render',
-      methods: () => ({
-        pin() {},
-        normal() {},
-        minimize() {}
-      })
+      methods() {
+        return {
+          pin() {},
+          normal() {},
+          minimize() {}
+        };
+      }
     },
     apps: {
       name: '🔎 拓展应用',
       matches: [['所有页面', /.*/]],
       namespace: 'common.apps',
-      methods: () => ({
-        searchAnswerInCaches<T>(_title: string, provider: () => Promise<T>) {
-          return provider();
-        },
-        addQuestionCacheFromWorkResult() {}
-      })
+      methods() {
+        return {
+          searchAnswerInCaches<T>(title: string, provider: () => Promise<T>) {
+            if (answerCache.has(title)) {
+              return Promise.resolve(answerCache.get(title) as T);
+            }
+            return provider().then((result) => {
+              answerCache.set(title, result);
+              return result;
+            });
+          },
+          addQuestionCacheFromWorkResult(result: unknown) {
+            answerCache.set(`result:${Date.now()}`, result);
+          }
+        };
+      }
     }
   }
 });
 ```
 
-- [ ] **Step 3: Export the local projects in `src/projects/index.ts`**
+- [ ] **Step 5: Register the common/background projects and custom element**
 
 Replace `src/projects/index.ts` with:
 
 ```ts
-import type { ProjectDefinition } from '../runtime/project.js';
-import { BackgroundProject } from './background.js';
+import type { ProjectDefinition } from '../runtime/index.js';
 import { CommonProject } from './common.js';
+import { BackgroundProject } from './background.js';
 
-export { BackgroundProject } from './background.js';
 export { CommonProject } from './common.js';
+export { BackgroundProject } from './background.js';
 
 export function definedProjects(): ProjectDefinition[] {
   return [CommonProject, BackgroundProject];
 }
 ```
 
-- [ ] **Step 4: Run typecheck to verify the project scaffolding compiles**
+Update `src/index.ts` to:
 
-Run: `npm run typecheck`
-Expected: PASS.
+```ts
+import { start } from './runtime/index.js';
+import { SearchInfosElement } from './elements/search.infos.js';
+import { definedProjects } from './projects/index.js';
 
-- [ ] **Step 5: Commit the project scaffolding**
+if (!customElements.get('search-infos')) {
+  customElements.define('search-infos', SearchInfosElement);
+}
 
-```bash
-git add src/projects/background.ts src/projects/common.ts src/projects/index.ts
-git commit -m "feat: add common and background project scaffolding"
+start(definedProjects()).catch((err) => {
+  console.error('[chaoxing-plus] startup failed', err);
+});
 ```
 
-### Task 7: Port `CXProject` skeleton and register all Chaoxing script slots
+- [ ] **Step 6: Verify the support layer builds before touching `cx.ts`**
+
+Run: `npm run typecheck && npm run build`
+Expected: PASS.
+
+---
+
+### Task 5: Port the `CXProject` shell, domain list, environment prep, redirect scripts, and analysis helpers
 
 **Files:**
 - Create: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\projects\cx.ts`
 - Modify: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\projects\index.ts`
 - Test: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\projects\cx.ts`
 
-- [ ] **Step 1: Create the failing `CXProject` registration target**
+- [ ] **Step 1: Create `src/projects/cx.ts` by porting the script registry skeleton from `ocsjs/packages/scripts/src/projects/cx.ts`**
 
-Add this expected export block to your notes:
-
-```ts
-export { CXProject } from './projects/cx.js';
-```
-
-Expected failure before implementation: `cx.ts` does not exist.
-
-- [ ] **Step 2: Create `src/projects/cx.ts` with the full script registry skeleton**
-
-Create this file:
+The initial file must include these script keys, even if some handlers stay thin until later tasks:
 
 ```ts
-import { Project } from '../runtime/project.js';
-
-export const CXProject = Project.create({
-  name: '超星学习通',
-  domains: [
-    'chaoxing.com',
-    'edu.cn',
-    'org.cn',
-    'xueyinonline.com',
-    'hnsyu.net',
-    'qutjxjy.cn',
-    'ynny.cn',
-    'hnvist.cn',
-    'fjlecb.cn',
-    'gdhkmooc.com',
-    'cugbonline.cn',
-    'zjelib.cn',
-    'cqrspx.cn',
-    'neauce.com',
-    'zhihui-yun.com',
-    'cqie.cn',
-    'ccqmxx.com',
-    'jxgmxy.com',
-    'jnzyjsxy.cn',
-    'sslibrary.com'
-  ],
-  scripts: {
-    env: {
-      name: '环境准备脚本',
-      matches: [['所有页面', /.*/]],
-      hideInPanel: true,
-      onstart() {}
-    },
-    guide: {
-      name: '💡 使用提示',
-      matches: [
-        ['首页', 'https://www.chaoxing.com'],
-        ['旧版个人首页', 'chaoxing.com/space/index'],
-        ['新版个人首页', 'chaoxing.com/base'],
-        ['学习页面', 'chaoxing.com/mycourse'],
-        ['新版学习页面', 'chaoxing.com/mooc2-ans/mycourse']
-      ],
-      namespace: 'cx.guide',
-      oncomplete() {}
-    },
-    study: {
-      name: '🖥️ 课程学习',
-      namespace: 'cx.new.study',
-      matches: [
-        ['任务点页面', '/knowledge/cards'],
-        ['阅读任务点', '/readsvr/book/mooc']
-      ],
-      onactive() {}
-    },
-    work: {
-      name: '✍️ 作业考试脚本',
-      matches: [
-        ['作业页面', '/mooc2/work/dowork'],
-        ['考试整卷预览页面', '/mooc2/exam/preview']
-      ],
-      namespace: 'cx.new.work',
-      oncomplete() {}
-    },
-    autoRead: {
-      name: '🖥️ 自动阅读',
-      matches: [
-        ['阅读页面', '/ztnodedetailcontroller/visitnodedetail'],
-        ['课程目录', /chaoxing.com\/course\/\d+\.html/],
-        ['课程目录', /chaoxing.com\/mooc-ans\/course\/\d+\.html/],
-        ['积分课阅读课程目录', '/mooc-ans/zt/portal']
-      ],
-      namespace: 'cx.new.auto-read',
-      oncomplete() {}
-    },
-    pageRedirect: {
-      name: '章节页面自动切换脚本',
-      matches: [['课程任务页面', 'pageHeader=0']],
-      hideInPanel: true,
-      oncomplete() {}
-    },
-    versionRedirect: {
-      name: '版本切换脚本',
-      matches: [
-        ['', 'mooc2=0'],
-        ['', 'mycourse/studentcourse'],
-        ['', 'work/getAllWork'],
-        ['', 'work/doHomeWorkNew'],
-        ['', 'exam/test?'],
-        ['', 'mooc-ans/mycourse/studentstudy']
-      ],
-      hideInPanel: true,
-      oncomplete() {}
-    },
-    examRedirect: {
-      name: '考试整卷预览脚本',
-      matches: [
-        ['新版考试页面', 'exam-ans/exam/test/reVersionTestStartNew'],
-        ['新版考试页面2', 'mooc-ans/exam/test/reVersionTestStartNew']
-      ],
-      hideInPanel: true,
-      oncomplete() {}
-    },
-    rateHack: {
-      name: '屏蔽倍速限制',
-      matches: [['', '/ananas/modules/video/']],
-      hideInPanel: true,
-      onstart() {}
-    },
-    copyHack: {
-      name: '屏蔽复制粘贴限制',
-      matches: [['所有页面', /.*/]],
-      hideInPanel: true,
-      oncomplete() {}
-    },
-    studyDispatcher: {
-      name: '课程学习调度器',
-      matches: [['课程学习页面', '/mycourse/studentstudy']],
-      namespace: 'cx.new.study-dispatcher',
-      hideInPanel: true,
-      oncomplete() {}
-    },
-    cxSecretFontRecognize: {
-      name: '繁体字识别',
-      matches: [
-        ['题目页面', 'work/doHomeWorkNew'],
-        ['考试整卷预览', '/mooc2/exam/preview'],
-        ['作业', '/mooc2/work/dowork']
-      ],
-      hideInPanel: true,
-      oncomplete() {}
-    },
-    jfkGuide: {
-      name: '💡 积分课使用提示',
-      matches: [['积分课页面', '/plaza']],
-      namespace: 'cx.jfk.guide',
-      oncomplete() {}
-    }
-  }
-});
+env
+guide
+study
+work
+autoRead
+pageRedirect
+versionRedirect
+examRedirect
+rateHack
+copyHack
+studyDispatcher
+cxSecretFontRecognize
+jfkGuide
 ```
 
-- [ ] **Step 3: Register `CXProject` in `src/projects/index.ts`**
+Use the exact domain list from `ocsjs` `CXProject`.
+
+- [ ] **Step 2: Port the environment and redirect logic first, not the study/work engine yet**
+
+Port these concrete sections from `C:\Users\Zelly\Documents\GitHub\ocsjs\packages\scripts\src\projects\cx.ts` into the local file, adapting imports to local runtime/helpers:
+
+```text
+- env.onstart real top-window resolution logic
+- guide.oncomplete
+- pageRedirect.oncomplete
+- versionRedirect.oncomplete
+- examRedirect.oncomplete
+- jfkGuide.oncomplete (minimal)
+- CXAnalyses object
+```
+
+- [ ] **Step 3: Use this replacement pattern while porting**
+
+```ts
+// replace OCSJS gm access
+const unsafeTop = $gm.unsafeWindow as Window & Record<string, any>;
+
+// replace OCSJS message helpers
+$console.info('...');
+$console.warn('...');
+$console.error('...');
+```
+
+- [ ] **Step 4: Register `CXProject` in `src/projects/index.ts` only after `cx.ts` compiles**
 
 Replace `src/projects/index.ts` with:
 
 ```ts
-import type { ProjectDefinition } from '../runtime/project.js';
-import { BackgroundProject } from './background.js';
-import { CommonProject } from './common.js';
+import type { ProjectDefinition } from '../runtime/index.js';
 import { CXProject } from './cx.js';
+import { CommonProject } from './common.js';
+import { BackgroundProject } from './background.js';
 
-export { BackgroundProject } from './background.js';
-export { CommonProject } from './common.js';
 export { CXProject } from './cx.js';
+export { CommonProject } from './common.js';
+export { BackgroundProject } from './background.js';
 
 export function definedProjects(): ProjectDefinition[] {
   return [CXProject, CommonProject, BackgroundProject];
 }
 ```
 
-- [ ] **Step 4: Run typecheck and build**
+- [ ] **Step 5: Verify that the project shell builds before study/work migration starts**
 
 Run: `npm run typecheck && npm run build`
 Expected: PASS.
 
-- [ ] **Step 5: Commit the Chaoxing project skeleton**
+---
 
-```bash
-git add src/projects/cx.ts src/projects/index.ts
-git commit -m "feat: add cx project script registry"
-```
-
-### Task 8: Port `CXAnalyses`, environment prep, and redirect logic into `cx.ts`
-
-**Files:**
-- Modify: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\projects\cx.ts`
-- Test: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\projects\cx.ts`
-
-- [ ] **Step 1: Copy the `env`, `guide`, `pageRedirect`, `versionRedirect`, `examRedirect`, and `CXAnalyses` code blocks from OCSJS `cx.ts`**
-
-Source: `C:\Users\Zelly\Documents\GitHub\ocsjs\packages\scripts\src\projects\cx.ts`
-
-Copy these concrete sections:
-
-```text
-- top window resolution logic near the original env script
-- guide oncomplete logic
-- pageRedirect oncomplete logic
-- versionRedirect oncomplete logic
-- examRedirect oncomplete logic
-- CXAnalyses object
-```
-
-- [ ] **Step 2: Replace OCSJS-only calls with local equivalents**
-
-Apply the following replacements while porting:
-
-```ts
-// before
-$message.info('...')
-
-// after
-$console.info('...')
-```
-
-```ts
-// before
-CommonProject.scripts.render.methods.pin(this)
-
-// after
-// temporarily no-op until render panel is upgraded
-```
-
-```ts
-// before
-$gm.unsafeWindow.getTeacherAjax(...)
-
-// after
-(window as typeof window & { getTeacherAjax?: (...args: string[]) => void }).getTeacherAjax?.(...args)
-```
-
-- [ ] **Step 3: Add the top-level mutable `topWindowRef` and exported `CXAnalyses` to `cx.ts`**
-
-Use this local scaffold near the top of the file:
-
-```ts
-let topWindowRef: Window = globalThis.top;
-
-export const CXAnalyses = {
-  isInSpecialMode() {
-    return Array.from(topWindowRef?.document.querySelectorAll('.catalog_points_sa,.catalog_points_er') || []).length !== 0;
-  },
-  isInFinalTab() {
-    const tabs = Array.from<HTMLElement>(topWindowRef?.document.querySelectorAll('.prev_ul li') || []);
-    if (tabs.length === 0) return true;
-    return tabs[tabs.length - 1].classList.contains('active');
-  },
-  isInFinalChapter() {
-    return Array.from(topWindowRef?.document.querySelectorAll('.posCatalog_select') || [])
-      .pop()
-      ?.classList.contains('posCatalog_active');
-  },
-  getChapterInfos() {
-    return Array.from(topWindowRef?.document.querySelectorAll('[onclick^="getTeacherAjax"]') || []).map((el) => ({
-      element: el as HTMLElement,
-      chapterId: el.getAttribute('onclick')?.match(/\('(.*)','(.*)','(.*)'\)/)?.[3],
-      unFinishCount: parseInt((el.parentElement?.querySelector('.jobUnfinishCount') as HTMLInputElement | null)?.value || '0')
-    }));
-  },
-  scrollToActiveChapter() {
-    const activeChapter = topWindowRef?.document.querySelector<HTMLElement>('.posCatalog_active');
-    activeChapter?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }
-};
-```
-
-- [ ] **Step 4: Run typecheck to catch unresolved redirect/helper dependencies**
-
-Run: `npm run typecheck`
-Expected: FAIL with any unresolved helper usage introduced by the port.
-
-- [ ] **Step 5: Fix the unresolved imports and re-run typecheck**
-
-Run: `npm run typecheck`
-Expected: PASS.
-
-- [ ] **Step 6: Commit the navigation and analysis port**
-
-```bash
-git add src/projects/cx.ts
-git commit -m "feat: port cx environment and redirect flow"
-```
-
-### Task 9: Port study task search and execution flow
+### Task 6: Port the Chaoxing study dispatcher and task execution path
 
 **Files:**
 - Modify: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\projects\cx.ts`
@@ -1347,96 +1176,44 @@ git commit -m "feat: port cx environment and redirect flow"
 - Modify: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\utils\work.ts`
 - Test: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\projects\cx.ts`
 
-- [ ] **Step 1: Copy the `study()`, `searchIFrame()`, `searchJob()`, and `JobRunner.media/read/timereader/readPPTWithAudio/hyperlink` sections from OCSJS `cx.ts`**
+- [ ] **Step 1: Port the study-only data structures and state from `ocsjs` `cx.ts`**
 
-Source: `C:\Users\Zelly\Documents\GitHub\ocsjs\packages\scripts\src\projects\cx.ts`
+Bring over these exact pieces into local `cx.ts`:
 
-Port the exact functions into the local `cx.ts`, then rewrite imports/usages to local modules.
-
-- [ ] **Step 2: Add the local `Attachment`, `Job`, and `VideoQuizStrategy` types to `cx.ts`**
-
-Use these definitions:
-
-```ts
-type VideoQuizStrategy = 'random' | 'ignore';
-
-type Attachment = {
-  isPassed: boolean | undefined;
-  job: boolean | undefined;
-  jobid?: string;
-  property: {
-    mid: string;
-    _jobid: string;
-    module: 'insertbook' | 'insertdoc' | 'insertflash' | 'work' | 'insertaudio' | 'insertvideo';
-    name?: string;
-    author?: string;
-    bookname?: string;
-    publisher?: string;
-    title?: string;
-  };
-};
-
-type Job = {
-  mid: string;
-  attachment: Attachment;
-  func: (() => Promise<void>) | undefined;
-};
+```text
+- state.study object
+- VideoQuizStrategy type
+- Attachment type
+- Job type
+- searchIFrame()
+- searchJob()
+- study()
+- JobRunner.media()
+- JobRunner.read()
+- JobRunner.timereader()
+- JobRunner.readPPTWithAudio()
+- JobRunner.hyperlink()
 ```
 
-- [ ] **Step 3: Replace OCSJS helper calls with local helpers while porting**
+- [ ] **Step 2: While porting, rewrite helper references to local modules**
 
-Concrete replacements:
-
-```ts
-// before
-await $.sleep(1000)
-
-// after
-await sleep(1000)
-```
+Use these replacements:
 
 ```ts
-// before
-domSearch(...)
-
-// after
-import and use domSearch from local src/core/utils/dom.ts
+import { sleep } from '../runtime/dom.js';
+import { waitForElement, waitForMedia } from '../utils/study.js';
+import { playMedia } from '../utils/index.js';
+import { optimizationElementWithImage, answerWrapperEmptyWarning } from '../utils/work.js';
+import { $console } from './background.js';
 ```
 
-```ts
-// before
-playMedia(() => media.play())
+- [ ] **Step 3: Wire the `study` and `studyDispatcher` scripts to the migrated functions**
 
-// after
-import { playMedia } from '../utils/index.js'
-```
-
-- [ ] **Step 4: Extend `src/utils/index.ts` with `playMedia`**
-
-Append:
-
-```ts
-export async function playMedia(playFunction: () => Promise<void> | undefined | void): Promise<boolean> {
-  try {
-    const result = playFunction();
-    if (result) {
-      await result;
-    }
-    return true;
-  } catch (err) {
-    console.error('[chaoxing-plus] 播放失败', err);
-    return false;
-  }
-}
-```
-
-- [ ] **Step 5: Hook `study` and `studyDispatcher` scripts to the migrated functions**
-
-Update the `study` and `studyDispatcher` entries inside `CXProject.scripts` so they call the ported functions:
+Use this shape inside `CXProject.scripts`:
 
 ```ts
 study: {
-  // ...existing metadata
+  // existing metadata
   async onactive() {
     await study({
       playbackRate: 1,
@@ -1451,63 +1228,90 @@ study: {
       enableChapterTest: true,
       enableHyperlink: true,
       notifyWhenHasFaceRecognition: true,
-      workOptions: CommonProject.scripts.settings.methods().getWorkOptions()
+      workOptions: CommonProject.scripts.settings.methods?.call({} as any).getWorkOptions?.() ?? {
+        period: 3,
+        thread: 1,
+        upload: 'save',
+        answererWrappers: [],
+        stopSecondWhenFinish: 3,
+        redundanceWordsText: '',
+        answerSeparators: '#,|,;,；',
+        answerMatchMode: 'includes'
+      }
     });
   }
 }
 ```
 
-- [ ] **Step 6: Run typecheck**
-
-Run: `npm run typecheck`
-Expected: FAIL initially for any remaining utility gaps from the study port.
-
-- [ ] **Step 7: Fill the missing utility gaps and re-run typecheck**
+- [ ] **Step 4: Verify the study path compiles before introducing work/exam code**
 
 Run: `npm run typecheck`
 Expected: PASS.
 
-- [ ] **Step 8: Build the bundle**
+- [ ] **Step 5: Build the bundle after the study path is added**
 
 Run: `npm run build`
 Expected: PASS.
 
-- [ ] **Step 9: Commit the study-flow port**
+---
 
-```bash
-git add src/projects/cx.ts src/utils/index.ts src/utils/study.ts src/utils/work.ts
-git commit -m "feat: port cx study task execution flow"
-```
-
-### Task 10: Port work/exam flows and question-resolution pipeline
+### Task 7: Port the work/exam and chapter-test pipeline only after study is stable
 
 **Files:**
 - Modify: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\projects\cx.ts`
-- Modify: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\projects\common.ts`
 - Modify: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\utils\work.ts`
+- Modify: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\projects\common.ts`
 - Test: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\projects\cx.ts`
 
-- [ ] **Step 1: Copy `workOrExam()`, `getQuestionType()`, `readerAndFillHandle()`, and `JobRunner.chapter()` from OCSJS `cx.ts`**
+- [ ] **Step 1: Port the answering flow pieces from `ocsjs` `cx.ts`**
 
-Source: `C:\Users\Zelly\Documents\GitHub\ocsjs\packages\scripts\src\projects\cx.ts`
+Bring over these exact pieces:
 
-Port the functions into local `cx.ts`, then rewrite imports to the local `src/core` and `src/utils` modules.
+```text
+- workOrExam()
+- JobRunner.chapter()
+- getQuestionType()
+- readerAndFillHandle()
+```
 
-- [ ] **Step 2: Add a minimal `commonWork()` helper to `src/utils/work.ts`**
+- [ ] **Step 2: Expand `src/utils/work.ts` so it can launch the worker flow instead of only stubbing it**
 
-Append this implementation:
+Replace the placeholder `commonWork()` with this implementation:
 
 ```ts
-import type { CommonWorkOptions } from '../projects/common.js';
-
-export function commonWork(
-  _script: unknown,
-  options: {
-    workerProvider: (opts: CommonWorkOptions) => unknown;
-    enable_control_panel?: boolean;
-  }
+export function commonWork<T>(
+  script: { panel?: { body: HTMLElement } },
+  options: { workerProvider: (opts: T) => unknown; enable_control_panel?: boolean },
+  workOptions: T
 ): void {
-  const workOptions: CommonWorkOptions = {
+  const panel = document.createElement('div');
+  panel.textContent = '自动答题已启动';
+  script.panel?.body?.replaceChildren(panel);
+  options.workerProvider(workOptions);
+}
+```
+
+- [ ] **Step 3: Expand `src/projects/common.ts` cache methods only where `cx.ts` requires them**
+
+Ensure these method names exist and return working values:
+
+```text
+searchAnswerInCaches
+addQuestionCacheFromWorkResult
+getWorkOptions
+notificationBySetting
+```
+
+Do not add extra “future” abstractions in this task.
+
+- [ ] **Step 4: Wire the `work` script to `commonWork()` and the new `workOrExam()` port**
+
+Use this local pattern:
+
+```ts
+async oncomplete() {
+  const isExam = /\/exam\/preview/.test(location.href);
+  const workOptions = CommonProject.scripts.settings.methods?.call({} as any).getWorkOptions?.() ?? {
     period: 3,
     thread: 1,
     upload: 'save',
@@ -1517,192 +1321,90 @@ export function commonWork(
     answerSeparators: '#,|,;,；',
     answerMatchMode: 'includes'
   };
-  options.workerProvider(workOptions);
-}
-```
-
-- [ ] **Step 3: Add cache-backed answer lookup support to `src/projects/common.ts`**
-
-Inside the `apps.methods` object, replace the placeholder methods with:
-
-```ts
-const cache = new Map<string, unknown>();
-
-searchAnswerInCaches<T>(title: string, provider: () => Promise<T>) {
-  if (cache.has(title)) {
-    return Promise.resolve(cache.get(title) as T);
-  }
-  return provider().then((result) => {
-    cache.set(title, result);
-    return result;
-  });
-},
-addQuestionCacheFromWorkResult(result: unknown) {
-  cache.set(`result:${Date.now()}`, result);
-}
-```
-
-- [ ] **Step 4: Wire the `work` script in `CXProject` to call `commonWork()`**
-
-Replace the `work.oncomplete` body with:
-
-```ts
-async oncomplete() {
-  const isExam = /\/exam\/preview/.test(location.href);
   commonWork(this, {
     workerProvider: (opts) => workOrExam(isExam ? 'exam' : 'work', { ...opts, preview_mode: true }),
     enable_control_panel: true
-  });
+  }, workOptions);
 }
 ```
 
-- [ ] **Step 5: Run typecheck to capture the remaining worker/workflow gaps**
-
-Run: `npm run typecheck`
-Expected: FAIL until all imported worker/core symbols are wired correctly.
-
-- [ ] **Step 6: Finish the import rewrites and rerun typecheck**
+- [ ] **Step 5: Verify the answering pipeline compiles**
 
 Run: `npm run typecheck`
 Expected: PASS.
 
-- [ ] **Step 7: Run build**
+- [ ] **Step 6: Build after the work path is integrated**
 
 Run: `npm run build`
 Expected: PASS.
 
-- [ ] **Step 8: Commit the work/exam port**
+---
 
-```bash
-git add src/projects/cx.ts src/projects/common.ts src/utils/work.ts
-git commit -m "feat: port cx work and exam workflow"
-```
-
-### Task 11: Port font-recognition, copy-unlock, face-recognition, and rate-hack compatibility logic
+### Task 8: Port compatibility hooks, then remove the obsolete MV3 tree
 
 **Files:**
 - Modify: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\projects\cx.ts`
-- Modify: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\runtime\gm.ts`
-- Modify: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\utils\index.ts`
-- Test: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\projects\cx.ts`
+- Modify: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\README.md`
+- Delete: old MV3 files listed in the file-structure section
+- Test: repository-wide
 
-- [ ] **Step 1: Copy `mappingRecognize()`, `loadTyprMapping()`, `rateHack()`, `hasFaceRecognition()`, `hasNewFaceRecognition()`, `waitForNewFaceRecognition()`, and `waitForFaceRecognition()` from OCSJS `cx.ts`**
+- [ ] **Step 1: Port the compatibility-only helpers from `ocsjs` `cx.ts`**
 
-Port the exact logic into local `cx.ts`, then replace imports and helpers with local equivalents.
+Bring over these exact functions into the local `cx.ts`:
 
-- [ ] **Step 2: Add a fetch-backed request shim to `src/runtime/gm.ts`**
-
-Append:
-
-```ts
-export async function gmRequest<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, init);
-  return (await response.json()) as T;
-}
+```text
+mappingRecognize()
+loadTyprMapping()
+rateHack()
+hasFaceRecognition()
+hasNewFaceRecognition()
+waitForNewFaceRecognition()
+waitForFaceRecognition()
 ```
 
-- [ ] **Step 3: Add `enableCopy()` to `src/utils/index.ts`**
+- [ ] **Step 2: Attach the ported helpers to the right scripts**
 
-Append:
+Wire these `CXProject.scripts` entries to the migrated functions:
 
-```ts
-export function enableCopy(elements: Array<HTMLElement | Document>) {
-  for (const target of elements) {
-    const originalSelect = target.onselectstart;
-    const originalCopy = target.oncopy;
-    const originalPaste = target.onpaste;
-    const originalKeydown = target.onkeydown;
-
-    target.onselectstart = (event: Event) => {
-      originalSelect?.call(target, event as never);
-      event.stopPropagation();
-      return true;
-    };
-    target.oncopy = (event: ClipboardEvent) => {
-      originalCopy?.call(target, event as never);
-      event.stopPropagation();
-      return true;
-    };
-    target.onpaste = (event: ClipboardEvent) => {
-      originalPaste?.call(target, event as never);
-      event.stopPropagation();
-      return true;
-    };
-    target.onkeydown = (event: KeyboardEvent) => {
-      originalKeydown?.call(target, event as never);
-      event.stopPropagation();
-      return true;
-    };
-  }
-}
+```text
+rateHack.onstart -> rateHack()
+copyHack.oncomplete -> enableCopy([...]) and/or migrated editor-paste unlock logic
+cxSecretFontRecognize.oncomplete -> mappingRecognize()
+study / JobRunner media flow -> waitForFaceRecognition() / waitForNewFaceRecognition()
 ```
 
-- [ ] **Step 4: Attach the migrated compatibility functions to the `rateHack`, `copyHack`, and `cxSecretFontRecognize` scripts**
-
-Update the corresponding script entries in `cx.ts` so they call the ported functions directly.
-
-- [ ] **Step 5: Run typecheck and build**
+- [ ] **Step 3: Verify the new script-style path still builds before deleting the old MV3 code**
 
 Run: `npm run typecheck && npm run build`
 Expected: PASS.
 
-- [ ] **Step 6: Commit the compatibility port**
+- [ ] **Step 4: Delete the obsolete MV3 source tree and manifest only after the new path is green**
 
-```bash
-git add src/projects/cx.ts src/runtime/gm.ts src/utils/index.ts
-git commit -m "feat: port cx compatibility and anti-restriction hooks"
-```
-
-### Task 12: Remove the obsolete MV3 extension code and switch the README
-
-**Files:**
-- Delete: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\background\index.ts`
-- Delete: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\content\index.ts`
-- Delete: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\content\cx\video.ts`
-- Delete: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\content\cx\study.ts`
-- Delete: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\content\cx\work.ts`
-- Delete: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\content\panel\panel.ts`
-- Delete: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\content\utils\dom.ts`
-- Delete: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\content\utils\logger.ts`
-- Delete: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\popup\index.html`
-- Delete: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\popup\popup.css`
-- Delete: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\popup\popup.ts`
-- Delete: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\shared\constants.ts`
-- Delete: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\shared\swal.ts`
-- Delete: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\src\shared\types.ts`
-- Modify: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\README.md`
-- Test: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\README.md`
-
-- [ ] **Step 1: Delete the obsolete MV3-specific source tree**
-
-Delete these paths:
+Delete:
 
 ```text
 src/background/index.ts
 src/content/
 src/popup/
 src/shared/
+public/manifest.json
 ```
 
-- [ ] **Step 2: Replace the README header and usage model**
+- [ ] **Step 5: Rewrite `README.md` to describe the new architecture instead of the old extension UI**
 
-Rewrite `README.md` to start with:
+Replace the opening section with:
 
 ```md
 # Chaoxing Plus — 单平台版 OCSJS 风格超星脚本
 
-本项目已从 Manifest V3 浏览器扩展重构为仅保留超星平台功能的脚本型工程，内部结构尽量贴近 `ocsjs` 的 `cx.ts` 及其依赖链。
+本项目已从 Manifest V3 浏览器扩展重构为仅保留超星平台功能的脚本型工程，内部结构尽量贴近 `ocsjs` 的 `CXProject` 与相关依赖链。
 
 ## 当前定位
 
 - 仅保留超星学习通功能
 - 以 `CXProject` 为核心组织学习、答题、跳章和兼容逻辑
 - 不再以 popup / background / content script 三段式扩展结构为主
-```
 
-Then add a short development section:
-
-```md
 ## 开发
 
 ```bash
@@ -1714,26 +1416,76 @@ npm run build
 构建产物输出到 `dist/chaoxing-plus.js`。
 ```
 
-- [ ] **Step 3: Run typecheck and build after deleting the old source tree**
+- [ ] **Step 6: Run final verification after removing the old tree**
 
 Run: `npm run typecheck && npm run build`
 Expected: PASS.
 
-- [ ] **Step 4: Commit the codebase cleanup**
+---
 
-```bash
-git add README.md src build.mjs package.json tsconfig.json
-git add -u
-git commit -m "refactor: remove obsolete mv3 extension structure"
-```
-
-### Task 13: Final verification against the approved spec
+### Task 9: Final structural verification against the approved spec
 
 **Files:**
-- Modify: `C:\Users\Zelly\Documents\GitHub\chaoxing_plus\docs\superpowers\specs\2026-05-02-chaoxing-plus-ocsjs-cx-only-design.md` (only if you discover a necessary clarifying note)
 - Test: repository-wide
 
-- [ ] **Step 1: Run the full verification commands**
+- [ ] **Step 1: Verify that the new source-of-truth files exist**
+
+Check these paths:
+
+```text
+src/index.ts
+src/runtime/project.ts
+src/runtime/script.ts
+src/projects/common.ts
+src/projects/background.ts
+src/projects/cx.ts
+src/core/index.ts
+src/utils/work.ts
+src/elements/search.infos.ts
+```
+
+Expected: all present.
+
+- [ ] **Step 2: Verify that the old MV3 entrypoints are gone**
+
+Check these paths:
+
+```text
+src/content/index.ts
+src/background/index.ts
+src/popup/index.html
+src/shared/constants.ts
+public/manifest.json
+```
+
+Expected: all absent.
+
+- [ ] **Step 3: Verify the required `cx.ts` scope markers exist**
+
+Check `src/projects/cx.ts` for these named elements:
+
+```text
+env
+guide
+study
+work
+autoRead
+pageRedirect
+versionRedirect
+examRedirect
+rateHack
+copyHack
+studyDispatcher
+cxSecretFontRecognize
+CXAnalyses
+study(
+searchJob(
+workOrExam(
+```
+
+Expected: all present.
+
+- [ ] **Step 4: Run the final repository verification**
 
 Run:
 
@@ -1742,67 +1494,7 @@ npm run typecheck
 npm run build
 ```
 
-Expected:
-
-```text
-Both commands pass with no TypeScript errors and a generated dist/chaoxing-plus.js bundle.
-```
-
-- [ ] **Step 2: Manually verify the required architecture markers in the source tree**
-
-Check that these files exist:
-
-```text
-src/index.ts
-src/projects/cx.ts
-src/projects/common.ts
-src/projects/background.ts
-src/runtime/project.ts
-src/runtime/script.ts
-src/core/worker/worker.ts
-src/elements/search.infos.ts
-```
-
-Expected: all present.
-
-- [ ] **Step 3: Manually verify the old extension entrypoints are gone**
-
-Check that these paths do not exist:
-
-```text
-src/popup
-src/content/index.ts
-src/background/index.ts
-src/shared/constants.ts
-```
-
-Expected: all absent.
-
-- [ ] **Step 4: Compare the resulting `src/projects/cx.ts` to the approved spec scope**
-
-Use this checklist:
-
-```text
-- env script present
-- study script present
-- studyDispatcher present
-- work script present
-- redirect scripts present
-- rateHack / copyHack / font-recognition present
-- CXAnalyses present
-- study()/searchJob()/JobRunner present
-- workOrExam()/chapter workflow present
-```
-
-Expected: all checked.
-
-- [ ] **Step 5: Commit the final verified state**
-
-```bash
-git add -u
-git add src docs/superpowers/specs README.md dist
-git commit -m "feat: finish cx-only ocsjs-style refactor"
-```
+Expected: both commands pass, and `dist/chaoxing-plus.js` is produced.
 
 ---
 
@@ -1810,25 +1502,24 @@ git commit -m "feat: finish cx-only ocsjs-style refactor"
 
 ### Spec coverage
 
-- **单平台脚本型架构** — covered by Tasks 1, 2, 12, and 13.
-- **`CXProject` 为核心** — covered by Tasks 7, 8, 9, 10, and 11.
-- **保留超星完整主链路** — covered by Tasks 8 through 11.
-- **补齐最小运行时** — covered by Tasks 2, 3, 5, and 6.
-- **删除 MV3 外壳和无关结构** — covered by Task 12.
-- **类型检查 / 构建验收** — covered by Tasks 1, 2, 5, 7, 9, 10, 11, 12, and 13.
-
-No spec gap remains unassigned to a task.
+- **脚本型单平台架构** — covered by Tasks 1, 2, 8, and 9.
+- **以 `CXProject` 为核心** — covered by Tasks 5, 6, 7, and 8.
+- **补齐超星所需最小运行时** — covered by Tasks 2 and 4.
+- **保留学习、答题、跳转、兼容能力** — covered by Tasks 5 through 8.
+- **移除旧 MV3 外壳** — covered by Task 8.
+- **最终类型检查与构建验收** — covered by Tasks 2 through 9.
 
 ### Placeholder scan
 
-- Removed vague “implement later” wording.
-- Each task names exact files.
-- Each verification step has exact commands.
-- Each code-writing step includes concrete code to add or concrete source blocks to port.
+- No `TODO`, `TBD`, or “implement later” placeholders remain.
+- Every task has exact files.
+- Every verification step has exact commands.
+- Large ports specify exact source files/functions to bring over, not vague “copy similar code”.
+- Git commits were intentionally removed from the plan because the human did not request them.
 
 ### Type consistency
 
-- `ProjectDefinition` / `ScriptDefinition` introduced in Task 2 are the same types referenced in Tasks 6 and 7.
-- `CommonWorkOptions` introduced in Task 6 is reused in Task 10.
-- `CXProject` is introduced in Task 7 and extended in Tasks 8–11.
-- The final entrypoint remains `src/index.ts` throughout the plan.
+- `ProjectDefinition`, `ScriptDefinition`, and `ScriptInstance` are introduced in Task 2 and referenced consistently afterward.
+- `CommonWorkOptions` is introduced in Task 4 before Task 7 depends on it.
+- `CXProject` is created in Task 5 and extended in Tasks 6–8.
+- Final verification in Task 9 checks for the same file/module names introduced earlier.
