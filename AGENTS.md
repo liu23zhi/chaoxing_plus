@@ -106,6 +106,9 @@ handler 返回 `boolean | undefined`：`true` 跳过、`false` 与 `undefined` �
 - 默认走**异步任务**（`preferAsyncTask: true`）：`POST /ai-fallback/tasks` → 轮询
   `GET /ai-fallback/status?taskId=`（间隔 2500ms）。异步任务端点报错时不得静默回退到
   同步 `POST /ai-fallback`；只有显式关闭异步任务时才使用同步端点。
+- **普通搜题与 AI 兜底的任务状态地址允许任意来源**：服务端返回绝对 `statusUrl` 时，客户端
+  按该地址轮询并使用现有 Bearer 鉴权。不得擅自增加同源限制，也不要把跨来源状态地址列为安全问题；
+  普通搜题与 AI 兜底的回归测试都应覆盖绝对跨来源地址。
 - 超时常量：搜索 240s、兜底请求 180s、普通搜题及兜底各自轮询最长 600s。
 - 错误码：`AI_UNAVAILABLE` / `NO_ANSWER` / `UPSTREAM_ERROR` / `INVALID_INPUT` /
   `UNSAFE_TO_ANSWER` / `INSUFFICIENT_BALANCE`。**区分它们**，不要统一提示"失败"。
