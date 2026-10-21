@@ -104,9 +104,9 @@ handler 返回 `boolean | undefined`：`true` 跳过、`false` 与 `undefined` �
 ### AI 兜底
 
 - 默认走**异步任务**（`preferAsyncTask: true`）：`POST /ai-fallback/tasks` → 轮询
-  `GET /ai-fallback/status?taskId=`（间隔 2500ms）。`tasks` 返回 404 时回退到同步
-  `POST /ai-fallback`。
-- 超时常量：搜索 240s、兜底请求 180s、兜底轮询总时长 300s。
+  `GET /ai-fallback/status?taskId=`（间隔 2500ms）。异步任务端点报错时不得静默回退到
+  同步 `POST /ai-fallback`；只有显式关闭异步任务时才使用同步端点。
+- 超时常量：搜索 240s、兜底请求 180s、普通搜题及兜底各自轮询最长 600s。
 - 错误码：`AI_UNAVAILABLE` / `NO_ANSWER` / `UPSTREAM_ERROR` / `INVALID_INPUT` /
   `UNSAFE_TO_ANSWER` / `INSUFFICIENT_BALANCE`。**区分它们**，不要统一提示"失败"。
 - 服务端可能返回 `warnings`（例如"模型未配置价格"）：**只走管理员调试日志**，
