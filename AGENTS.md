@@ -62,8 +62,10 @@
   `plat` **已彻底移除**（服务端把它删了：该字段所有调用方恒为 `-1`、没有区分度）。
   不要因为看到历史文档或旧日志里有 `plat: -1` 就加回去。
 - 鉴权用 `Authorization: Bearer <key>`（`createTikuAdapterAuthorizationHeader`），密钥不拼进 URL。
-- 端点由 `createTikuAdapterSearchUrl` / `createTikuAdapterAIFallbackUrl` /
-  `createTikuAdapterAIFallbackTaskUrl` / `createTikuAdapterAIFallbackStatusUrl` 统一生成，
+- 端点由 `createTikuAdapterSearchUrl` / `createTikuAdapterSearchTaskUrl` /
+  `createTikuAdapterSearchStatusUrl` / `createTikuAdapterSearchHealthUrl` /
+  `createTikuAdapterAIFallbackUrl` / `createTikuAdapterAIFallbackTaskUrl` /
+  `createTikuAdapterAIFallbackStatusUrl` 统一生成，
   不要手写路径字符串。
 - `qid` 为空字符串；`courseName` / `extra` 为空字符串。
 
@@ -106,6 +108,15 @@ handler 返回 `boolean | undefined`：`true` 跳过、`false` 与 `undefined` �
 - 默认走**异步任务**（`preferAsyncTask: true`）：`POST /ai-fallback/tasks` → 轮询
   `GET /ai-fallback/status?taskId=`（间隔 2500ms）。异步任务端点报错时不得静默回退到
   同步 `POST /ai-fallback`；只有显式关闭异步任务时才使用同步端点。
+- 普通异步搜题前每题执行 `/search/health`，并实际查询响应中的 `statusUrl`；只有健康
+  探测失败或普通任务**创建**返回 404 才使用旧同步 `/search`。创建成功后的状态查询失败
+  不得回退同步，仍由轮询层累计连续 3 次失败。健康探测 401/403 不回退同步。
+- 普通和 AI 异步**创建**重试须复用同一 `Idempotency-Key` 与请求体；状态查询每轮只发
+  一次，由轮询层独占重试计数。显式同步 AI 请求在无法确认幂等时不盲目重发。
+- `src/core/utils/request.js` 是当前构建的实际运行路径；修改通用请求重试或超时逻辑时，
+  同步维护 `request.ts` 和 `request.js`，并检查构建产物。超时必须中止在途 `fetch`。
+  通用请求仅对 GET/HEAD 或带服务端幂等键的请求允许多次尝试；未知副作用的 POST
+  即使配置了 `retry` 也只请求一次。
 - **普通搜题与 AI 兜底的任务状态地址允许任意来源**：服务端返回绝对 `statusUrl` 时，客户端
   按该地址轮询并使用现有 Bearer 鉴权。不得擅自增加同源限制，也不要把跨来源状态地址列为安全问题；
   普通搜题与 AI 兜底的回归测试都应覆盖绝对跨来源地址。
