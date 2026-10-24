@@ -21,10 +21,11 @@
 - 改了代码就要**实际运行**验证，并把原始输出贴出来，不要只描述"应该没问题"：
   - 全量测试：`node --test scripts/*.test.mjs`
   - 类型检查：`node node_modules/typescript/bin/tsc --noEmit`
-- `scripts/*.test.mjs` 通配必须确实展开；当前有 24 个测试文件，新增或删除测试后按实际文件列表核对，不要把数量写死在执行脚本中。只跑单个文件不能代表全量通过。
+- `scripts/*.test.mjs` 通配必须确实展开；新增或删除测试后按实际文件列表核对，不要把数量写死在执行脚本中。只跑单个文件不能代表全量通过。
 - PowerShell 可显式展开后执行：`$testFiles = @(Get-ChildItem -LiteralPath scripts -Filter '*.test.mjs' -File | Sort-Object Name | Select-Object -ExpandProperty FullName); $testFiles.Count; node --test @testFiles`。
 - 测试数量对不上时，先确认通配展开、再确认是否漏跑——不要凭"看起来都过了"下结论。
 - 修改运行时代码或扩展入口后，还要运行 `npm run build`；浏览器弹窗、iframe 与层级问题必须做实际浏览器回归，不能只靠源码字符串断言。
+- 项目类型检查使用 TypeScript 7；测试脚本若需 `transpileModule`，从 `@typescript/typescript6` 导入。测试中的单文件 CommonJS 编译统一经 `scripts/test-helpers/tsc-compat.mjs`，不得直接调用 TypeScript 7 CLI（它不提供旧 API，也不支持原有的 `moduleResolution=node` 参数）。
 - 汇报命令、退出码和原始结果摘要；明确区分自动化模拟页面验证与真实超星课程页面验证，未做真实课程验证时如实说明。
 - `dist/` 是构建产物且已被 `.gitignore` 忽略，**不要手工改 `dist/`**。
 - `.tmp-tests*` 目录由测试自行重建，已在 `.gitignore` 内。
