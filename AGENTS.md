@@ -175,3 +175,51 @@ handler 返回 `boolean | undefined`：`true` 跳过、`false` 与 `undefined` �
   改这一个不要顺手改另一个。
 - 汇报事实，不要把推测写成结论。例如"我没找到某文件的引用"应说成
   "在本仓库全量搜索无匹配"，而不是"该文件引用了不存在的 X"。
+
+---
+
+## Windows 端（CEF 75 / CDP 注入）
+
+`windows/` 是超星考试客户端（CEF 75.1.4 / Chromium 75.0.3770.100）的宿主实现，设计说明见 `docs/windows.md`。
+
+### 必须遵守的边界
+
+- **Chrome 75 语法闸门**：`npm run build:windows` 会拒绝 `?.` / `??` / 逻辑赋值 / 私有类成员 / 静态块等语法。
+  - 业务主包由构建按 `target: chrome75` 自动转译；`windows/bootstrap/windows-bootstrap.js`、`windows/host/trampoline.js` 必须手工保持 ES2019/ES5 可解析。
+  - `src/projects/tiku-adapter-config.ts` 等**运行期 `Function(...)` 求值的 handler 字符串不会经过构建转译**，新增/修改 handler 时必须保持 ES2019 语法（禁止 `?.`、`??`）。
+- `dist-windows/` 与 `windows/data/` 是构建产物/本机配置，均已 gitignore；不要手工修改或提交。
+- 宿主只连接自己启动、且监听 PID 校验通过的本机客户端；不要加入“自动连接任意端口/进程”的默认行为。`--attach` 仅供测试/调试。
+- 页面配置通道只允许共享键（`common.settings.*`、`cx.new.*` 等，见 `windows/host/config.mjs`）；不要把逐题缓存写进宿主配置。
+- 页面侧在 about:blank/srcdoc 等不透明 origin 中访问 `localStorage` 会抛 `SecurityError`，业务 runtime store 必须保持容错（已有 `windows-store-safety` 测试）。
+- 真实考试客户端验证需要 UAC 与人工登录，不能在自动化测试里宣称已完成；汇报时明确区分“mock CDP / 真实 Chromium 冒烟（宿主链路）”与“真实 CEF 75 客户端页面验证”。
+
+### Windows 相关验证命令
+
+```bash
+npm run typecheck
+npm run build
+npm run build:windows
+node --test scripts/windows-host.test.mjs scripts/windows-bootstrap.test.mjs scripts/windows-chrome75.test.mjs scripts/windows-store-safety.test.mjs
+node windows/host/main.mjs --self-check
+```
+
+新增 Windows 行为时，按 repo 既有约定补充 `scripts/windows-*.test.mjs`，并保证全量 `scripts/*.test.mjs` 通过；修改扩展主包共用代码（如 `src/runtime/store.ts`）后必须同时跑扩展构建与全量测试。
+
+### 渲染诊断与“悬浮窗模糊”类问题
+
+- 启动模式默认写渲染诊断到 `windows/data/diagnostics/<时间戳>/`（`render-diagnostics.json` + page/window png）。排查模糊、缩放、面板定位问题时保留并分析这些产物，`--no-diagnose` 只用于确认正常。
+- 悬浮窗样式保持：**不使用 backdrop-filter、使用紧凑阴影、不透明或近不透明底色、fixed 位置与外宽都吸附设备像素网格**；`scripts/pink-panel-ui.test.mjs` 有对应回归断言（2026-10-26 真实客户端确认：CEF75 支持 backdrop-filter，旧面板 blur 即“悬浮窗附近模糊”的根因）。
+- `--dpi-aware` / `dpiAwareness: "system"` 的 `HIGHDPIAWARE` 兼容层只允许“启动前临时写入 → CreateProcess → 立即恢复”，禁止持久修改 `AppCompatFlags\Layers`。
+- 判断 DPI 模糊：`dpiDiagnosis.status=mismatch`（窗口 DPI ≠ 系统 DPI）说明 Windows 在位图缩放整个客户端窗口；`pageDiagnosis.findings` 非空说明是页面样式/定位问题。真实客户端上的结论只能来自人工运行后的诊断文件，不要把本地 Chromium 冒烟当成真实 CEF75 结论。
+
+### Windows 默认折叠与面板生命周期
+
+- **Windows 面板考试专用化**：Windows 端只服务考试/答题场景，业务侧通过 `isWindowsHostRuntime()`（检测 bootstrap 注入的 `window.__CX_WIN_HOST__`）：
+  - 只在考试路径创建面板（`isWindowsExamRelatedUrl`：`/exam-ans/`、`/exam/test/`、`/mooc2/exam`、`/reVersionTestStartNew`、`/examcode/`）；登录/课程/跳转页不显示面板；
+  - 默认折叠；裁剪学习相关功能（媒体控制、学习流程、任务能力、完成后动作、日志窗口、题库缓存列表区块），保留答题结果、题库配置、考试自动交卷、AI 搜题等考试功能。
+- **Chrome 扩展必须保持完整面板与默认展开**：扩展不注入 `__CX_WIN_HOST__`，不得把 Windows 裁剪逻辑写成无条件分支；`pink-panel-ui.test.mjs` 会同时断言 Windows 分支裁剪与扩展分支保留完整分组。
+- **提前挂载折叠壳**：`windows/bootstrap/windows-bootstrap.js` 在考试页面新文档开始时挂载 `panel-common-work-results` 折叠壳（`data-cx-win-panel-shell=1`），业务 `createPanelRoot` 复用同一节点；不要改壳 id 或删除壳 keep-alive/点击展开标记逻辑。
+- **面板所有权只能由顶层 frame 占用**：`claimTopWindowPanelOwnership()` 必须先判断 `window.self === window.top`，非顶层 frame 直接返回 false、绝不写顶层 `data-chaoxing-plus-panel-owner`。答题页大量 about:blank iframe 被注入时，子 frame 抢占 owner 会隐藏顶层面板（2026-10-26 实测问题）。
+- **顶层面板必须可自愈**：`ensureTopPanelKeepAlive(root)` 用 MutationObserver 在面板被 SPA 替换 body 移除后重新 append；不要删除该逻辑。
+- **顶层注入兜底**：`windows/host/inject.mjs` 在顶层 `Page.frameNavigated` 后 2.5 秒检查 `__CX_WIN_HOST__` / `__CX_WIN_BUNDLE_LOADED__` 并补注入；新增导航相关逻辑时不要移除 `scheduleTopFrameEnsure()`。
+- 面板生命周期日志（`[context]`、`[nav]`、`[panel]`、`[panel] 已提前挂载折叠面板壳`）是排查“面板消失/闪烁”的主要依据；改动日志字段时同步更新 `docs/windows.md`。
