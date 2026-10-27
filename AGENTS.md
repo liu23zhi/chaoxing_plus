@@ -206,6 +206,7 @@ npm run build:windows
 node --test scripts/windows-host.test.mjs scripts/windows-bootstrap.test.mjs scripts/windows-chrome75.test.mjs scripts/windows-store-safety.test.mjs scripts/windows-selection-window.test.mjs
 node windows/host/main.mjs --self-check
 node windows/host/main.mjs --capabilities
+node --test scripts/windows-injection.browser.mjs
 ```
 
 原生选择窗口交互冒烟（会实际弹窗、自动关闭，仅本机手动执行）：
@@ -234,3 +235,12 @@ $env:CX_TEST_NATIVE_WINDOW='1'; node --test scripts/windows-selection-window.tes
 - **顶层面板必须可自愈**：`ensureTopPanelKeepAlive(root)` 用 MutationObserver 在面板被 SPA 替换 body 移除后重新 append；不要删除该逻辑。
 - **顶层注入兜底**：`windows/host/inject.mjs` 在顶层 `Page.frameNavigated` 后 2.5 秒检查 `__CX_WIN_HOST__` / `__CX_WIN_BUNDLE_LOADED__` 并补注入；新增导航相关逻辑时不要移除 `scheduleTopFrameEnsure()`。
 - 面板生命周期日志（`[context]`、`[nav]`、`[panel]`、`[panel] 已提前挂载折叠面板壳`）是排查“面板消失/闪烁”的主要依据；改动日志字段时同步更新 `docs/windows.md`。
+
+### Windows 配置与重连回归
+
+- Windows 6.2.0 第一阶段仅支持普通运行；内存执行、删除挂起、启动清理和自毁必须在 CLI/JSON/配置入口显式拒绝，并在 capability 和生成器中保持禁用。未接入的设计模型及其单元测试通过，不代表发布入口支持该能力。
+- 配置合并必须保留前层未被覆盖的共享 `settings`；跨字段冲突及 `noDiskWrite` 派生规则在全部层合并后校验，不能提前用低优先级层拒绝最终有效配置。
+- 配置文件热更新必须重新应用 CLI 与内联 JSON 优先级；不能直接以磁盘原始值替换已生效的页面配置。修改此链路时运行 `scripts/windows-config-reload.test.mjs` 及宿主集成测试。
+- 宿主广播配置须使用 `{kind: "config", values: settings}` 消息包装；回归必须检查真实 bootstrap 的 DOM 属性和配置闭包已更新，不能只断言发出了 `Runtime.evaluate`。同实例重连复用原配置桥，不重复安装页面监听；本次启动的 `noDiskWrite` 策略须在热更新及页面同步中保持一致。
+- CDP 断线后必须关闭旧会话并允许对同一存活 target 重连；首次连接和重连也必须安排顶层注入兜底，不能仅依赖导航或历史 console `ready` 回放。
+- 注入生命周期变更须运行 `scripts/windows-injection-lifecycle.test.mjs` 和实际 Chromium 的 `scripts/windows-injection.browser.mjs`，覆盖并发去重、上下文销毁、关闭后停止重试以及重连恢复；自动化测试页面仍不能替代真实 CEF 75 考试页面验收。
