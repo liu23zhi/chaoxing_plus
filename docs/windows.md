@@ -26,7 +26,7 @@ Node 宿主当前仍需 Node.js 22+，其客户端选择窗口还使用 PowerShe
 
 原生客户端选择使用 Win32 控件和 `GetOpenFileNameW`：显示序号、架构、文件版本、完整路径与推荐项，支持双击、确认和手动浏览；扫描无候选时仍可浏览，取消不会启动客户端。所选路径会再次检查有效 PE 和系统架构兼容性。
 
-原生宿主现已接入文件日志与运行报告，`--capabilities` 中 `fileLogging:true`、`runReport:true`；渲染诊断、配置持久化和配置热更新仍未接入，`renderDiagnostics:false`、`configReload:false`。接受部分参数或将设置传入页面不等于实现对应宿主行为，原生宿主仍不与 Node 宿主完整等价。原生版本仍为原型，其构建依赖本机 MSVC x86 工具链和 Windows SDK；x86/x64 客户端适配及旧版 Windows 兼容性仍需在目标干净环境验收。
+原生宿主现已接入共享配置同步、持久化、文件热更新、文件日志与运行报告，`--capabilities` 中 `configReload:true`、`configPersistence:true`、`fileLogging:true`、`runReport:true`；渲染诊断仍未接入，`renderDiagnostics:false`。接受部分参数或将设置传入页面不等于实现对应宿主行为，原生宿主仍不与 Node 宿主完整等价。原生版本仍为原型，其构建依赖本机 MSVC x86 工具链和 Windows SDK；x86/x64 客户端适配及旧版 Windows 兼容性仍需在目标干净环境验收。
 
 下文完整参数和 `start-windows.cmd` 示例以 Node 宿主为准；原生原型的具体参数以它自己的 `--help`、`--capabilities` 和已执行测试为准，不默认宣称与 Node 全部等价。两条宿主都不提供启动清理、内存执行、删除挂起或自毁能力；这些请求必须明确拒绝，不能静默降级为普通运行。
 
@@ -37,6 +37,24 @@ Node 宿主当前仍需 Node.js 22+，其客户端选择窗口还使用 PowerShe
 “单文件”和“旧系统兼容”需要分别验收：[Node 24 官方平台要求](https://github.com/nodejs/node/blob/v24.12.0/BUILDING.md)为 Windows 10 / Server 2016 起，Windows 发布架构为 x64/arm64；[SEA 打包](https://nodejs.org/download/release/v24.12.0/docs/api/single-executable-applications.html)不能降低这一系统要求。[Go 1.21 起](https://go.dev/doc/go1.21#windows)也以 Windows 10 / Server 2016 为最低要求，原设计的 Go 1.22+ 静态构建不能据此宣称覆盖 Windows 7。Chromium 75 [官方构建说明](https://github.com/chromium/chromium/blob/75.0.3770.100/build/config/win/BUILD.gn)仍以 Windows 7 为受支持系统；样本 PE 头的 `5.1` 声明不能证明客户端支持 Windows XP。
 
 后续普通单文件宿主仍须补齐与 Node 的参数行为差异，并在明确的 x86/x64、旧版和现代 Windows 干净环境中验证。当前 CDP 使用 TCP/WebSocket 通信，宿主与客户端无需相同位数；没有必要仅为页面注入拆分两套业务资源。现代 Chromium 自动化已覆盖原生实际 WebSocket 注入、导航、iframe、新 target、CSP 回退和限时关闭；历史探针和样式诊断只证明当时记录的局部行为，**本次 Windows 6.2.0 第一阶段尚未完成真实 CEF75 客户端端到端验收**。
+
+### 原生共享配置与热更新
+
+原生 EXE 的默认配置是 **EXE 同级的 `chaoxing-plus.json`**，与 Node 的 `windows/data/config.json` 不同，也不随原生 `--data-dir` 改变。`--config <path>` 选择配置回写目标，相对路径按进程工作目录解析；显式文件在启动时必须可读取。未指定 `--config` 且默认文件不存在时使用内存默认值，首次有效页面修改才按需创建默认文件及父目录。
+
+原生合并顺序为：内置默认值 < EXE 同级配置 < `--config` 指定配置 < `--options-json` 启动快照 < 独立 CLI 参数。`--options-json @file` 也只在启动时读取一次，不作为热更新文件。宿主每 1500ms 检查默认文件及显式配置文件的修改时间、大小与存在状态，重新加载后仍应用原始内联 JSON 和 CLI 优先级。各层未覆盖的共享键保留；同名解码键按后层值合并，重复更新不会追加重复键而持续增大配置。
+
+文件热更新只改变页面共享设置，客户端、端口、资源目录、注入策略等启动选项需要重启宿主。`noDiskWrite` 与日志启用策略按本次启动结果锁定，页面同步和外部文件都不能在运行期间改变它们。无效 JSON、类型或范围不合法的更新整笔拒绝，保留上一份有效内存快照。
+
+删除默认 `chaoxing-plus.json` 会将该层视为空层，回落到内置默认值及仍生效的内联 JSON/CLI，并移除该文件独有的共享键；显式 `--config` 文件被删除或不可读取时则拒绝重载，保留最后有效快照。两种情况在文件恢复有效内容后都可继续热更新。
+
+页面 `config-sync` 只接收共享键白名单，并校验 `source: "chaoxing-plus-windows"`、本轮唯一 `instance` 和仍存活、已登记且完成 bootstrap 的默认执行上下文；已实际完成 bootstrap 的顶层 fallback 也可参与。页面事件只验证并排队，配置文件 I/O 与 CDP 广播放在主循环的任务间执行，避免等待 CDP 回复时重入发送。配置任务与 bootstrap/bundle 串行，导航或销毁会使旧任务失效；总开关从关闭恢复开启后，已就绪但未注入的文档可以继续，已完成的 bundle 不重复执行。
+
+有效页面修改先更新内存并广播，文件写入按 250ms 去抖。持久化会重新读取当前文件，保留未覆盖的共享设置及未知顶层字段，把完整 UTF-8 内容写入自有临时文件，再以 `MoveFileExW` 替换目标；解析、生成或替换失败不覆盖原文件，只清理自有临时文件。写入失败时继续使用内存值并保留待保存 patch；待保存修改优先，未成功保存前不发布外部文件快照覆盖它。`--no-disk-write` 禁止配置文件、临时文件及其父目录创建，也禁止 bootstrap/runtimeStore 写入或删除 localStorage，但仍允许内存同步、DOM 镜像和读取已有配置。
+
+原生广播完整快照使用 `{kind:"config", values:settings, replace:true}`。缺失的旧共享键会从配置闭包、DOM 属性和延迟属性队列移除；允许写盘时同步删除 localStorage，并通过独立 `chaoxing-plus:shared-store-remove` 事件清理 runtimeStore 内存。无写盘模式保留旧磁盘值，但删除标记阻止当前 runtimeStore 把它重新读回；后续重新水合该键会清除删除标记。删除通知不回流为 `config-sync`，非共享键不受删除影响。不带 `replace:true` 的配置消息继续使用增量合并语义；同实例重连复用原桥并按完整快照重新水合。新宿主接管仍存续的文档时，通过原桥 `adoptInstance()` 同时更新原发送闭包的实例标识和配置快照，避免旧身份导致同步被拒绝；监听器、面板与已完成业务包继续复用。
+
+`scripts/windows-native-config.test.mjs` 验证已编译 C 配置驱动的真实文件操作；`scripts/windows-native-config.browser.mjs` 用原生 EXE 和现代 Chromium 模拟页面验证同步、持久化、热更新与重新连接。两者均不代表真实 CEF75 客户端登录后页面验收，执行方法见下文。
 
 ### 原生文件日志与运行报告
 
@@ -110,6 +128,8 @@ windows/
   native/selection.c           无 CRT 的 Win32 候选选择、文件浏览与隐藏控件探针
   native/session.c             上下文/导航/就绪任务状态机与取消代次
   native/host-session.inc      原生 target 轮询、真实 WebSocket 会话与生命周期适配
+  native/host-config.inc       原生配置排队、启动优先级、文件热更新与串行广播
+  native/config-store.c        共享 JSON 规范合并、变更键选择与配置文件安全替换
   native/audit.c               无 CRT 的 UTC 固定事件日志、独立 JSON 运行报告与写入失败降级
   native/build.ps1             x86 构建、RCDATA 与导入表审计；-BuildTests 生成 C 测试程序
   data/                        本地配置与日志（gitignore）：config.json / logs/
@@ -260,7 +280,7 @@ vendor/sweetalert2.min.css  config.example.json  package-manifest.json
 
 参考项目中的 `cef-hook` 是当前进程内的 CEF/Detours hook，不能安全地作为通用外部注入器复用；本宿主因此采用“启动客户端时注入受控远程调试参数 + 校验 Browser/PID/端口归属 + CDP 多路径页面注入”。宿主不会自动连接任意已有端口；`--attach` 仅用于测试/调试。
 
-CDP 断开时关闭旧页面会话；target 仍存在则在下一轮枚举重新连接。初次连接、重连和顶层导航后都会延迟检查 bootstrap/bundle，避免已有 bootstrap 不再发送 `ready` 时漏注入。同一执行上下文的并发 `ready` 合并为一次业务注入；上下文销毁或会话关闭后，迟到结果作废，停止后续策略切换及重试。DOM script 注入使用执行完成标记识别 CSP 阻止或脚本异常，失败后按所选策略回退，不把无异常的 CDP 响应当作脚本已成功执行。配置广播统一发送 `{kind:"config", values:...}`；同实例重连复用已有配置桥水合最新快照，不重复安装监听或面板。
+CDP 断开时关闭旧页面会话；target 仍存在则在下一轮枚举重新连接。初次连接、重连和顶层导航后都会延迟检查 bootstrap/bundle，避免已有 bootstrap 不再发送 `ready` 时漏注入。同一执行上下文的并发 `ready` 合并为一次业务注入；上下文销毁或会话关闭后，迟到结果作废，停止后续策略切换及重试。DOM script 注入使用执行完成标记识别 CSP 阻止或脚本异常，失败后按所选策略回退，不把无异常的 CDP 响应当作脚本已成功执行。配置广播使用 `{kind:"config", values:...}` 包装；原生宿主的完整快照另带 `replace:true` 以删除已移除的旧共享键，不带该标记时保留增量合并语义。同实例重连复用已有配置桥水合最新完整快照，不重复安装监听或面板。
 
 运行报告累计保留历次 target 会话的统计；断线重连或页面关闭不会抹去此前成功注入的计数，也不会因此误报“没有完成任何业务注入”。
 
@@ -572,15 +592,18 @@ $env:CX_NATIVE_SESSION_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bi
 $env:CX_NATIVE_SELECTION_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\selection-tests.exe').Path
 $env:CX_NATIVE_TRANSPORT_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\transport-tests.exe').Path
 $env:CX_NATIVE_AUDIT_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\audit-tests.exe').Path
+$env:CX_NATIVE_CONFIG_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\config-store-tests.exe').Path
 try {
-  node --test scripts/windows-native-host.test.mjs scripts/windows-native-assets.test.mjs scripts/windows-native-options.test.mjs scripts/windows-native-session.test.mjs scripts/windows-native-selection.test.mjs scripts/windows-native-transport.test.mjs scripts/windows-native-audit.test.mjs
-  node --test scripts/windows-native-injection.browser.mjs scripts/windows-native-assets.browser.mjs scripts/windows-native-lifecycle.browser.mjs scripts/windows-native-audit.browser.mjs
+  node --test scripts/windows-native-host.test.mjs scripts/windows-native-assets.test.mjs scripts/windows-native-options.test.mjs scripts/windows-native-session.test.mjs scripts/windows-native-selection.test.mjs scripts/windows-native-transport.test.mjs scripts/windows-native-audit.test.mjs scripts/windows-native-config.test.mjs
+  node --test scripts/windows-native-injection.browser.mjs scripts/windows-native-assets.browser.mjs scripts/windows-native-lifecycle.browser.mjs scripts/windows-native-audit.browser.mjs scripts/windows-native-config.browser.mjs
 } finally {
-  Remove-Item Env:CX_NATIVE_HOST_EXE, Env:CX_NATIVE_INJECTION_EXE, Env:CX_NATIVE_ASSETS_EXE, Env:CX_NATIVE_OPTIONS_EXE, Env:CX_NATIVE_SESSION_EXE, Env:CX_NATIVE_SELECTION_EXE, Env:CX_NATIVE_TRANSPORT_EXE, Env:CX_NATIVE_AUDIT_EXE -ErrorAction SilentlyContinue
+  Remove-Item Env:CX_NATIVE_HOST_EXE, Env:CX_NATIVE_INJECTION_EXE, Env:CX_NATIVE_ASSETS_EXE, Env:CX_NATIVE_OPTIONS_EXE, Env:CX_NATIVE_SESSION_EXE, Env:CX_NATIVE_SELECTION_EXE, Env:CX_NATIVE_TRANSPORT_EXE, Env:CX_NATIVE_AUDIT_EXE, Env:CX_NATIVE_CONFIG_EXE -ErrorAction SilentlyContinue
 }
 ```
 
-`-BuildTests` 编译实际原生宿主注入代码与确定性 mock CDP 传输，输出 `injection-tests.exe`，同时生成 `assets-tests.exe`、`options-tests.exe`、`json-tests.exe`、`session-tests.exe`、`selection-tests.exe`、`transport-tests.exe` 和 `audit-tests.exe`。`CX_NATIVE_INJECTION_EXE` 启用策略顺序、重试上限、CDP 请求 ID 及执行确认测试；`CX_NATIVE_ASSETS_EXE` 启用资源字节校验；`CX_NATIVE_OPTIONS_EXE` 启用实际 C 参数回归；`CX_NATIVE_SESSION_EXE` 检查导航、iframe、取消代次和任务去重；`CX_NATIVE_SELECTION_EXE` 构建真实 Win32 隐藏控件；`CX_NATIVE_TRANSPORT_EXE` 检查分段 WebSocket 消息、零超时和控制帧截止时间；`CX_NATIVE_AUDIT_EXE` 检查真实日志/报告文件、中文路径、quiet/noDiskWrite、UTF-8/JSON 转义和文件失败降级。未设置对应变量时会显示跳过，不能称为已完成编译验证。`json-tests.exe` 可直接执行验证 JSON 解析。`CX_NATIVE_HOST_EXE` 用于原生 CLI、实际 Chromium 生命周期及审计回归，`--capabilities` 校验内嵌资源并报告 `embeddedResources:true`、资源数量及 `fileLogging:true`/`runReport:true`。`build/pe-imports.txt` 是导入表审计记录；这些测试仍不等同于真实客户端验收。
+`-BuildTests` 编译实际原生宿主注入代码与确定性 mock CDP 传输，输出 `injection-tests.exe`，同时生成 `assets-tests.exe`、`options-tests.exe`、`json-tests.exe`、`session-tests.exe`、`selection-tests.exe`、`transport-tests.exe`、`audit-tests.exe` 和 `config-store-tests.exe`。`CX_NATIVE_INJECTION_EXE` 启用策略顺序、重试上限、CDP 请求 ID 及执行确认测试；`CX_NATIVE_ASSETS_EXE` 启用资源字节校验；`CX_NATIVE_OPTIONS_EXE` 启用实际 C 参数回归；`CX_NATIVE_SESSION_EXE` 检查导航、iframe、取消代次、配置任务和启用恢复；`CX_NATIVE_SELECTION_EXE` 构建真实 Win32 隐藏控件；`CX_NATIVE_TRANSPORT_EXE` 检查分段 WebSocket 消息、零超时和控制帧截止时间；`CX_NATIVE_AUDIT_EXE` 检查真实日志/报告文件、中文路径、quiet/noDiskWrite、UTF-8/JSON 转义和文件失败降级；`CX_NATIVE_CONFIG_EXE` 检查共享键解码去重、容量边界、真实文件 patch、原文件保留和自有临时文件清理。未设置对应变量时会显示跳过，不能称为已完成编译验证。`json-tests.exe` 可直接执行验证 JSON 解析。`CX_NATIVE_HOST_EXE` 用于原生 CLI、现代 Chromium 生命周期、审计及配置回归，`--capabilities` 校验内嵌资源并报告 `embeddedResources:true`、资源数量以及 `configReload:true`/`configPersistence:true`/`fileLogging:true`/`runReport:true`。`build/pe-imports.txt` 是导入表审计记录；这些测试仍不等同于真实客户端验收。
+
+2026-10-28 本轮验证记录：显式展开 55 个 `scripts/*.test.mjs`，560/560 通过、0 跳过；原有 6 个浏览器回归文件共 50/50 通过，新增原生配置浏览器回归 8/8 通过，合计 58 项。类型检查、扩展构建、Chrome75 构建、原生 `-BuildTests` 均退出 0；Node 宿主 self-check 为 0 失败、0 警告。本轮原生 EXE 为 498176 字节，导入表仅含 Windows 系统 DLL。编译后的故障回归先失败、修复后通过，覆盖写盘失败期间不丢失更新的内存配置；浏览器回归覆盖新宿主接管旧文档，以及默认/显式配置文件删除后的不同恢复行为。自有宿主、浏览器和监听端口已关闭。以上为本地驱动、mock CDP 与现代 Chromium 自动化证据，尚未执行真实 CEF75 客户端登录后验证；后续执行时应重新展开测试文件并报告当次实际数量。
 
 原生 Win32 选择窗口的实际显示与自动选择冒烟需单独启用，整个过程中不会启动考试客户端：
 
@@ -617,13 +640,15 @@ try {
 - `windows-native-selection.test.mjs`：实际 C Win32 控件探针、推荐项与 Unicode 标题；`CX_TEST_NATIVE_WINDOW=1` 时显示窗口并测试自动取消、选中有效 Unicode 路径，均不启动客户端。
 - `windows-native-transport.test.mjs`：无 CRT 的传输接口及实际 WebSocket 分段读、零超时、连续控制帧总截止时间回归。
 - `windows-native-audit.test.mjs`：`CX_NATIVE_AUDIT_EXE` 驱动实际目录与文件，覆盖中文空格/相对路径、日志防覆盖、UTC UTF-8、quiet/no-log/noDiskWrite、报告 JSON 转义及生成失败保留旧报告、日志真实文件锁写失败后关闭句柄。
+- `windows-native-config.test.mjs`：`CX_NATIVE_CONFIG_EXE` 驱动实际 C 配置模块，覆盖解码键规范化、重复合并不膨胀、共享白名单、未知顶层字段保留、中文/空格/相对路径、原文件无效或替换失败时保留原文，以及仅清理自有临时文件。
 - `windows-native-injection.browser.mjs` / `windows-native-assets.browser.mjs`：真实 Chromium 执行实际 C 生成的表达式，验证 CSP/异常/语法错误/无挂载节点以及顶层 Swal CSS 安装；不代表 CEF75 登录后页面验收。
 - `windows-native-lifecycle.browser.mjs`：已编译原生宿主通过真实 WebSocket 连接现代 Chromium，覆盖三种策略、导航后每文档只执行一次、延迟 about:blank iframe、新 page target、CSP 回退、空白 iframe 开关、非超星页面限制、Browser 不匹配拒绝、断线去重及 console 历史清除后的 iframe 恢复；还覆盖 `--duration` 关闭会话但保留 attach 浏览器。不代表真实 CEF75 人工登录验收。
 - `windows-native-audit.browser.mjs`：`CX_NATIVE_HOST_EXE` 驱动现代 Chromium 模拟页面，验证实际日志/报告落盘、quiet/no-log/no-disk-write/no-capture-console、页面异常与 bootstrap 控制事件脱敏、重连累计与停止时存活上下文统计、正常取消不误计错误；不代表真实 CEF75 登录后页面验收。
+- `windows-native-config.browser.mjs`：`CX_NATIVE_HOST_EXE` 驱动现代 Chromium 模拟页面，覆盖 EXE 同级/显式配置文件回写、热更新及删除恢复、新宿主接管旧文档、来源/实例/上下文校验、CLI/内联覆盖、大 UTF-8 配置、无效更新事务拒绝、完整快照删除及重加、跨 origin iframe/新文档/新 target/重连、无写盘锁定；不代表真实 CEF75 登录后页面验收。
 - `windows-selection-window.test.mjs`：原生选择窗口脚本纯 ASCII 约束、结果合约（选中/取消/自动关闭/错误）、PowerShell 进程参数与 UTF-8 JSON 载荷、WinForms 控件构建探针；`CX_TEST_NATIVE_WINDOW=1` 时额外验证真实窗口显示与宿主 `--ui gui`/`--select-client` 接线（自动关闭）。
-- `windows-bootstrap.test.mjs`：共享配置水合、DOMContentLoaded 延迟、`replaceChildren`/`randomUUID` 补丁、总开关、配置同步、重复注入去重。
+- `windows-bootstrap.test.mjs`：共享配置水合、DOMContentLoaded 延迟、`replaceChildren`/`randomUUID` 补丁、总开关、配置同步及来源字段、完整快照删除与重加、延迟属性清理、无写盘删除、同实例重连去重与新实例接管旧发送闭包。
 - `windows-chrome75.test.mjs`：构建产物与内置 handler 字符串必须通过 Chrome75 语法闸门（`?.`/`??`/逻辑赋值/私有成员/静态块均不允许）。
-- `windows-store-safety.test.mjs`：不透明 origin（about:blank）下 `localStorage` 抛 `SecurityError` 时业务 store 不崩溃。
+- `windows-store-safety.test.mjs`：不透明 origin（about:blank）下 `localStorage` 抛 `SecurityError` 时业务 store 不崩溃；无写盘模式的共享删除事件清理内存并屏蔽旧磁盘值，重新水合可恢复且不回流同步。
 - `swal-iframe.browser.mjs`：同源多层 iframe、跨源 iframe、顶层运行时延迟初始化、确认/取消/拒绝/计时器结果回传、面板层级覆盖与不受信来源拒绝。
 
 `npm run build:windows` 本身也带语法闸门，失败会中止构建。
