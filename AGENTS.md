@@ -191,10 +191,11 @@ handler 返回 `boolean | undefined`：`true` 跳过、`false` 与 `undefined` �
 - 宿主只连接自己启动、且监听 PID 校验通过的本机客户端；不要加入“自动连接任意端口/进程”的默认行为。`--attach` 仅供测试/调试。
 - 页面配置通道只允许共享键（`common.settings.*`、`cx.new.*` 等，见 `windows/host/config.mjs`）；不要把逐题缓存写进宿主配置。
 - 页面侧在 about:blank/srcdoc 等不透明 origin 中访问 `localStorage` 会抛 `SecurityError`，业务 runtime store 必须保持容错（已有 `windows-store-safety` 测试）。
-- **原生客户端选择窗口**（`--ui gui` / `--select-client`）：由 `windows/host/selection-window.ps1`（Windows PowerShell 5.1+ WinForms，不新增 npm 依赖）实现，Node 封装在 `windows/host/selection-window.mjs`。
+- **Node 宿主的客户端选择窗口**（`--ui gui` / `--select-client`）：由 `windows/host/selection-window.ps1`（Windows PowerShell 5.1+ WinForms，不新增 npm 依赖）实现，Node 封装在 `windows/host/selection-window.mjs`。
   - `.ps1` 必须保持**纯 ASCII**：Windows PowerShell 5.1 对无 BOM 的 `.ps1` 按 ANSI/OEM 解码，中文字面量会让整段脚本语法错误；所有界面文案一律经 Node 写入的 UTF-8 JSON 传入（已在 `windows-selection-window.test.mjs` 断言）。
   - 窗口结果合约：输出文件 JSON `{path,cancelled,error}`；`--self-check` 只构建控件（`-Probe`，不显示窗口）；`--ui gui` 在非 Windows/窗口不可用时必须显式报错，不得静默降级。
   - 自动化验证：`node --test scripts/windows-selection-window.test.mjs`（含 WinForms 控件探针）；真实窗口冒烟用 `CX_TEST_NATIVE_WINDOW=1`，并依赖 `CXPLUS_SELECTION_AUTO_CLOSE_MS` 自动关闭，禁止在自动化中阻塞等待人工点击。
+- **原生 EXE 的客户端选择窗口**：由 `windows/native/selection.c` 使用 Win32 控件和 `GetOpenFileNameW` 实现，不依赖 Node、PowerShell、WinForms 或 CRT。保留序号、架构、版本、完整路径和推荐项；无候选仍可浏览；选中路径必须重新校验有效 PE 和系统架构，取消不得启动客户端。编译 `selection-tests.exe` 后设置 `CX_NATIVE_SELECTION_EXE` 运行 `scripts/windows-native-selection.test.mjs`；隐藏控件探针无需显示窗口，真实显示/取消/选择冒烟需显式设置 `CX_TEST_NATIVE_WINDOW=1`，自动取消变量为 `CXPLUS_NATIVE_SELECTION_AUTO_CLOSE_MS`。测试不得执行所选客户端。
 - 真实考试客户端验证需要 UAC 与人工登录，不能在自动化测试里宣称已完成；汇报时明确区分“mock CDP / 真实 Chromium 冒烟（宿主链路）”“原生选择窗口冒烟”与“真实 CEF 75 客户端页面验证”。
 
 ### Windows 相关验证命令
@@ -209,7 +210,7 @@ node windows/host/main.mjs --capabilities
 node --test scripts/windows-injection.browser.mjs
 ```
 
-原生选择窗口交互冒烟（会实际弹窗、自动关闭，仅本机手动执行）：
+Node 宿主的 WinForms 选择窗口交互冒烟（会实际弹窗、自动关闭，仅本机手动执行）：
 
 ```powershell
 $env:CX_TEST_NATIVE_WINDOW='1'; node --test scripts/windows-selection-window.test.mjs; Remove-Item Env:CX_TEST_NATIVE_WINDOW
@@ -244,5 +245,9 @@ $env:CX_TEST_NATIVE_WINDOW='1'; node --test scripts/windows-selection-window.tes
 - 宿主广播配置须使用 `{kind: "config", values: settings}` 消息包装；回归必须检查真实 bootstrap 的 DOM 属性和配置闭包已更新，不能只断言发出了 `Runtime.evaluate`。同实例重连复用原配置桥，不重复安装页面监听；本次启动的 `noDiskWrite` 策略须在热更新及页面同步中保持一致。
 - CDP 断线后必须关闭旧会话并允许对同一存活 target 重连；首次连接和重连也必须安排顶层注入兜底，不能仅依赖导航或历史 console `ready` 回放。
 - 注入生命周期变更须运行 `scripts/windows-injection-lifecycle.test.mjs` 和实际 Chromium 的 `scripts/windows-injection.browser.mjs`，覆盖并发去重、上下文销毁、关闭后停止重试以及重连恢复；自动化测试页面仍不能替代真实 CEF 75 考试页面验收。
-- 原生构建默认将 `dist-windows` 的四项资源内嵌为 RCDATA，不允许以运行时解包写盘代替；显式 `--assets` 覆盖缺失时不得静默回退。修改原生注入或资源加载须执行 `windows/native/build.ps1 -BuildTests`，设置 `CX_NATIVE_HOST_EXE`、`CX_NATIVE_INJECTION_EXE`、`CX_NATIVE_ASSETS_EXE`、`CX_NATIVE_OPTIONS_EXE` 后运行对应 `scripts/windows-native-*.test.mjs`，并运行 `scripts/windows-native-injection.browser.mjs`、`scripts/windows-native-assets.browser.mjs`。跳过的编译测试不能汇报为通过。
+- 原生构建为无 CRT 的 x86 Win32 EXE，默认将 `dist-windows` 的四项资源内嵌为 RCDATA，不允许以运行时解包写盘代替；显式 `--assets` 覆盖缺失时不得静默回退。修改原生注入或资源加载须执行 `windows/native/build.ps1 -BuildTests`；除 `injection-tests.exe`、`assets-tests.exe`、`options-tests.exe`、`json-tests.exe` 外，还应生成 `session-tests.exe`、`selection-tests.exe`、`transport-tests.exe`。分别设置 `CX_NATIVE_HOST_EXE`、`CX_NATIVE_INJECTION_EXE`、`CX_NATIVE_ASSETS_EXE`、`CX_NATIVE_OPTIONS_EXE`、`CX_NATIVE_SESSION_EXE`、`CX_NATIVE_SELECTION_EXE`、`CX_NATIVE_TRANSPORT_EXE` 后运行对应 `scripts/windows-native-*.test.mjs`，并运行 `scripts/windows-native-injection.browser.mjs`、`scripts/windows-native-assets.browser.mjs` 和 `scripts/windows-native-lifecycle.browser.mjs`。完整命令见 `docs/windows.md`；跳过的编译测试不能汇报为通过。
 - 原生 DOM script 执行须同时检查完成标记和严格布尔确认；CDP 无异常不代表 CSP 允许脚本执行。原生入口的生命周期和参数支持须分别验收，不得以 Node 宿主通过或参数可解析推导原生实现完整。
+- 原生 `session.c` 管理上下文就绪、导航、frame 子树销毁和取消代次，`host-session.inc` 负责真实 target 轮询、WebSocket、重连及顶层兜底；保持三种注入策略的顺序：`runtime` 只用 Runtime，`script` 先 DOM script 后 Runtime，`hybrid` 先 Runtime 后 DOM script。修改生命周期须同时运行已编译会话/传输测试和 `windows-native-lifecycle.browser.mjs`，不能只测纯状态模型或 C 生成的表达式。
+- 原生目标刷新与 WebSocket 建连前都须重新验证本次启动进程的监听归属；失败时关闭既有会话，不能沿用首次验证结果重连。iframe 重连不得依赖 console 历史 ready：成功复用 bootstrap 后，DOM 已就绪时通过现有 `requestBundle()` 恢复通知，业务包继续按文档标记去重；须保留清空 console 历史后的实际浏览器回归。
+- 原生原型已接入持续会话和 Win32 选择，但尚未与 Node 宿主的日志、诊断、报告、配置持久化及热重载完整对齐；内存执行、删除挂起、启动清理、自毁仍须显式拒绝。现代 Chromium 中真实 WebSocket 的自动化结果不代表真实 CEF75 客户端登录后验收，也不能证明旧 Windows 干净环境兼容性。
+- 原生构建当前使用 `/Gs9999999`，不生成栈探针；大路径、环境变量、表达式和控件缓冲区须使用堆或静态存储，避免大栈帧跨过 Windows guard page。修改默认扫描根目录时须实际执行已编译的 `--list-clients --scan-mode common --quiet` 回归，不能只使用人工提供根目录的测试。

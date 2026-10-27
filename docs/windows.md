@@ -8,7 +8,7 @@ Windows 6.2.0 第一阶段提供 **普通可审计 Windows 宿主**：它用官�
 | --- | --- |
 | 目标客户端 | 电子科技大学中山学院 考试客户端 V4.1.4.25512（x86，CEF 75.1.4 / Chromium 75.0.3770.100） |
 | 注入方式 | `--remote-debugging-port` + 本地 CDP（仅 127.0.0.1） |
-| 宿主运行时 | Node.js ≥ 22（使用内置 `fetch` / `WebSocket`，不新增依赖） |
+| 宿主运行时 | 完整 Node 宿主：Node.js ≥ 22；原生原型：x86 Win32、无 CRT、四项页面资源内嵌（边界见下文） |
 | 自动化验证 | mock CDP 回归、真实 Chromium（非 CEF75）端到端冒烟、Chrome75 语法闸门、类型检查与扩展全量测试 |
 | 真实考试客户端整体验证 | **需人工按下方步骤执行一次**（启动需要 UAC，且需要在客户端里登录后观察） |
 
@@ -16,11 +16,17 @@ Windows 6.2.0 第一阶段提供 **普通可审计 Windows 宿主**：它用官�
 
 ### 发布与系统兼容边界
 
-Node 宿主当前仍需 Node.js 22+，原生选择窗口还使用 PowerShell 5.1 与 WinForms；`start-windows.cmd` 不会安装或内嵌这些运行条件。客户端能启动不代表 Node 宿主前提均已具备。
+Node 宿主当前仍需 Node.js 22+，其客户端选择窗口还使用 PowerShell 5.1 与 WinForms；`start-windows.cmd` 不会安装或内嵌这些运行条件。客户端能启动不代表 Node 宿主前提均已具备。原生 EXE 使用独立的 Win32 选择窗口，不依赖 Node、PowerShell 或 WinForms。
 
 `windows/native/` 是另一条普通运行的原生宿主原型。构建生成 x86 `chaoxing_plus.exe`，现已将 bootstrap、业务 bundle、新文档探针和 SweetAlert2 CSS 作为 RCDATA 嵌入 EXE；默认直接读取资源，不解包旁置文件。已在本机验证把 EXE 单独复制到含中文与空格的空目录后，四项资源的长度及 SHA256 均与构建输入一致；导入表只包含系统 DLL，没有 Node、.NET 或 VC++ Runtime。显式 `--assets <dir>` 可用于调试覆盖，目录结构须与 `dist-windows` 一致，CSS 位于 `vendor/sweetalert2.min.css`；覆盖文件缺失或无效时明确报错，不回退内嵌版本。
 
-上述资源内嵌不代表原生宿主已具备 Node 宿主的完整生命周期：当前原生路径仍只向首个 target 默认上下文执行一次，尚未覆盖登录后导航、新 target、iframe 和重连；GUI 选择、日志、诊断等参数的原生执行也未全部接入。原生版本仍为原型，不能因参数解析成功就宣称功能等价。其构建依赖本机 MSVC x86 工具链和 Windows SDK；x86/x64 客户端适配及旧版 Windows 兼容性仍需在目标干净环境验收。
+原生路径现已通过真实 TCP/WebSocket 适配器持续轮询 page target，为各 target 建立上下文会话，处理导航、新 target、延迟创建的 iframe、上下文销毁、连接关闭与重连重试；首次连接和导航后保留顶层补注入。`runtime`、`script`、`hybrid` 三种注入策略均接入同一生命周期。宿主在本次启动的客户端退出或 `--duration` 到期后关闭会话；默认不结束仍存活的客户端，只有 `--stop-client-on-exit` 或启动失败时结束本次创建的进程，`--attach` 的外部浏览器不在该范围内。
+
+原生宿主在每轮目标刷新及建立 WebSocket 前重新检查监听进程归属；检查失败会关闭现有会话并阻止新连接。只有显式测试参数 `--attach` 跳过归属校验。重连后，已完成 DOM 初始化的上下文通过既有 `requestBundle()` 重发就绪通知，避免 iframe 因 console 历史已清除而一直等待；业务包仍由文档标记去重。当前容量为最多 16 个 page 会话，每页最多 256 个默认上下文、512 个 frame，超过容量的目标不会覆盖仍在使用的状态。
+
+原生客户端选择使用 Win32 控件和 `GetOpenFileNameW`：显示序号、架构、文件版本、完整路径与推荐项，支持双击、确认和手动浏览；扫描无候选时仍可浏览，取消不会启动客户端。所选路径会再次检查有效 PE 和系统架构兼容性。
+
+上述能力不代表原生宿主已与 Node 宿主完整等价：原生日志文件、渲染诊断、报告、配置持久化和热更新等尚未完整接入；接受部分参数或将设置传入页面不等于实现对应宿主行为。原生版本仍为原型，其构建依赖本机 MSVC x86 工具链和 Windows SDK；x86/x64 客户端适配及旧版 Windows 兼容性仍需在目标干净环境验收。
 
 下文完整参数和 `start-windows.cmd` 示例以 Node 宿主为准；原生原型的具体参数以它自己的 `--help`、`--capabilities` 和已执行测试为准，不默认宣称与 Node 全部等价。两条宿主都不提供启动清理、内存执行、删除挂起或自毁能力；这些请求必须明确拒绝，不能静默降级为普通运行。
 
@@ -30,7 +36,7 @@ Node 宿主当前仍需 Node.js 22+，原生选择窗口还使用 PowerShell 5.1
 
 “单文件”和“旧系统兼容”需要分别验收：[Node 24 官方平台要求](https://github.com/nodejs/node/blob/v24.12.0/BUILDING.md)为 Windows 10 / Server 2016 起，Windows 发布架构为 x64/arm64；[SEA 打包](https://nodejs.org/download/release/v24.12.0/docs/api/single-executable-applications.html)不能降低这一系统要求。[Go 1.21 起](https://go.dev/doc/go1.21#windows)也以 Windows 10 / Server 2016 为最低要求，原设计的 Go 1.22+ 静态构建不能据此宣称覆盖 Windows 7。Chromium 75 [官方构建说明](https://github.com/chromium/chromium/blob/75.0.3770.100/build/config/win/BUILD.gn)仍以 Windows 7 为受支持系统；样本 PE 头的 `5.1` 声明不能证明客户端支持 Windows XP。
 
-后续普通单文件宿主仍须补齐原生生命周期与参数真实行为，并在明确的 x86/x64、旧版和现代 Windows 干净环境中验证。当前 CDP 使用 TCP/WebSocket 通信，宿主与客户端无需相同位数；没有必要仅为页面注入拆分两套业务资源。历史探针和样式诊断只证明当时记录的局部行为，**本次 Windows 6.2.0 第一阶段尚未完成真实 CEF75 客户端端到端验收**。
+后续普通单文件宿主仍须补齐与 Node 的参数行为差异，并在明确的 x86/x64、旧版和现代 Windows 干净环境中验证。当前 CDP 使用 TCP/WebSocket 通信，宿主与客户端无需相同位数；没有必要仅为页面注入拆分两套业务资源。现代 Chromium 自动化已覆盖原生实际 WebSocket 注入、导航、iframe、新 target、CSP 回退和限时关闭；历史探针和样式诊断只证明当时记录的局部行为，**本次 Windows 6.2.0 第一阶段尚未完成真实 CEF75 客户端端到端验收**。
 
 ## 工作原理
 
@@ -82,6 +88,9 @@ windows/
   parameter-generator.html     离线单文件启动参数生成器（不联网、不执行命令、不保存输入）
   native/                      普通运行的原生宿主原型，四项资源内嵌
   native/assets.c              内嵌资源读取与显式外部资源覆盖，不解包写盘
+  native/selection.c           无 CRT 的 Win32 候选选择、文件浏览与隐藏控件探针
+  native/session.c             上下文/导航/就绪任务状态机与取消代次
+  native/host-session.inc      原生 target 轮询、真实 WebSocket 会话与生命周期适配
   native/build.ps1             x86 构建、RCDATA 与导入表审计；-BuildTests 生成 C 测试程序
   data/                        本地配置与日志（gitignore）：config.json / logs/
 build.windows.mjs              Windows 构建（target chrome75 + 语法闸门 + manifest）
@@ -189,7 +198,9 @@ vendor/sweetalert2.min.css  config.example.json  package-manifest.json
 | `--no-scan-cache` | 关闭 | 不读取或写入扫描缓存；实时扫描仍照常执行。 |
 | `--ui auto\|gui\|cli` | `auto` | `gui` 使用 Windows 原生选择窗口；`cli` 使用终端交互；`auto` 优先使用已配置客户端路径，否则交互终端提示选择，Windows 非交互环境默认显示原生选择窗口，其他非交互环境使用推荐候选。显式 `--client` 在三种界面模式下均跳过扫描和选择窗口。Windows `auto` 窗口不可用时回退推荐候选；需要窗口时，`gui` 在非 Windows 平台或窗口不可用时直接报错。`--quiet` 或 `--client-first` 会关闭 `auto` 原生选择窗口并使用推荐候选。 |
 
-原生选择窗口使用 Windows 自带的 PowerShell（5.1+）与 WinForms，不新增 npm 依赖：窗口列出扫描到的 `CXExam.exe`（架构、完整路径），支持双击/按钮确认与“手动浏览”选择任意 `CXExam.exe`，取消返回 `cancelled`。`windows/host/selection-window.ps1` **必须保持纯 ASCII**（Windows PowerShell 5.1 对无 BOM 的 `.ps1` 按 ANSI/OEM 解析，中文文案会破坏语法），所有界面文案经 UTF-8 JSON 传入；`--self-check` 会构建一次窗口控件做冒烟（不显示窗口），`--capabilities` 的 `supported.nativeClientSelection` 在 Windows 上为 true。自动化验证可用环境变量 `CXPLUS_SELECTION_AUTO_CLOSE_MS=<ms>` 让窗口自动关闭（仅测试/调试，避免无人值守阻塞）。
+此处参数表描述 Node 宿主。它的选择窗口使用 Windows 自带的 PowerShell（5.1+）与 WinForms，不新增 npm 依赖：窗口列出扫描到的 `CXExam.exe`（架构、完整路径），支持双击/按钮确认与“手动浏览”选择任意 `CXExam.exe`，取消返回 `cancelled`。`windows/host/selection-window.ps1` **必须保持纯 ASCII**（Windows PowerShell 5.1 对无 BOM 的 `.ps1` 按 ANSI/OEM 解析，中文文案会破坏语法），所有界面文案经 UTF-8 JSON 传入；`--self-check` 会构建一次窗口控件做冒烟（不显示窗口），`--capabilities` 的 `supported.nativeClientSelection` 在 Windows 上为 true。自动化验证可用环境变量 `CXPLUS_SELECTION_AUTO_CLOSE_MS=<ms>` 让窗口自动关闭（仅测试/调试，避免无人值守阻塞）。
+
+原生 EXE 的 `--ui gui` / `--select-client` 则调用 `windows/native/selection.c`，没有 PowerShell 子进程。其隐藏控件探针由 `selection-tests.exe` 执行；实际显示、取消和选择 Unicode 路径的交互冒烟需显式设置 `CX_TEST_NATIVE_WINDOW=1`，测试通过 `CXPLUS_NATIVE_SELECTION_AUTO_CLOSE_MS` 自动取消，避免等待人工操作。该测试不会执行所选客户端。
 
 常规扫描依次检查用户桌面、OneDrive Desktop、Program Files、Program Files (x86)、AppData/ProgramData 等常见根目录，以及所有可访问固定磁盘根目录；每个根目录只检查根目录自身和一级子目录。跳过符号链接、不可访问目录和 Windows 系统目录。常规扫描找到候选后不再递归全盘，即使候选只有 x64 也一样。普通自动选择时，递归回退按固定磁盘和子目录的确定性顺序遍历，记住首个 x64，发现首个 x86 后停止；未发现 x86 时选首个 x64。为支持用户显式选择，`--client-index`、`--select-client` 和 `--list-clients` 会完整枚举全盘结果。架构校验允许 x86 Windows 选择 x86 客户端，x64 Windows 选择 x86/x64 客户端；这不代表当前 Node 宿主已覆盖所有这些系统。自动推荐优先 x86，x64 CEF 客户端尚未做真实客户端验证。
 
@@ -519,7 +530,7 @@ node --test scripts/windows-injection.browser.mjs
 node --test scripts/windows-parameter-generator.test.mjs
 node --test scripts/windows-selection-window.test.mjs
 
-# 原生选择窗口交互冒烟（会实际弹出窗口，自动关闭；仅本机手动执行）
+# Node 宿主的 WinForms 选择窗口冒烟（会实际弹出窗口，自动关闭；仅本机手动执行）
 $env:CX_TEST_NATIVE_WINDOW='1'; node --test scripts/windows-selection-window.test.mjs; Remove-Item Env:CX_TEST_NATIVE_WINDOW
 
 node windows/host/main.mjs --capabilities
@@ -537,15 +548,32 @@ $env:CX_NATIVE_HOST_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\c
 $env:CX_NATIVE_INJECTION_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\injection-tests.exe').Path
 $env:CX_NATIVE_ASSETS_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\assets-tests.exe').Path
 $env:CX_NATIVE_OPTIONS_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\options-tests.exe').Path
+$env:CX_NATIVE_SESSION_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\session-tests.exe').Path
+$env:CX_NATIVE_SELECTION_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\selection-tests.exe').Path
+$env:CX_NATIVE_TRANSPORT_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\transport-tests.exe').Path
 try {
-  node --test scripts/windows-native-host.test.mjs scripts/windows-native-assets.test.mjs scripts/windows-native-options.test.mjs
-  node --test scripts/windows-native-injection.browser.mjs scripts/windows-native-assets.browser.mjs
+  node --test scripts/windows-native-host.test.mjs scripts/windows-native-assets.test.mjs scripts/windows-native-options.test.mjs scripts/windows-native-session.test.mjs scripts/windows-native-selection.test.mjs scripts/windows-native-transport.test.mjs
+  node --test scripts/windows-native-injection.browser.mjs scripts/windows-native-assets.browser.mjs scripts/windows-native-lifecycle.browser.mjs
 } finally {
-  Remove-Item Env:CX_NATIVE_HOST_EXE, Env:CX_NATIVE_INJECTION_EXE, Env:CX_NATIVE_ASSETS_EXE, Env:CX_NATIVE_OPTIONS_EXE -ErrorAction SilentlyContinue
+  Remove-Item Env:CX_NATIVE_HOST_EXE, Env:CX_NATIVE_INJECTION_EXE, Env:CX_NATIVE_ASSETS_EXE, Env:CX_NATIVE_OPTIONS_EXE, Env:CX_NATIVE_SESSION_EXE, Env:CX_NATIVE_SELECTION_EXE, Env:CX_NATIVE_TRANSPORT_EXE -ErrorAction SilentlyContinue
 }
 ```
 
-`-BuildTests` 编译实际原生宿主注入代码与确定性 mock CDP 传输，输出 `injection-tests.exe`，同时生成 `assets-tests.exe`、`options-tests.exe` 和 `json-tests.exe`。`CX_NATIVE_INJECTION_EXE` 启用策略顺序、重试上限、CDP 请求 ID 及执行确认测试；`CX_NATIVE_ASSETS_EXE` 启用资源字节校验；`CX_NATIVE_OPTIONS_EXE` 启用实际 C 参数回归。未设置对应变量时会显示跳过，不能称为已完成编译验证。`CX_NATIVE_HOST_EXE` 用于原生 CLI 的帮助、能力和明确拒绝路径，`--capabilities` 校验内嵌资源并报告 `embeddedResources:true` 和资源数量。`build/pe-imports.txt` 是导入表审计记录；这些测试仍不等同于真实客户端验收。
+`-BuildTests` 编译实际原生宿主注入代码与确定性 mock CDP 传输，输出 `injection-tests.exe`，同时生成 `assets-tests.exe`、`options-tests.exe`、`json-tests.exe`、`session-tests.exe`、`selection-tests.exe` 和 `transport-tests.exe`。`CX_NATIVE_INJECTION_EXE` 启用策略顺序、重试上限、CDP 请求 ID 及执行确认测试；`CX_NATIVE_ASSETS_EXE` 启用资源字节校验；`CX_NATIVE_OPTIONS_EXE` 启用实际 C 参数回归；`CX_NATIVE_SESSION_EXE` 检查导航、iframe、取消代次和任务去重；`CX_NATIVE_SELECTION_EXE` 构建真实 Win32 隐藏控件；`CX_NATIVE_TRANSPORT_EXE` 检查分段 WebSocket 消息、零超时和控制帧截止时间。未设置对应变量时会显示跳过，不能称为已完成编译验证。`json-tests.exe` 可直接执行验证 JSON 解析。`CX_NATIVE_HOST_EXE` 用于原生 CLI 和实际 Chromium 生命周期回归，`--capabilities` 校验内嵌资源并报告 `embeddedResources:true` 和资源数量。`build/pe-imports.txt` 是导入表审计记录；这些测试仍不等同于真实客户端验收。
+
+原生 Win32 选择窗口的实际显示与自动选择冒烟需单独启用，整个过程中不会启动考试客户端：
+
+```powershell
+$env:CX_NATIVE_SELECTION_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\selection-tests.exe').Path
+$env:CX_TEST_NATIVE_WINDOW = '1'
+try {
+  node --test scripts/windows-native-selection.test.mjs
+} finally {
+  Remove-Item Env:CX_NATIVE_SELECTION_EXE, Env:CX_TEST_NATIVE_WINDOW -ErrorAction SilentlyContinue
+}
+```
+
+原生实际会话通过 `--inject-strategy runtime|script|hybrid` 选择路径：`runtime` 仅使用 `Runtime.evaluate`，`script` 先尝试 DOM script、失败再回退 Runtime，`hybrid` 先尝试 Runtime、失败再回退 DOM script。重试始终遵守 `--inject-retries` 上限；每个上下文的就绪、执行和失效均经过会话任务状态机，不递归重入正在执行的注入。
 
 原生 DOM script 注入必须获得严格的布尔 `true` 执行确认：脚本只有执行到末尾才写入完成标记，CSP 阻止、语法错误、运行时异常、缺少挂载节点以及缺失/非布尔确认均按失败处理并执行所选回退策略。临时 script 和完成标记在检查后移除。配置预置同时传入内嵌 Swal CSS，由实际 bootstrap 安装至顶层文档；浏览器回归验证的是 C 生成的真实表达式与实际 CSS 计算样式。
 
@@ -564,7 +592,11 @@ try {
 - `windows-native-host.test.mjs`：原生源码边界与构建选项；设置 `CX_NATIVE_HOST_EXE` 后执行 CLI 回归，设置 `CX_NATIVE_INJECTION_EXE` 后执行已编译的实际注入逻辑测试。内部清理器或状态机测试仅证明模块行为，不表示 Node 或原生入口支持启动清理、自毁。
 - `windows-native-assets.test.mjs`：仅复制 EXE/driver 到中文空格目录，逐项比对宿主与 driver 内嵌资源的长度/SHA256，并覆盖外部资源缺失、空文件、超限及禁止落盘解包。
 - `windows-native-options.test.mjs`：实际 C 参数测试，覆盖扫描别名和 CLI/JSON 的客户端选择优先级。
+- `windows-native-session.test.mjs`：实际 C 会话状态机，覆盖导航和 frame 子树销毁、就绪通知期间不重入、URL 过滤、顶层兜底及容量边界；不以模型通过代替宿主适配器验证。
+- `windows-native-selection.test.mjs`：实际 C Win32 控件探针、推荐项与 Unicode 标题；`CX_TEST_NATIVE_WINDOW=1` 时显示窗口并测试自动取消、选中有效 Unicode 路径，均不启动客户端。
+- `windows-native-transport.test.mjs`：无 CRT 的传输接口及实际 WebSocket 分段读、零超时、连续控制帧总截止时间回归。
 - `windows-native-injection.browser.mjs` / `windows-native-assets.browser.mjs`：真实 Chromium 执行实际 C 生成的表达式，验证 CSP/异常/语法错误/无挂载节点以及顶层 Swal CSS 安装；不代表 CEF75 登录后页面验收。
+- `windows-native-lifecycle.browser.mjs`：已编译原生宿主通过真实 WebSocket 连接现代 Chromium，覆盖三种策略、导航后每文档只执行一次、延迟 about:blank iframe、新 page target、CSP 回退、空白 iframe 开关、非超星页面限制、Browser 不匹配拒绝、断线去重及 console 历史清除后的 iframe 恢复；还覆盖 `--duration` 关闭会话但保留 attach 浏览器。不代表真实 CEF75 人工登录验收。
 - `windows-selection-window.test.mjs`：原生选择窗口脚本纯 ASCII 约束、结果合约（选中/取消/自动关闭/错误）、PowerShell 进程参数与 UTF-8 JSON 载荷、WinForms 控件构建探针；`CX_TEST_NATIVE_WINDOW=1` 时额外验证真实窗口显示与宿主 `--ui gui`/`--select-client` 接线（自动关闭）。
 - `windows-bootstrap.test.mjs`：共享配置水合、DOMContentLoaded 延迟、`replaceChildren`/`randomUUID` 补丁、总开关、配置同步、重复注入去重。
 - `windows-chrome75.test.mjs`：构建产物与内置 handler 字符串必须通过 Chrome75 语法闸门（`?.`/`??`/逻辑赋值/私有成员/静态块均不允许）。
