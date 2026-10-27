@@ -244,3 +244,5 @@ $env:CX_TEST_NATIVE_WINDOW='1'; node --test scripts/windows-selection-window.tes
 - 宿主广播配置须使用 `{kind: "config", values: settings}` 消息包装；回归必须检查真实 bootstrap 的 DOM 属性和配置闭包已更新，不能只断言发出了 `Runtime.evaluate`。同实例重连复用原配置桥，不重复安装页面监听；本次启动的 `noDiskWrite` 策略须在热更新及页面同步中保持一致。
 - CDP 断线后必须关闭旧会话并允许对同一存活 target 重连；首次连接和重连也必须安排顶层注入兜底，不能仅依赖导航或历史 console `ready` 回放。
 - 注入生命周期变更须运行 `scripts/windows-injection-lifecycle.test.mjs` 和实际 Chromium 的 `scripts/windows-injection.browser.mjs`，覆盖并发去重、上下文销毁、关闭后停止重试以及重连恢复；自动化测试页面仍不能替代真实 CEF 75 考试页面验收。
+- 原生构建默认将 `dist-windows` 的四项资源内嵌为 RCDATA，不允许以运行时解包写盘代替；显式 `--assets` 覆盖缺失时不得静默回退。修改原生注入或资源加载须执行 `windows/native/build.ps1 -BuildTests`，设置 `CX_NATIVE_HOST_EXE`、`CX_NATIVE_INJECTION_EXE`、`CX_NATIVE_ASSETS_EXE`、`CX_NATIVE_OPTIONS_EXE` 后运行对应 `scripts/windows-native-*.test.mjs`，并运行 `scripts/windows-native-injection.browser.mjs`、`scripts/windows-native-assets.browser.mjs`。跳过的编译测试不能汇报为通过。
+- 原生 DOM script 执行须同时检查完成标记和严格布尔确认；CDP 无异常不代表 CSP 允许脚本执行。原生入口的生命周期和参数支持须分别验收，不得以 Node 宿主通过或参数可解析推导原生实现完整。
