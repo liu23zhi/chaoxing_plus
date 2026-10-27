@@ -46,12 +46,18 @@ windows/
   config.example.json          配置模板（不含任何真实路径/密钥）
   bootstrap/windows-bootstrap.js  页面侧平台层（无 chrome.*）
   host/main.mjs                宿主入口（启动、CDP、注入、配置、报告）
+  host/options.mjs             启动参数解析、互斥/范围校验与配置覆盖
+  host/client-discovery.mjs    CXExam.exe 常规扫描、全盘回退与候选选择
+  host/diagnostics.mjs         渲染诊断采样、DPI/页面结论
   host/cdp.mjs                 最小 CDP 客户端（fetch + 内置 WebSocket）
   host/inject.mjs              每个页面 target 的会话与注入生命周期
   host/launch.mjs              提权、端口、PE、进程、监听归属
   host/config.mjs              配置持久化、共享键过滤、广播
   host/chrome75-syntax.mjs     Chrome75 语法闸门（构建与测试共用）
   host/trampoline.js           新文档探针
+  host/selection-window.ps1    Windows 原生客户端选择窗口（PowerShell + WinForms，纯 ASCII）
+  host/selection-window.mjs    原生选择窗口的 Node 封装、结果校验与 self-check 探针
+  parameter-generator.html     离线单文件启动参数生成器（不联网、不执行命令、不保存输入）
   data/                        本地配置与日志（gitignore）：config.json / logs/
 build.windows.mjs              Windows 构建（target chrome75 + 语法闸门 + manifest）
 start-windows.cmd              推荐入口（检查 Node 版本后启动宿主）
@@ -86,6 +92,7 @@ vendor/sweetalert2.min.css  config.example.json  package-manifest.json
    ```powershell
    .\start-windows.cmd --list-clients
    .\start-windows.cmd --select-client
+   .\start-windows.cmd --ui gui
    .\start-windows.cmd --client-index 2 --panel --panel-expanded --panel-top 24 --panel-right 24 --panel-width 520
    .\start-windows.cmd --client "D:\\Exam\\CXExam.exe" --answer-mode manual --answer-key Ctrl+Shift+A --answer-threads 1 --hide-answer-dialog --no-log
    ```
@@ -145,12 +152,14 @@ vendor/sweetalert2.min.css  config.example.json  package-manifest.json
 | `--client-index <n>` | 未指定，`n >= 1` | 启动扫描结果第 n 个；常规候选按完整路径排序，全盘候选按遍历顺序。为确保序号可用，全盘扫描会完整枚举候选，不在首个 x86 提前停止。 |
 | `--client-first` | 关闭 | 选择推荐候选；常规扫描结果中 x86 优先，同架构按路径排序。 |
 | `--list-clients` | 关闭 | 列出候选和架构后退出，不启动客户端。 |
-| `--select-client` | 关闭 | 完整扫描后在终端逐项选择；提示时可输入序号或带引号的手动路径。 |
+| `--select-client` | 关闭 | 扫描后显示 **Windows 原生选择窗口**（候选列表 + “手动浏览”选择任意位置的 `CXExam.exe`）；窗口不可用时回退终端逐项选择，非交互终端回退推荐候选；用户取消时以退出码 3 结束，不启动客户端。 |
 | `--scan-mode common\|fallback-all\|all` | `fallback-all` | `common` 只扫常规根目录及一级直接子目录；`fallback-all` 仅在常规扫描为零结果时递归固定磁盘；`all` 直接递归固定磁盘。 |
 | `--scan-all` / `--no-scan-all` | 默认 fallback-all | `--scan-all` 启用常规无结果后的递归回退；`--no-scan-all` 将扫描限制为常规路径。 |
 | `--scan-clients` / `--rescan` | 关闭 | 忽略配置中的现有客户端路径并执行扫描；当前宿主没有持久扫描缓存，故 `--rescan` 不涉及缓存清理。 |
 | `--no-scan-cache` | 关闭 | 不读取或写入扫描缓存；当前宿主尚未实现扫描缓存。 |
-| `--ui auto\|cli` | `auto` | `cli` 使用终端交互；`auto` 优先使用已配置客户端路径，否则在交互终端提示选择、在非交互环境使用推荐候选。`gui` 当前未实现，显式指定会报错。 |
+| `--ui auto\|gui\|cli` | `auto` | `gui` 强制使用 Windows 原生选择窗口（总会重新扫描并列出全部候选）；`cli` 使用终端交互；`auto` 优先使用已配置客户端路径，否则在交互终端提示选择、在非交互环境使用推荐候选。`gui` 在非 Windows 平台或窗口不可用时直接报错，不会静默降级。 |
+
+原生选择窗口使用 Windows 自带的 PowerShell（5.1+）与 WinForms，不新增 npm 依赖：窗口列出扫描到的 `CXExam.exe`（架构、完整路径），支持双击/按钮确认与“手动浏览”选择任意 `CXExam.exe`，取消返回 `cancelled`。`windows/host/selection-window.ps1` **必须保持纯 ASCII**（Windows PowerShell 5.1 对无 BOM 的 `.ps1` 按 ANSI/OEM 解析，中文文案会破坏语法），所有界面文案经 UTF-8 JSON 传入；`--self-check` 会构建一次窗口控件做冒烟（不显示窗口），`--capabilities` 的 `supported.nativeClientSelection` 在 Windows 上为 true。自动化验证可用环境变量 `CXPLUS_SELECTION_AUTO_CLOSE_MS=<ms>` 让窗口自动关闭（仅测试/调试，避免无人值守阻塞）。
 
 常规扫描依次检查用户桌面、OneDrive Desktop、Program Files、Program Files (x86)、AppData/ProgramData 等常见根目录，以及所有可访问固定磁盘根目录；每个根目录只检查根目录自身和一级子目录。跳过符号链接、不可访问目录和 Windows 系统目录。常规扫描找到候选后不再递归全盘，即使候选只有 x64 也一样。普通自动选择时，递归回退按固定磁盘和子目录的确定性顺序遍历，记住首个 x64，发现首个 x86 后停止；未发现 x86 时选首个 x64。为支持用户显式选择，`--client-index`、`--select-client` 和 `--list-clients` 会完整枚举全盘结果。宿主可在 32/64 位 Windows 运行 x86 客户端，并在 64 位 Windows 运行 x64 客户端；自动推荐仍优先 x86。仓库提供的真实目标客户端是 x86，x64 CEF 客户端尚未做真实客户端验证。
 
@@ -163,9 +172,9 @@ vendor/sweetalert2.min.css  config.example.json  package-manifest.json
 | `--config <path>` | `windows/data/config.json` | 读取并更新指定的宿主 JSON 配置文件。 |
 | `--options-json <json>` | 未指定 | 将内联 JSON 对象合并为配置；也可使用 `--options-json @<file.json>` 从文件读取。顶层必须是 JSON 对象，指定的文件不存在或无法解析时会在启动前报错。 |
 | `--data-dir <path>` | `windows/data` | 设置宿主配置、日志和诊断的默认数据目录；明确指定 `--config` 时配置文件路径仍以 `--config` 为准。 |
-| `--no-disk-write` | 关闭 | 不创建/更新配置，不写日志、诊断、运行报告或宿主临时业务文件；并关闭扫描缓存。不会阻止 CXExam 页面自身写入 localStorage，也不能保证 OS 错误或 UAC 提示静默。 |
-| `--retain-data` / `--no-retain-data` | 当前不支持 | 数据保留/清理生命周期尚未实现，参数会直接报错，避免被误当成有效设置。 |
-| `--delete-config` | 当前不支持 | 不会删除外部配置；参数会直接报错。 |
+| `--no-disk-write` | 关闭 | 不创建/更新配置，不写日志、诊断、运行报告或宿主临时业务文件；并关闭扫描缓存。同时通过共享设置下发 `windows-no-disk-write`，关闭 Windows 业务侧题库缓存的读写与本地持久化。不会阻止 CXExam 页面自身写入 localStorage（例如页面/业务自身设置），也不能保证 OS 错误或 UAC 提示静默。 |
+| `--retain-data` / `--no-retain-data` | 默认保留 | 默认保留本次运行写入的日志、诊断、报告和本次新建的配置；`--no-retain-data` 在退出时只删除**本次运行创建**的这些宿主数据文件，运行前已存在的数据不受影响。 |
+| `--delete-config` | 关闭 | 退出时删除 `--config` 指定的**外部**配置文件；必须同时指定 `--config`，否则启动前直接报错，避免误删默认配置。 |
 
 配置合并顺序为：内置默认值 < 默认宿主配置 `windows/data/config.json` < 同目录 `chaoxing-plus.json` < `--config` 指定配置 < `--options-json` < 独立命令行参数。使用 `--no-disk-write` 时仍可读取现有配置，但所有宿主侧写入都关闭。配置只会向页面共享键白名单同步。
 
@@ -203,6 +212,8 @@ vendor/sweetalert2.min.css  config.example.json  package-manifest.json
 | `--duration <ms>` | 不限时 | 测试模式运行指定时长后退出。 |
 | `--attach <port>` | 不启用 | 仅测试/调试连接已存在端点；不会启动客户端或校验进程归属。 |
 | `--self-check` / `--help` | 关闭 | 只做环境检查或输出参数帮助。 |
+| `--capabilities` | 关闭 | 输出机器可读的能力标记：支持普通运行、扫描、参数生成器与（Windows）原生客户端选择窗口；内存执行、启动清理与自毁的 schema 及“未实现”状态会一并列出，便于脚本判断。 |
+| `--no-elevate` | 关闭 | 非管理员时直接报错，不自动申请 UAC（便于自动化/调试）。 |
 
 以下参数是后续能力的设计项，本阶段**全部拒绝，不会运行或静默忽略**：
 
@@ -221,22 +232,53 @@ vendor/sweetalert2.min.css  config.example.json  package-manifest.json
 | `--self-destruct-delay <ms>` | `0` | 自毁延迟尚未实现，报错。 |
 | `--no-self-destruct-confirm` | 关闭 | 自毁确认控制尚未实现，报错。 |
 
-JSON 中使用这些未发布字段时同样会报错。配置生成器将它们标记为未发布；“启动清理型”预设不会输出命令。
+JSON 中使用这些未发布字段时同样会报错。配置生成器将它们标记为“当前宿主不可执行”；“启动清理型”预设不会输出命令。
 
-`--wipe-*`、`--self-destruct-*`、`--retain-data`、`--no-retain-data` 和 `--delete-config` 当前都不会执行清理或自毁，宿主会拒绝相应 CLI/JSON 配置。只有普通进程启动路径可用；请勿把面板隐藏或 `--quiet` 当成进程隐蔽/自毁能力。
+`--wipe-*`、`--self-destruct-*` 当前都不会执行清理或自毁，宿主会拒绝相应 CLI/JSON 配置。只有普通进程启动路径可用；请勿把面板隐藏或 `--quiet` 当成进程隐蔽/自毁能力。`--delete-config` 只删除显式 `--config` 指定的外部配置，`--no-retain-data` 只清理本次运行创建的宿主数据，两者都不触碰 CXExam 自身文件。
 
 已知限制：Windows 端没有扩展 popup，目前通过编辑 `config.json` 或在页面内面板修改设置；`common.settings.extension-enabled=false` 时不会注入业务 bundle。
 
 ### Windows 参数生成器与启动示例
 
-`windows/parameter-generator.html` 是离线单文件参数生成器，可在浏览器中打开，生成 PowerShell、cmd 和 JSON 配置。启动脚本默认根据 HTML 所在位置定位到项目根目录的 `start-windows.cmd`，也可在页面中修改；单独复制 HTML 时需自行指定实际启动器路径。它只导出当前宿主支持的普通启动、扫描、面板、答题、日志和诊断参数，不执行命令、不保存输入。内存执行、删除挂起、启动清理和自毁选项不会由页面生成；启动清理预设会阻止命令导出。
+`windows/parameter-generator.html` 是离线单文件参数生成器，可在浏览器中打开，生成 PowerShell、cmd、JSON 配置和参数摘要。启动脚本默认根据 HTML 所在位置定位到项目根目录的 `start-windows.cmd`，也可在页面中修改；单独复制 HTML 时需自行指定实际启动器路径。页面按客户端扫描 / 配置和数据 / 执行模式 / 面板 / 答题 / 日志与诊断 / 启动清理 / 自毁分组，提供绝对静默型、友好交互型、懒人型、手动答题型、启动清理型、仅扫描型、直接路径型、全盘扫描型 8 个预设，并实时校验客户端选择互斥、`--no-disk-write` 冲突、答题线程/面板宽度/清理重试范围、内联 JSON 与宿主 options-json 规则一致（未被独立 CLI 参数覆盖的字段同样校验范围/枚举/类型）、`--delete-config` 必须搭配 `--config`、答题与自毁快捷键冲突（归一化 `Ctrl`/`Control` 等别名）、非法序号与以 `--` 开头的参数值以及未实现执行模式。它只导出当前宿主支持的普通启动、扫描（含 `--no-scan-cache`）、面板（含预留 `--panel-theme`）、答题、日志、诊断和数据生命周期参数，`--ui gui` 会生成原生选择窗口参数；不联网、不执行命令、不保存输入；内存执行、删除挂起、启动清理和自毁能力只显示并标记“当前宿主不可执行”，不会导出可运行命令（启动清理预设会保持阻止状态直到切换预设或重置）。
 
-常规路径扫描会检查桌面、OneDrive Desktop、Program Files、Program Files (x86)、AppData/ProgramData，以及所有可识别固定磁盘根目录；每个根目录只检查根目录自身和一级直接子目录。若常规扫描找到候选，默认不递归全盘。常规无候选时 `fallback-all` 才递归固定磁盘；`all` 直接全盘扫描。`--ui cli` 或 `--select-client` 会显示完整候选列表；交互提示支持输入列表序号或带引号的手动 `CXExam.exe` 路径。`--ui auto` 优先使用配置中的客户端路径；没有配置路径时，交互终端提示选择，非交互环境使用推荐候选。`--ui gui` 当前会明确报错。
+常规路径扫描会检查桌面、OneDrive Desktop、Program Files、Program Files (x86)、AppData/ProgramData，以及所有可识别固定磁盘根目录；每个根目录只检查根目录自身和一级直接子目录。若常规扫描找到候选，默认不递归全盘。常规无候选时 `fallback-all` 才递归固定磁盘；`all` 直接全盘扫描。`--ui cli`、`--ui gui` 或 `--select-client` 会显示完整候选列表；`--select-client`/`--ui gui` 使用 Windows 原生选择窗口（支持手动浏览），终端提示则支持输入列表序号或带引号的手动 `CXExam.exe` 路径。`--ui auto` 优先使用配置中的客户端路径；没有配置路径时，交互终端提示选择，非交互环境使用推荐候选。
 
-绝对静默预设的安全子集（关闭宿主一般日志、面板和宿主侧持久化，以快捷键手动放行一题；不承诺所有错误都静默，且不包含内存执行/自毁；CXExam 自身的浏览器存储仍不受此开关控制）：
+#### 启动示例
+
+以下示例覆盖方案中的 8 类用法。内存执行、启动清理、自毁快捷键和退出全屏自毁属于后续阶段能力：当前宿主会对这些参数**明确报错**，参数生成器也会把它们标记为“当前宿主不可执行”，不会导出可运行命令。
+
+**1. 绝对静默型**
+
+最终目标参数（示例按已打包 `exe` 的最终形态书写；当前仓库通过 `start-windows.cmd` 运行，见下方可执行子集。当前宿主不可执行，仅作为设计目标；逐条会触发“尚未实现”错误，不会静默降级）：
+
+```powershell
+& "C:\Tools\chaoxing_plus.exe" `
+  --ui cli `
+  --scan-mode fallback-all `
+  --client-first `
+  --execution-mode memory `
+  --wipe-owned-files-on-start `
+  --wipe-failure-policy retry `
+  --wipe-retries 5 `
+  --wipe-retry-delay 200 `
+  --wipe-runtime-retry `
+  --wipe-runtime-interval 30 `
+  --answer-mode manual `
+  --answer-key Ctrl+Alt+Shift+S `
+  --answer-threads 1 `
+  --hide-answer-dialog `
+  --self-destruct-key Ctrl+Alt+Shift+E `
+  --self-destruct-key F8 `
+  --self-destruct-on-fullscreen-exit `
+  --no-self-destruct-confirm
+```
+
+第一阶段可执行的绝对静默子集（关闭宿主一般日志、面板和宿主侧持久化，以快捷键手动放行一题；不承诺所有错误都静默，且不包含内存执行/自毁；CXExam 自身的浏览器存储仍不受此开关控制）：
 
 ```powershell
 & ".\start-windows.cmd" `
+  --ui cli `
   --scan-mode fallback-all `
   --client-first `
   --execution-mode normal `
@@ -250,7 +292,9 @@ JSON 中使用这些未发布字段时同样会报错。配置生成器将它们
   --hide-answer-dialog
 ```
 
-友好交互型：
+第一阶段行为：先扫描桌面、OneDrive Desktop、Program Files、Program Files (x86)、AppData/ProgramData 和所有固定磁盘根目录的一级子目录；常规扫描有候选时不进行全盘递归，常规无候选时才进入全盘递归；全盘遇到第一个 x86 立即使用，只有 x64 时使用第一个 x64；无候选时以退出码 3 结束，`--quiet` 下控制台不输出错误（使用 `--list-clients` 则只列出空候选并以 0 退出）。不写宿主日志、诊断、报告和面板；`Ctrl+Alt+Shift+S` 每次授权 1 道题；自毁相关参数当前会被拒绝。**永远不删除 CXExam 文件。**
+
+**2. 友好交互型**
 
 ```powershell
 & ".\start-windows.cmd" `
@@ -266,10 +310,14 @@ JSON 中使用这些未发布字段时同样会报错。配置生成器将它们
   --answer-threads 4 `
   --show-answer-dialog `
   --log `
-  --diagnose
+  --diagnose `
+  --report ".data\last-report.json" `
+  --retain-data
 ```
 
-懒人型普通启动（默认选择推荐扫描候选，x86 优先）：
+行为：终端列出候选并提示选择（可输入序号或带引号的 `CXExam.exe` 路径；非交互终端会提示并回退到推荐候选，`--quiet` 下候选列表仍会输出）；显示完整悬浮面板；自动答题前显示倒计时；同时处理最多 4 道题；写入日志、诊断和报告；保留数据；不启用自毁。
+
+**3. 懒人型**
 
 ```powershell
 & ".\start-windows.cmd" `
@@ -284,7 +332,9 @@ JSON 中使用这些未发布字段时同样会报错。配置生成器将它们
   --log
 ```
 
-手动答题型（终端选择候选客户端，每次快捷键放行 2 道题）：
+行为：直接选择推荐客户端（x86 优先）；常规扫描优先，常规无结果才全盘扫描；显示完整悬浮面板；倒计时结束后自动答题；默认使用 4 个答题线程。
+
+**4. 手动答题型**
 
 ```powershell
 & ".\start-windows.cmd" `
@@ -298,19 +348,42 @@ JSON 中使用这些未发布字段时同样会报错。配置生成器将它们
   --log
 ```
 
-仅扫描常规路径并列出候选：
+行为：终端选择候选客户端（也可在提示中直接输入 `CXExam.exe` 路径，或使用 `--client <path>` 跳过扫描）；面板默认折叠；每次按 `Ctrl+Shift+A` 授权 2 道题；不显示自动答题弹窗；不自动提交。
+
+**5. 仅扫描型**
 
 ```powershell
 & ".\start-windows.cmd" --scan-mode common --list-clients --no-log --quiet
 ```
 
-强制全盘扫描并列出候选：
+行为：只扫描常见路径（根目录和一级子目录），列出架构和路径后退出；不启动 CXExam。`--list-clients` 的候选列表不受 `--quiet` 抑制。
+
+**6. 强制全盘扫描型**
 
 ```powershell
 & ".\start-windows.cmd" --scan-mode all --list-clients --no-log
 ```
 
-指定客户端和自定义数据目录：
+行为：跳过常规扫描限制，递归扫描所有固定磁盘；跳过系统目录和符号链接；只列出候选，不启动 CXExam。
+
+**7. 配置文件型**
+
+```powershell
+& ".\start-windows.cmd" `
+  --config "C:\Tools\chaoxing-plus.json" `
+  --client-first `
+  --panel `
+  --answer-mode auto
+```
+
+**8. 内联 JSON 型**
+
+```powershell
+& ".\start-windows.cmd" `
+  --options-json '{"scanMode":"fallback-all","clientFirst":true,"panel":true,"answerMode":"auto","answerThreads":4}'
+```
+
+其他常用组合：指定客户端和自定义数据目录：
 
 ```powershell
 & ".\start-windows.cmd" `
@@ -321,14 +394,16 @@ JSON 中使用这些未发布字段时同样会报错。配置生成器将它们
   --log
 ```
 
-通过配置文件或内联 JSON 指定面板配置：
+数据生命周期示例（退出时清理本次运行创建的宿主数据，并删除显式指定的外部配置）：
 
 ```powershell
-& ".\start-windows.cmd" --config ".\chaoxing-plus.json" --panel
-& ".\start-windows.cmd" --options-json '{"panel":true,"panelTop":24,"panelWidth":520}'
+& ".\start-windows.cmd" `
+  --config "C:\Tools\chaoxing-plus.json" `
+  --no-retain-data `
+  --delete-config
 ```
 
-以上示例不启用内存执行、自毁或启动清理；手动答题示例会启用答题快捷键，自动模式按默认业务流程处理题目。使用 `--no-disk-write` 时，宿主日志、配置持久化、诊断和报告写入关闭；CXExam 页面自身的 localStorage 不受该选项控制。参数错误、环境检查或权限提示仍可能输出。
+以上**可执行**示例不启用内存执行、自毁或启动清理；示例 1 中的最终目标参数块仅作设计目标，当前宿主会逐条报错。手动答题示例会启用答题快捷键，自动模式按默认业务流程处理题目。使用 `--no-disk-write` 时，宿主日志、配置持久化、诊断和报告写入关闭，并关闭业务侧题库缓存；`--no-retain-data` 只清理本次运行创建的宿主数据，`--delete-config` 只删除显式 `--config` 指定的文件且不能与 `--no-disk-write` 同用；CXExam 页面自身的 localStorage 不受这些选项控制。参数错误、环境检查或权限提示仍可能输出。
 
 Windows 端与 Chrome 扩展的差异：
 
@@ -346,16 +421,39 @@ Windows 端与 Chrome 扩展的差异：
 ### 自动化（不需要客户端、不需要 UAC）
 
 ```powershell
-node --test scripts/windows-host.test.mjs scripts/windows-bootstrap.test.mjs scripts/windows-chrome75.test.mjs scripts/windows-store-safety.test.mjs
+# 类型检查与构建（含 Chrome75 语法闸门）
+node node_modules/typescript/bin/tsc --noEmit
+npm run build
+npm run build:windows
+
+# 全量单元测试（Windows 宿主相关包含扫描、参数、生成器）
+$testFiles = @(Get-ChildItem -LiteralPath scripts -Filter '*.test.mjs' -File | Sort-Object Name | Select-Object -ExpandProperty FullName)
+node --test @testFiles
+
+# 浏览器回归：Swal iframe 顶层运行时与离线参数生成器
+node --test scripts/swal-iframe.browser.mjs
+node --test scripts/windows-parameter-generator.test.mjs
+node --test scripts/windows-selection-window.test.mjs
+
+# 原生选择窗口交互冒烟（会实际弹出窗口，自动关闭；仅本机手动执行）
+$env:CX_TEST_NATIVE_WINDOW='1'; node --test scripts/windows-selection-window.test.mjs; Remove-Item Env:CX_TEST_NATIVE_WINDOW
+
+node windows/host/main.mjs --capabilities
 node windows/host/main.mjs --self-check
+git diff --check
 ```
 
 覆盖内容：
 
 - `windows-host.test.mjs`：配置持久化/共享键过滤、PE 解析、端口选择、CDP 客户端；**mock CDP 服务器**下完整跑通 `bootstrap -> bundle -> 配置回写`。
+- `windows-client-discovery.test.mjs`：常规扫描只到根目录+一级子目录、全盘回退触发条件、首个 x86 立即停止、只有 x64 时选首个 x64、`--scan-mode common` 不回退、跳过系统目录/符号链接。
+- `windows-host-options.test.mjs`：全部启动参数解析与范围/互斥校验、`--no-disk-write` 覆盖、配置合并顺序、未实现能力显式拒绝、数据保留/删除外部配置、文档示例参数可解析。
+- `windows-parameter-generator.test.mjs`：离线生成器加载、8 预设输出可被宿主解析器重新解析、实时校验（互斥、no-disk-write、线程/面板宽度/清理重试、内联 JSON、自毁快捷键冲突、未实现执行模式）与未发布能力不导出。
+- `windows-selection-window.test.mjs`：原生选择窗口脚本纯 ASCII 约束、结果合约（选中/取消/自动关闭/错误）、PowerShell 进程参数与 UTF-8 JSON 载荷、WinForms 控件构建探针；`CX_TEST_NATIVE_WINDOW=1` 时额外验证真实窗口显示与宿主 `--ui gui`/`--select-client` 接线（自动关闭）。
 - `windows-bootstrap.test.mjs`：共享配置水合、DOMContentLoaded 延迟、`replaceChildren`/`randomUUID` 补丁、总开关、配置同步、重复注入去重。
 - `windows-chrome75.test.mjs`：构建产物与内置 handler 字符串必须通过 Chrome75 语法闸门（`?.`/`??`/逻辑赋值/私有成员/静态块均不允许）。
 - `windows-store-safety.test.mjs`：不透明 origin（about:blank）下 `localStorage` 抛 `SecurityError` 时业务 store 不崩溃。
+- `swal-iframe.browser.mjs`：同源多层 iframe、跨源 iframe、顶层运行时延迟初始化、确认/取消/拒绝/计时器结果回传、面板层级覆盖与不受信来源拒绝。
 
 `npm run build:windows` 本身也带语法闸门，失败会中止构建。
 

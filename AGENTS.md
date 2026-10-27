@@ -191,7 +191,11 @@ handler 返回 `boolean | undefined`：`true` 跳过、`false` 与 `undefined` �
 - 宿主只连接自己启动、且监听 PID 校验通过的本机客户端；不要加入“自动连接任意端口/进程”的默认行为。`--attach` 仅供测试/调试。
 - 页面配置通道只允许共享键（`common.settings.*`、`cx.new.*` 等，见 `windows/host/config.mjs`）；不要把逐题缓存写进宿主配置。
 - 页面侧在 about:blank/srcdoc 等不透明 origin 中访问 `localStorage` 会抛 `SecurityError`，业务 runtime store 必须保持容错（已有 `windows-store-safety` 测试）。
-- 真实考试客户端验证需要 UAC 与人工登录，不能在自动化测试里宣称已完成；汇报时明确区分“mock CDP / 真实 Chromium 冒烟（宿主链路）”与“真实 CEF 75 客户端页面验证”。
+- **原生客户端选择窗口**（`--ui gui` / `--select-client`）：由 `windows/host/selection-window.ps1`（Windows PowerShell 5.1+ WinForms，不新增 npm 依赖）实现，Node 封装在 `windows/host/selection-window.mjs`。
+  - `.ps1` 必须保持**纯 ASCII**：Windows PowerShell 5.1 对无 BOM 的 `.ps1` 按 ANSI/OEM 解码，中文字面量会让整段脚本语法错误；所有界面文案一律经 Node 写入的 UTF-8 JSON 传入（已在 `windows-selection-window.test.mjs` 断言）。
+  - 窗口结果合约：输出文件 JSON `{path,cancelled,error}`；`--self-check` 只构建控件（`-Probe`，不显示窗口）；`--ui gui` 在非 Windows/窗口不可用时必须显式报错，不得静默降级。
+  - 自动化验证：`node --test scripts/windows-selection-window.test.mjs`（含 WinForms 控件探针）；真实窗口冒烟用 `CX_TEST_NATIVE_WINDOW=1`，并依赖 `CXPLUS_SELECTION_AUTO_CLOSE_MS` 自动关闭，禁止在自动化中阻塞等待人工点击。
+- 真实考试客户端验证需要 UAC 与人工登录，不能在自动化测试里宣称已完成；汇报时明确区分“mock CDP / 真实 Chromium 冒烟（宿主链路）”“原生选择窗口冒烟”与“真实 CEF 75 客户端页面验证”。
 
 ### Windows 相关验证命令
 
@@ -199,8 +203,15 @@ handler 返回 `boolean | undefined`：`true` 跳过、`false` 与 `undefined` �
 npm run typecheck
 npm run build
 npm run build:windows
-node --test scripts/windows-host.test.mjs scripts/windows-bootstrap.test.mjs scripts/windows-chrome75.test.mjs scripts/windows-store-safety.test.mjs
+node --test scripts/windows-host.test.mjs scripts/windows-bootstrap.test.mjs scripts/windows-chrome75.test.mjs scripts/windows-store-safety.test.mjs scripts/windows-selection-window.test.mjs
 node windows/host/main.mjs --self-check
+node windows/host/main.mjs --capabilities
+```
+
+原生选择窗口交互冒烟（会实际弹窗、自动关闭，仅本机手动执行）：
+
+```powershell
+$env:CX_TEST_NATIVE_WINDOW='1'; node --test scripts/windows-selection-window.test.mjs; Remove-Item Env:CX_TEST_NATIVE_WINDOW
 ```
 
 新增 Windows 行为时，按 repo 既有约定补充 `scripts/windows-*.test.mjs`，并保证全量 `scripts/*.test.mjs` 通过；修改扩展主包共用代码（如 `src/runtime/store.ts`）后必须同时跑扩展构建与全量测试。
