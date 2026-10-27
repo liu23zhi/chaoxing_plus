@@ -73,7 +73,7 @@ vendor/sweetalert2.min.css  config.example.json  package-manifest.json
    npm run build:windows
    ```
 
-3. 首次运行会自动创建 `windows/data/config.json`（从模板复制）。未设置 `clientPath` 时，启动会扫描桌面、Program Files、AppData/ProgramData 与各盘根目录并递归查找；默认选第一个 x86 客户端。也可交互选客户端或直接指定路径：
+3. 首次运行会自动创建 `windows/data/config.json`（从模板复制）。未设置 `clientPath` 时，默认先扫描桌面、Program Files、Program Files (x86)、OneDrive Desktop、AppData/ProgramData 等常见根目录，并且每个根目录只进入一级直接子目录；只有常规路径完全没有候选且扫描模式为 `fallback-all` 时，才递归扫描固定磁盘根目录。这里的“任意子文件夹”严格指一级子目录，不会在常规扫描中进入二级或更深目录。也可交互选客户端或直接指定路径：
 
    ```json
    { "clientPath": "D:\\考试客户端\\CXExam.exe", "port": 0, "settings": { "common.settings.extension-enabled": true } }
@@ -90,7 +90,7 @@ vendor/sweetalert2.min.css  config.example.json  package-manifest.json
    .\start-windows.cmd --client "D:\\Exam\\CXExam.exe" --answer-mode manual --answer-key Ctrl+Shift+A --answer-threads 1 --hide-answer-dialog --no-log
    ```
 
-   `--client-index` 从扫描列表的 1 开始；`--answer-threads` 限制为 1-4。手动模式按组合键后放行对应数量的题目搜题/作答；不会自动保存或提交。自动模式按原流程运行。
+   `--client-index` 从扫描列表的 1 开始；`--scan-mode common` 只扫描常规根目录及一级子目录，`--scan-mode fallback-all`（默认）在常规无结果时追加全盘递归，`--scan-mode all` 强制全盘递归。`--answer-threads` 限制为 1-4。手动模式按组合键后放行对应数量的题目搜题/作答；不会自动保存或提交。自动模式按原流程运行。
 
 4. 启动：
 
@@ -133,9 +133,202 @@ vendor/sweetalert2.min.css  config.example.json  package-manifest.json
 | `dpiAwareness` | `""`（默认）/`"system"`；`system` 会在启动客户端时临时加 Windows `HIGHDPIAWARE` 兼容层（启动后立即恢复注册表原值），用于修复系统缩放 125%/150% 下整个客户端窗口被位图缩放导致的模糊 |
 | `settings` | 共享配置快照（`common.settings.*`、`cx.new.*` 等），会被水合到所有 frame；面板里修改的设置也会回写到这里 |
 
-支持的启动参数还包括 `--panel/--no-panel`、`--panel-collapsed/--panel-expanded`、`--panel-top`、`--panel-right`、`--panel-width`、`--answer-mode auto|manual`、`--answer-key`、`--show-answer-dialog/--hide-answer-dialog`、`--answer-threads`、`--log/--no-log`。`--execution-mode` 仅接受 `normal`；内存执行、删除挂起及快捷键/全屏自毁参数会被拒绝。
+### 完整启动参数
+
+命令行参数优先级高于 JSON 配置。重复的标量开关以命令行中最后一次设置为准；`--self-check`、`--help`、`--list-clients` 等动作型开关按各自语义执行。
+
+#### 客户端扫描和选择
+
+| 参数 | 默认/范围 | 行为 |
+| --- | --- | --- |
+| `--client <path>` | 未指定 | 直接启动指定的 `CXExam.exe`，跳过扫描；仍会检查 PE 架构。 |
+| `--client-index <n>` | 未指定，`n >= 1` | 启动扫描结果第 n 个；常规候选按完整路径排序，全盘候选按遍历顺序。为确保序号可用，全盘扫描会完整枚举候选，不在首个 x86 提前停止。 |
+| `--client-first` | 关闭 | 选择推荐候选；常规扫描结果中 x86 优先，同架构按路径排序。 |
+| `--list-clients` | 关闭 | 列出候选和架构后退出，不启动客户端。 |
+| `--select-client` | 关闭 | 完整扫描后在终端逐项选择；提示时可输入序号或带引号的手动路径。 |
+| `--scan-mode common\|fallback-all\|all` | `fallback-all` | `common` 只扫常规根目录及一级直接子目录；`fallback-all` 仅在常规扫描为零结果时递归固定磁盘；`all` 直接递归固定磁盘。 |
+| `--scan-all` / `--no-scan-all` | 默认 fallback-all | `--scan-all` 启用常规无结果后的递归回退；`--no-scan-all` 将扫描限制为常规路径。 |
+| `--scan-clients` / `--rescan` | 关闭 | 忽略配置中的现有客户端路径并执行扫描；当前宿主没有持久扫描缓存，故 `--rescan` 不涉及缓存清理。 |
+| `--no-scan-cache` | 关闭 | 不读取或写入扫描缓存；当前宿主尚未实现扫描缓存。 |
+| `--ui auto\|cli` | `auto` | `cli` 使用终端交互；`auto` 优先使用已配置客户端路径，否则在交互终端提示选择、在非交互环境使用推荐候选。`gui` 当前未实现，显式指定会报错。 |
+
+常规扫描依次检查用户桌面、OneDrive Desktop、Program Files、Program Files (x86)、AppData/ProgramData 等常见根目录，以及所有可访问固定磁盘根目录；每个根目录只检查根目录自身和一级子目录。跳过符号链接、不可访问目录和 Windows 系统目录。常规扫描找到候选后不再递归全盘，即使候选只有 x64 也一样。普通自动选择时，递归回退按固定磁盘和子目录的确定性顺序遍历，记住首个 x64，发现首个 x86 后停止；未发现 x86 时选首个 x64。为支持用户显式选择，`--client-index`、`--select-client` 和 `--list-clients` 会完整枚举全盘结果。宿主可在 32/64 位 Windows 运行 x86 客户端，并在 64 位 Windows 运行 x64 客户端；自动推荐仍优先 x86。仓库提供的真实目标客户端是 x86，x64 CEF 客户端尚未做真实客户端验证。
+
+选择参数互斥：`--client` 不可与 `--client-index`、`--client-first`、`--select-client` 或 `--list-clients` 同用；`--client-index` 不可与 `--client-first`、`--select-client` 或 `--list-clients` 同用；`--select-client` 与 `--list-clients` 不可同用。扫描模式可以和 `--client` 同时出现，但指定路径会优先并跳过扫描。
+
+#### 配置和数据
+
+| 参数 | 默认/范围 | 行为 |
+| --- | --- | --- |
+| `--config <path>` | `windows/data/config.json` | 读取并更新指定的宿主 JSON 配置文件。 |
+| `--options-json <json>` | 未指定 | 将内联 JSON 对象合并为配置；也可使用 `--options-json @<file.json>` 从文件读取。顶层必须是 JSON 对象，指定的文件不存在或无法解析时会在启动前报错。 |
+| `--data-dir <path>` | `windows/data` | 设置宿主配置、日志和诊断的默认数据目录；明确指定 `--config` 时配置文件路径仍以 `--config` 为准。 |
+| `--no-disk-write` | 关闭 | 不创建/更新配置，不写日志、诊断、运行报告或宿主临时业务文件；并关闭扫描缓存。不会阻止 CXExam 页面自身写入 localStorage，也不能保证 OS 错误或 UAC 提示静默。 |
+| `--retain-data` / `--no-retain-data` | 当前不支持 | 数据保留/清理生命周期尚未实现，参数会直接报错，避免被误当成有效设置。 |
+| `--delete-config` | 当前不支持 | 不会删除外部配置；参数会直接报错。 |
+
+配置合并顺序为：内置默认值 < 默认宿主配置 `windows/data/config.json` < 同目录 `chaoxing-plus.json` < `--config` 指定配置 < `--options-json` < 独立命令行参数。使用 `--no-disk-write` 时仍可读取现有配置，但所有宿主侧写入都关闭。配置只会向页面共享键白名单同步。
+
+#### 面板和答题
+
+| 参数 | 默认/范围 | 行为 |
+| --- | --- | --- |
+| `--panel` / `--no-panel` | 面板由 Windows 页面规则决定，默认考试页显示 | 启用或关闭业务悬浮面板；关闭后 bootstrap 折叠壳也不会挂载。 |
+| `--panel-collapsed` / `--panel-expanded` | 默认折叠 | 设置首次出现时的展开状态。 |
+| `--panel-top <px>` / `--panel-right <px>` | `16`，`0-10000` | 设置面板距视口上边和右边的距离。 |
+| `--panel-width <px>` | `460`，`320-800` | 设置面板宽度。 |
+| `--panel-theme <name>` | `pink` | 预留主题名；当前页面仍使用内置主题样式。 |
+| `--answer-mode auto\|manual` | `auto` | 自动模式按页面设置流程运行；manual 由快捷键为题目处理发放许可。 |
+| `--answer-key <shortcut>` | `F8` | 手动模式快捷键；示例 `Ctrl+Alt+Shift+S`。仅支持一个基础按键，可组合 Ctrl/Alt/Shift/Win。 |
+| `--answer-threads <n>` | `4`，`1-4` | 每次手动许可放行/并行处理的题目数量；超出范围或非整数直接报错。 |
+| `--answer-countdown <sec>` | `5`，整数 `0-3600` | 自动模式开始前的倒计时秒数；`0` 不自动倒计时，等待用户确认。 |
+| `--answer-retry <n>` | 默认 `3`，`0-20` | 设置单题额外重试次数；必须为整数，`0` 表示不额外重试。 |
+| `--show-answer-dialog` / `--hide-answer-dialog` | 显示 | 控制自动答题确认弹窗。 |
+| `--no-auto-submit` | 关闭 | 禁止 Windows 宿主自动提交，章节、作业和考试改为保存；未指定时保留配置文件及业务默认行为。 |
+
+#### 日志、诊断和运行
+
+| 参数 | 默认/范围 | 行为 |
+| --- | --- | --- |
+| `--log` / `--no-log` | 写入宿主日志 | 开启或关闭宿主日志文件。 |
+| `--quiet` | 关闭 | 减少常规控制台输出；参数错误、OS/UAC 提示不一定静默。 |
+| `--diagnose` / `--no-diagnose` | 正式启动默认开启 | 开启或关闭渲染诊断。命令行开关覆盖 JSON 值。 |
+| `--diagnostics-dir <path>` | `windows/data/diagnostics/<timestamp>` | 指定诊断图片和 JSON 的输出目录。 |
+| `--report <path>` | 不生成 | 将运行报告写入指定路径。 |
+| `--execution-mode normal` | `normal` | 当前唯一支持的执行模式。`memory`、`delete-suspend`、`--memory-exec` 和 `--delete-suspend` 会明确报错，不会静默降级。 |
+| `--stop-client-on-exit` | 关闭 | 宿主退出时结束本次启动的客户端进程树。 |
+| `--dpi-aware` | 关闭 | 本次启动临时添加 HIGHDPIAWARE 兼容层，进程创建后立即恢复原注册表值。 |
+| `--port <n>` | `0` | `0` 使用自动端口；`1-65535` 指定端口。 |
+| `--assets <dir>` | `dist-windows` | 指定注入资源目录。 |
+| `--duration <ms>` | 不限时 | 测试模式运行指定时长后退出。 |
+| `--attach <port>` | 不启用 | 仅测试/调试连接已存在端点；不会启动客户端或校验进程归属。 |
+| `--self-check` / `--help` | 关闭 | 只做环境检查或输出参数帮助。 |
+
+以下参数是后续能力的设计项，本阶段**全部拒绝，不会运行或静默忽略**：
+
+| 未发布参数 | 设计值 | 当前行为 |
+| --- | --- | --- |
+| `--execution-mode memory`、`--memory-exec` | 内存执行 | 启动前报错。 |
+| `--execution-mode delete-suspend`、`--delete-suspend` | 删除挂起 | 启动前报错。 |
+| `--wipe-owned-files-on-start` | 关闭 | 启动清理未实现，报错。 |
+| `--wipe-failure-policy retry\|background\|ignore\|abort` | `retry` | 失败策略尚未实现，报错。 |
+| `--wipe-retries <1-20>` | `5` | 重试次数尚未实现，报错。 |
+| `--wipe-retry-delay <ms>` | `200` | 启动重试间隔尚未实现，报错。 |
+| `--wipe-runtime-retry` / `--no-wipe-runtime-retry` | 开启 | 运行期重试尚未实现，报错。 |
+| `--wipe-runtime-interval <sec>` | `30` | 运行期重试间隔尚未实现，报错。 |
+| `--self-destruct-key <shortcut>` | 可重复，默认无 | 自毁快捷键尚未实现，报错。 |
+| `--self-destruct-on-fullscreen-exit` | 关闭 | 全屏/进程退出监控尚未实现，报错。 |
+| `--self-destruct-delay <ms>` | `0` | 自毁延迟尚未实现，报错。 |
+| `--no-self-destruct-confirm` | 关闭 | 自毁确认控制尚未实现，报错。 |
+
+JSON 中使用这些未发布字段时同样会报错。配置生成器将它们标记为未发布；“启动清理型”预设不会输出命令。
+
+`--wipe-*`、`--self-destruct-*`、`--retain-data`、`--no-retain-data` 和 `--delete-config` 当前都不会执行清理或自毁，宿主会拒绝相应 CLI/JSON 配置。只有普通进程启动路径可用；请勿把面板隐藏或 `--quiet` 当成进程隐蔽/自毁能力。
 
 已知限制：Windows 端没有扩展 popup，目前通过编辑 `config.json` 或在页面内面板修改设置；`common.settings.extension-enabled=false` 时不会注入业务 bundle。
+
+### Windows 参数生成器与启动示例
+
+`windows/parameter-generator.html` 是离线单文件参数生成器，可在浏览器中打开，生成 PowerShell、cmd 和 JSON 配置。启动脚本默认根据 HTML 所在位置定位到项目根目录的 `start-windows.cmd`，也可在页面中修改；单独复制 HTML 时需自行指定实际启动器路径。它只导出当前宿主支持的普通启动、扫描、面板、答题、日志和诊断参数，不执行命令、不保存输入。内存执行、删除挂起、启动清理和自毁选项不会由页面生成；启动清理预设会阻止命令导出。
+
+常规路径扫描会检查桌面、OneDrive Desktop、Program Files、Program Files (x86)、AppData/ProgramData，以及所有可识别固定磁盘根目录；每个根目录只检查根目录自身和一级直接子目录。若常规扫描找到候选，默认不递归全盘。常规无候选时 `fallback-all` 才递归固定磁盘；`all` 直接全盘扫描。`--ui cli` 或 `--select-client` 会显示完整候选列表；交互提示支持输入列表序号或带引号的手动 `CXExam.exe` 路径。`--ui auto` 优先使用配置中的客户端路径；没有配置路径时，交互终端提示选择，非交互环境使用推荐候选。`--ui gui` 当前会明确报错。
+
+绝对静默预设的安全子集（关闭宿主一般日志、面板和宿主侧持久化，以快捷键手动放行一题；不承诺所有错误都静默，且不包含内存执行/自毁；CXExam 自身的浏览器存储仍不受此开关控制）：
+
+```powershell
+& ".\start-windows.cmd" `
+  --scan-mode fallback-all `
+  --client-first `
+  --execution-mode normal `
+  --no-disk-write `
+  --no-log `
+  --quiet `
+  --no-panel `
+  --answer-mode manual `
+  --answer-key Ctrl+Alt+Shift+S `
+  --answer-threads 1 `
+  --hide-answer-dialog
+```
+
+友好交互型：
+
+```powershell
+& ".\start-windows.cmd" `
+  --scan-mode fallback-all `
+  --select-client `
+  --panel `
+  --panel-expanded `
+  --panel-top 24 `
+  --panel-right 24 `
+  --panel-width 520 `
+  --answer-mode auto `
+  --answer-countdown 5 `
+  --answer-threads 4 `
+  --show-answer-dialog `
+  --log `
+  --diagnose
+```
+
+懒人型普通启动（默认选择推荐扫描候选，x86 优先）：
+
+```powershell
+& ".\start-windows.cmd" `
+  --scan-mode fallback-all `
+  --client-first `
+  --panel `
+  --panel-expanded `
+  --answer-mode auto `
+  --answer-countdown 5 `
+  --answer-threads 4 `
+  --show-answer-dialog `
+  --log
+```
+
+手动答题型（终端选择候选客户端，每次快捷键放行 2 道题）：
+
+```powershell
+& ".\start-windows.cmd" `
+  --select-client `
+  --panel-collapsed `
+  --answer-mode manual `
+  --answer-key Ctrl+Shift+A `
+  --answer-threads 2 `
+  --hide-answer-dialog `
+  --no-auto-submit `
+  --log
+```
+
+仅扫描常规路径并列出候选：
+
+```powershell
+& ".\start-windows.cmd" --scan-mode common --list-clients --no-log --quiet
+```
+
+强制全盘扫描并列出候选：
+
+```powershell
+& ".\start-windows.cmd" --scan-mode all --list-clients --no-log
+```
+
+指定客户端和自定义数据目录：
+
+```powershell
+& ".\start-windows.cmd" `
+  --client "D:\Exam\CXExam.exe" `
+  --data-dir "D:\CXPlusData" `
+  --panel `
+  --panel-width 520 `
+  --log
+```
+
+通过配置文件或内联 JSON 指定面板配置：
+
+```powershell
+& ".\start-windows.cmd" --config ".\chaoxing-plus.json" --panel
+& ".\start-windows.cmd" --options-json '{"panel":true,"panelTop":24,"panelWidth":520}'
+```
+
+以上示例不启用内存执行、自毁或启动清理；手动答题示例会启用答题快捷键，自动模式按默认业务流程处理题目。使用 `--no-disk-write` 时，宿主日志、配置持久化、诊断和报告写入关闭；CXExam 页面自身的 localStorage 不受该选项控制。参数错误、环境检查或权限提示仍可能输出。
 
 Windows 端与 Chrome 扩展的差异：
 
