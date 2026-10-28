@@ -34,6 +34,8 @@ Node 宿主当前仍需 Node.js 22+，其客户端选择窗口还使用 PowerShe
 
 三份本地样本的静态审计结果：V4.1.4.25512 的两个学校版本 EXE 相同，V4.3.0.4 的 EXE 不同，三者均为 x86，所带 CEF 均为 `75.1.4+g4210896 / Chromium 75.0.3770.100`。该结论仅代表文件架构与版本，未完成这些客户端在各 Windows 版本上的启动、登录及答题验证。
 
+三份样本的 manifest 均要求管理员权限，所带 `libcef.dll` 及关键 CEF 资源内容一致；4.3.0.4 另有音视频组件，启动时应保留原安装目录和客户端工作目录，不能只复制 `CXExam.exe`。对三个显式目录的只读原生自检均返回 `0`，仅报告当前普通用户权限警告；自检没有启动客户端、请求 UAC、连接 CDP 或写入文件。
+
 “单文件”和“旧系统兼容”需要分别验收：[Node 24 官方平台要求](https://github.com/nodejs/node/blob/v24.12.0/BUILDING.md)为 Windows 10 / Server 2016 起，Windows 发布架构为 x64/arm64；[SEA 打包](https://nodejs.org/download/release/v24.12.0/docs/api/single-executable-applications.html)不能降低这一系统要求。[Go 1.21 起](https://go.dev/doc/go1.21#windows)也以 Windows 10 / Server 2016 为最低要求，原设计的 Go 1.22+ 静态构建不能据此宣称覆盖 Windows 7。Chromium 75 [官方构建说明](https://github.com/chromium/chromium/blob/75.0.3770.100/build/config/win/BUILD.gn)仍以 Windows 7 为受支持系统；样本 PE 头的 `5.1` 声明不能证明客户端支持 Windows XP。
 
 后续普通单文件宿主仍须补齐与 Node 的参数行为差异，并在明确的 x86/x64、旧版和现代 Windows 干净环境中验证。当前 CDP 使用 TCP/WebSocket 通信，宿主与客户端无需相同位数；没有必要仅为页面注入拆分两套业务资源。现代 Chromium 自动化已覆盖原生实际 WebSocket 注入、导航、iframe、新 target、CSP 回退和限时关闭；历史探针和样式诊断只证明当时记录的局部行为，**本次 Windows 6.2.0 第一阶段尚未完成真实 CEF75 客户端端到端验收**。
@@ -606,6 +608,8 @@ $hostProcess.Dispose()
 ```
 
 路径必须最终解析为文件名为 `CXExam.exe` 的有效 PE；宿主会读取 PE machine，校验 x86/x64 兼容性，并只连接本次启动客户端声明的本机 CDP 端口。`hybrid` 在直接执行业务源码失败后尝试 DOM script；严格 CSP 可能阻止 DOM script，此时按策略回退 runtime。两条路径都依赖 CDP `Runtime.evaluate`，不能解决目标完全不支持该命令的问题。这些策略都是页面内 CDP 注入，不是任意进程的 DLL 注入。
+
+Node 与原生宿主均在 target 刷新和 WebSocket 连接前重新检查监听进程归属；查询失败或归属变化时关闭已有会话，等待后续轮询重新验证，不能沿用启动时的结果。Node 定时轮询不会重叠；target 的 WebSocket 只接受指定端口的 `ws://127.0.0.1` 或 `ws://localhost`，后者固定连接已校验的 IPv4 回环地址。`--attach` 仍是显式调试例外，不检查进程归属，但保留本机同端口限制。发送命令时发现 WebSocket 已进入关闭状态，会立即取消等待请求并通知重连，不再等待默认命令超时。
 
 数据生命周期示例（普通退出时清理本轮登记的宿主产物，并删除显式指定的外部配置）：
 
