@@ -197,6 +197,7 @@ handler 返回 `boolean | undefined`：`true` 跳过、`false` 与 `undefined` �
   - 自动化验证：`node --test scripts/windows-selection-window.test.mjs`（含 WinForms 控件探针）；真实窗口冒烟用 `CX_TEST_NATIVE_WINDOW=1`，并依赖 `CXPLUS_SELECTION_AUTO_CLOSE_MS` 自动关闭，禁止在自动化中阻塞等待人工点击。
 - **原生 EXE 的客户端选择窗口**：由 `windows/native/selection.c` 使用 Win32 控件和 `GetOpenFileNameW` 实现，不依赖 Node、PowerShell、WinForms 或 CRT。保留序号、架构、版本、完整路径和推荐项；无候选仍可浏览；选中路径必须重新校验有效 PE 和系统架构，取消不得启动客户端。编译 `selection-tests.exe` 后设置 `CX_NATIVE_SELECTION_EXE` 运行 `scripts/windows-native-selection.test.mjs`；隐藏控件探针无需显示窗口，真实显示/取消/选择冒烟需显式设置 `CX_TEST_NATIVE_WINDOW=1`，自动取消变量为 `CXPLUS_NATIVE_SELECTION_AUTO_CLOSE_MS`。测试不得执行所选客户端。
 - **Node 参数生成器的进程参数传递**：Windows PowerShell 5.1 的普通原生命令调用及 `start-windows.cmd` 的 `%*` 转交都可能丢失内联 JSON 双引号。生成器使用 `ProcessStartInfo`、`UseShellExecute=false` 和逐项 Win32 参数引用，直接启动 Node，并显式设置项目工作目录；不要改回批处理转交。修改命令生成时必须实际执行 PowerShell 5.1/7 输出，检查 JSON、中文、引号、尾反斜杠与 shell 字符逐项保真，测试以 `--help` 停止，不得启动考试客户端。
+- Node 的标准 UAC 重启同样须将逐项 Win32 引用后的完整参数串传给 `Start-Process -ArgumentList`；不能直接传原始字符串数组（该 API 只以空格拼接）。修改时运行 `scripts/windows-elevation-arguments.test.mjs`，用不提权的 PowerShell 5.1/7 子进程复核 JSON、空参数、中文、引号、尾反斜杠、路径及工作目录，测试不得请求 UAC 或启动客户端。
 - 真实考试客户端验证需要 UAC 与人工登录，不能在自动化测试里宣称已完成；汇报时明确区分“mock CDP / 真实 Chromium 冒烟（宿主链路）”“原生选择窗口冒烟”与“真实 CEF 75 客户端页面验证”。
 
 ### Windows 相关验证命令
@@ -232,6 +233,7 @@ $env:CX_TEST_NATIVE_WINDOW='1'; node --test scripts/windows-selection-window.tes
   - 只在考试路径创建面板（`isWindowsExamRelatedUrl`：`/exam-ans/`、`/exam/test/`、`/mooc2/exam`、`/reVersionTestStartNew`、`/examcode/`）；登录/课程/跳转页不显示面板；
   - 默认折叠；裁剪学习相关功能（媒体控制、学习流程、任务能力、完成后动作、日志窗口、题库缓存列表区块），保留答题结果、题库配置、考试自动交卷、AI 搜题等考试功能。
 - **Chrome 扩展必须保持完整面板与默认展开**：扩展不注入 `__CX_WIN_HOST__`，不得把 Windows 裁剪逻辑写成无条件分支；`pink-panel-ui.test.mjs` 会同时断言 Windows 分支裁剪与扩展分支保留完整分组。
+- Windows 的 `--no-panel` 同时抑制 `showTopCenterNotice`（包括手动答题就绪及按键反馈），但仍须清除先前提示并保留快捷键放行和监听清理；扩展提示不受旧 Windows 设置影响。修改时运行 `scripts/windows-no-panel-notice.test.mjs` 的真实 Chromium DOM 回归，不能仅用源码字符串判断。
 - **提前挂载折叠壳**：`windows/bootstrap/windows-bootstrap.js` 在考试页面新文档开始时挂载 `panel-common-work-results` 折叠壳（`data-cx-win-panel-shell=1`），业务 `createPanelRoot` 复用同一节点；不要改壳 id 或删除壳 keep-alive/点击展开标记逻辑。
 - **面板所有权只能由顶层 frame 占用**：`claimTopWindowPanelOwnership()` 必须先判断 `window.self === window.top`，非顶层 frame 直接返回 false、绝不写顶层 `data-chaoxing-plus-panel-owner`。答题页大量 about:blank iframe 被注入时，子 frame 抢占 owner 会隐藏顶层面板（2026-10-26 实测问题）。
 - **顶层面板必须可自愈**：`ensureTopPanelKeepAlive(root)` 用 MutationObserver 在面板被 SPA 替换 body 移除后重新 append；不要删除该逻辑。
@@ -241,6 +243,7 @@ $env:CX_TEST_NATIVE_WINDOW='1'; node --test scripts/windows-selection-window.tes
 ### Windows 配置与重连回归
 
 - Windows 6.2.0 第一阶段仅支持普通运行；内存执行、删除挂起、启动清理和自毁必须在 CLI/JSON/配置入口显式拒绝，并在 capability 和生成器中保持禁用。未接入的设计模型及其单元测试通过，不代表发布入口支持该能力。
+- 原生 JSON 的能力拒绝须检查完整 token 树（共享 settings、对象及数组），先解码键并规范化 Windows 前缀、大小写、连字符和下划线，不能只拒绝顶层键后静默保留嵌套请求。保持普通 `normal` 与显式关闭值的既有语义，非法层不得修改已合并设置；实跑 `CX_NATIVE_OPTIONS_EXE`/`CX_NATIVE_HOST_EXE` 对应 `windows-native-options.test.mjs` 的内联、@file 和配置文件回归。
 - 配置合并必须保留前层未被覆盖的共享 `settings`；跨字段冲突及 `noDiskWrite` 派生规则在全部层合并后校验，不能提前用低优先级层拒绝最终有效配置。
 - 配置文件热更新必须重新应用 CLI 与内联 JSON 优先级；不能直接以磁盘原始值替换已生效的页面配置。修改此链路时运行 `scripts/windows-config-reload.test.mjs` 及宿主集成测试。
 - 宿主广播配置须使用 `{kind: "config", values: settings}` 消息包装；原生完整快照加 `replace:true`，缺失旧共享键须同时清理闭包、DOM/延迟属性队列，并通过 `chaoxing-plus:shared-store-remove` 通知 runtimeStore 清理内存及标记删除，禁止重新读回旧 localStorage；重新水合该键须解除删除标记。不带 `replace:true` 仍为增量合并。无写盘策略下不得为删除而触碰 localStorage，非共享键不删，删除通知不得回流同步。回归必须检查真实 bootstrap 的 DOM 属性、配置闭包及 runtimeStore 默认值，不能只断言发出了 `Runtime.evaluate`。同实例重连复用原配置桥并按完整快照水合，不重复安装页面监听；本次启动的 `noDiskWrite` 策略须在热更新及页面同步中保持一致。
@@ -256,8 +259,10 @@ $env:CX_TEST_NATIVE_WINDOW='1'; node --test scripts/windows-selection-window.tes
 - 原生 DOM script 执行须同时检查完成标记和严格布尔确认；CDP 无异常不代表 CSP 允许脚本执行。原生入口的生命周期和参数支持须分别验收，不得以 Node 宿主通过或参数可解析推导原生实现完整。
 - 原生 `session.c` 管理上下文就绪、导航、frame 子树销毁和取消代次，`host-session.inc` 负责真实 target 轮询、WebSocket、重连及顶层兜底；保持三种注入策略的顺序：`runtime` 只用 Runtime，`script` 先 DOM script 后 Runtime，`hybrid` 先 Runtime 后 DOM script。修改生命周期须同时运行已编译会话/传输测试和 `windows-native-lifecycle.browser.mjs`，不能只测纯状态模型或 C 生成的表达式。
 - 原生目标刷新与 WebSocket 建连前都须重新验证本次启动进程的监听归属；失败时关闭既有会话，不能沿用首次验证结果重连。iframe 重连不得依赖 console 历史 ready：成功复用 bootstrap 后，DOM 已就绪时通过现有 `requestBundle()` 恢复通知，业务包继续按文档标记去重；须保留清空 console 历史后的实际浏览器回归。
+- 原生 HTTP 与 WebSocket Upgrade 的连接、发送、分块接收和最终确认须共享一次总截止，不能逐次 recv 重置时间；调用方传入剩余 `debug-timeout`/`duration` 预算，握手后须再次检查取消，迟到连接不得创建会话或发送 CDP。修改时实跑已编译的 `windows-native-transport.test.mjs` 与 `windows-native-host.test.mjs`，保留慢版本响应、慢 target 列表、分块响应、慢/分块 Upgrade 和取消后关闭回归。
 - 原生原型已接入持续会话、Win32 选择、共享配置同步/持久化/热更新、文件日志、运行报告和页面布局采样（`pageRenderDiagnostics:true`）。完整宿主渲染诊断仍不支持（`renderDiagnostics:false`，不采集窗口 DPI 或截图）；内存执行、删除挂起、启动清理、自毁仍须显式拒绝。现代 Chromium 中真实 WebSocket 的自动化结果不代表真实 CEF75 客户端登录后验收，也不能证明旧 Windows 干净环境兼容性。
 - 原生构建当前使用 `/Gs9999999`，不生成栈探针；大路径、环境变量、表达式和控件缓冲区须使用堆或静态存储，避免大栈帧跨过 Windows guard page。修改默认扫描根目录时须实际执行已编译的 `--list-clients --scan-mode common --quiet` 回归，不能只使用人工提供根目录的测试。
+- 原生扫描缓存使用独立 `native-scan-cache-v1.bin`，仅复用完整非空常规扫描；`--list-clients` 保持实时且不读写缓存。缓存须有界、校验真实范围/系统架构/PE/文件指纹/父目录排除及 reparse，失败非致命；`--no-disk-write`/`--no-scan-cache` 禁读写，`--rescan` 绕过读取。修改时编译 `discovery-cache-driver.exe` 和 `discovery-cache-host-tests.exe`，设置 `CX_NATIVE_CACHE_EXE`、`CX_NATIVE_CACHE_HOST_EXE`、`CX_DISCOVERY_TEST_DRIVER` 并运行 `windows-native-cache.test.mjs`、`windows-native-discovery.test.mjs` 与宿主回归。
 - 无 CRT 测试程序也须遵守栈限制，`CX_OPTIONS` 等大对象不能放在测试函数栈上。GUI 子系统测试程序须由 Node `spawnSync` 或 `Start-Process -Wait` 等待并检查实际退出码；PowerShell 直接调用后遗留的 `$LASTEXITCODE` 不构成通过证据。
 - 原生 `--self-check` 必须在普通 `h_run()` 之前独立返回；不得自动扫描常见根目录或全盘、启动客户端、申请 UAC、连接 CDP、创建日志/诊断/报告/配置。显式客户端目录按既有一级规则解析。保留权限真实状态、显式外部资源不回退、普通注入容量限制、实际 loopback bind 后关闭、quiet 静默和参数错误退出 `2`；设置 `CX_NATIVE_HOST_EXE` 实跑 `scripts/windows-native-self-check.test.mjs`。自检通过不能当作客户端启动或 CEF 页面验收证据。
 - 原生 UAC 仅由普通 `proc_launch` 返回 Win32 `740` 触发，使用标准 `runas` 重启同一宿主，不能只提权客户端而丢失进程归属。`--no-elevate`、已重启标记、实际已提升 token 或权限查询失败均阻止重复申请；内部已选路径必须经真实 token 校验并重新验证 PE，不能重新扫描/打开选择窗口。保留原始 argv 和工作目录，父实例先释放资源、跳过交接阶段报告后再等待子实例；取消返回 `3`。修改此链路后生成 `elevation-tests.exe`、`elevation-host-tests.exe`，设置 `CX_NATIVE_ELEVATION_EXE`、`CX_NATIVE_ELEVATION_HOST_EXE`、`CX_NATIVE_HOST_EXE` 实跑 `scripts/windows-native-elevation.test.mjs`；调用替身测试不能宣称真实 UAC 人工批准或 CEF 登录后验证。

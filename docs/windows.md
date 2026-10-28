@@ -36,6 +36,16 @@ Node 宿主当前仍需 Node.js 22+，其客户端选择窗口还使用 PowerShe
 
 三份样本的 manifest 均要求管理员权限，所带 `libcef.dll` 及关键 CEF 资源内容一致；4.3.0.4 另有音视频组件，启动时应保留原安装目录和客户端工作目录，不能只复制 `CXExam.exe`。对三个显式目录的只读原生自检均返回 `0`，仅报告当前普通用户权限警告；自检没有启动客户端、请求 UAC、连接 CDP 或写入文件。
 
+2026-10-28 人工配合的本机运行记录（原生普通宿主）：
+
+| 客户端 | 本轮实际证据 | 尚未验收 |
+| --- | --- | --- |
+| 4.1.4.25512 中山学院版本 | 标准 UAC 交接、监听归属校验通过；`hybrid` 收到 8 次 bootstrap 和 7 次业务包执行确认，用户确认正常加载并显示面板；手动关闭后报告 `success:true`、`client-exit` | 实际答题、Swal 交互、无面板模式及旧 Windows 环境 |
+| 4.3.0.4 通用版本 | 用户确认可到登录页和测试考试；`script` 使用自动端口 38100、`runtime` 使用显式端口 9333，两次均未建立可验证的 CDP 页面会话，面板未显示 | 注入兼容性尚未通过，不能由相同 CEF 版本推导成功 |
+| 4.1.4.25512 河南应用技术职业学院版本 | 仅有静态文件和只读自检证据；用户没有登录测试环境 | 启动、登录及页面注入 |
+
+4.3.0.4 首次等待 30 秒后，宿主按启动失败策略结束了本次创建的客户端；第二次等待上限设为 120 秒，约 41 秒时客户端进程结束。该旧版报告均记为 `endpoint-unavailable`，不能将第二次也解释成调试等待超时。没有证明其考试页面主动拒绝或退出，也没有通过改动客户端文件或关闭保护来验证。后续真实测试前应先确认调试连接，再进入测试考试；本轮人工配合已结束。
+
 “单文件”和“旧系统兼容”需要分别验收：[Node 24 官方平台要求](https://github.com/nodejs/node/blob/v24.12.0/BUILDING.md)为 Windows 10 / Server 2016 起，Windows 发布架构为 x64/arm64；[SEA 打包](https://nodejs.org/download/release/v24.12.0/docs/api/single-executable-applications.html)不能降低这一系统要求。[Go 1.21 起](https://go.dev/doc/go1.21#windows)也以 Windows 10 / Server 2016 为最低要求，原设计的 Go 1.22+ 静态构建不能据此宣称覆盖 Windows 7。Chromium 75 [官方构建说明](https://github.com/chromium/chromium/blob/75.0.3770.100/build/config/win/BUILD.gn)仍以 Windows 7 为受支持系统；样本 PE 头的 `5.1` 声明不能证明客户端支持 Windows XP。
 
 后续普通单文件宿主仍须补齐与 Node 的参数行为差异，并在明确的 x86/x64、旧版和现代 Windows 干净环境中验证。当前 CDP 使用 TCP/WebSocket 通信，宿主与客户端无需相同位数；没有必要仅为页面注入拆分两套业务资源。现代 Chromium 自动化已覆盖原生实际 WebSocket 注入、导航、iframe、新 target、CSP 回退和限时关闭；历史探针和样式诊断只证明当时记录的局部行为，**本次 Windows 6.2.0 第一阶段尚未完成真实 CEF75 客户端端到端验收**。
@@ -70,6 +80,8 @@ chaoxing_plus.exe --self-check --assets "D:\Debug Assets" --port 38123
 父宿主等待提升后的实例结束并回传其退出码；用户取消 UAC 返回 `3`，不得当作客户端已启动。实际权限查询失败、已重启实例仍遇到 `740` 或指定 `--no-elevate` 时直接失败，不循环请求权限。`--quiet` 不能抑制系统 UAC 确认框。帮助、能力输出、有效配置输出、自检、仅列出客户端以及显式 `--attach` 均不申请 UAC。
 
 `runas` 不保证继承父实例的重定向标准输出，跨权限交接后的诊断应使用显式报告或日志。若在 UAC 中使用另一个管理员账户，系统环境变量和映射盘可能不同；保留工作目录不能替代该账户对客户端及配置文件的访问权限。
+
+Node 开发宿主的 UAC 重启先对每一项参数执行 Win32 引用，再将完整命令行作为单个 `Start-Process -ArgumentList` 值传入，保留内联 JSON、空参数、中文、引号及尾反斜杠。对应 PowerShell 5.1/7 自动化只启动参数探针并移除提权请求，不会弹出 UAC 或启动考试客户端；它验证参数保真，不能代替真实权限交接验收。
 
 自动化使用受控 Win32 调用替身验证提权分支、参数传递和退出码，不批准真实 UAC，也不启动真实考试客户端。这不代表已完成 UAC 人工确认、真实 CEF75 登录后页面或旧 Windows 干净环境验收；内存执行、启动清理和自毁能力仍不可用。
 
@@ -311,6 +323,8 @@ vendor/sweetalert2.min.css  config.example.json  package-manifest.json
 
 常规扫描依次检查用户桌面、OneDrive Desktop、Program Files、Program Files (x86)、AppData/ProgramData 等常见根目录，以及所有可访问固定磁盘根目录；每个根目录只检查根目录自身和一级子目录。跳过符号链接、不可访问目录和 Windows 系统目录。常规扫描找到候选后不再递归全盘，即使候选只有 x64 也一样。普通自动选择时，递归回退按固定磁盘和子目录的确定性顺序遍历，记住首个 x64，发现首个 x86 后停止；未发现 x86 时选首个 x64。为支持用户显式选择，`--client-index`、`--select-client` 和 `--list-clients` 会完整枚举全盘结果。架构校验允许 x86 Windows 选择 x86 客户端，x64 Windows 选择 x86/x64 客户端；这不代表当前 Node 宿主已覆盖所有这些系统。自动推荐优先 x86，x64 CEF 客户端尚未做真实客户端验证。
 
+原生 EXE 使用独立的 `<data-dir>/native-scan-cache-v1.bin`，不与 Node 的 `scan-cache.json` 共用格式。仅缓存完整常规扫描的非空结果，有效期 5 分钟；命中时重新校验扫描根目录、系统架构、一级深度、候选 PE、文件标识/大小/修改时间，以及父目录的系统排除和 reparse 状态。新增客户端在缓存期内可能暂不出现，使用 `--rescan` 强制刷新。`--no-scan-cache`、`--no-disk-write`、`--list-clients`、显式客户端路径和强制全盘扫描均不读写该缓存；空结果、递归回退或不完整扫描不写入。缓存损坏、过期、过大、访问/替换失败或范围超出缓存容量时，继续实时扫描，不阻止启动。
+
 选择参数互斥：`--client` 不可与扫描参数（`--scan-clients`、`--scan-mode`、`--rescan`）、`--client-index`、`--client-first`、`--select-client` 或 `--list-clients` 同用；`--client-index` 不可与 `--client-first`、`--select-client` 或 `--list-clients` 同用；`--select-client` 与 `--list-clients` 不可同用。这样可避免“显式路径被扫描结果覆盖”的歧义。
 
 #### 配置和数据
@@ -347,6 +361,8 @@ vendor/sweetalert2.min.css  config.example.json  package-manifest.json
 
 参考项目中的 `cef-hook` 是当前进程内的 CEF/Detours hook，不能安全地作为通用外部注入器复用；本宿主因此采用“启动客户端时注入受控远程调试参数 + 校验 Browser/PID/端口归属 + CDP 多路径页面注入”。宿主不会自动连接任意已有端口；`--attach` 仅用于测试/调试。
 
+原生宿主的 HTTP 请求和 WebSocket Upgrade 均按一次总截止时间执行，连接、发送、分块接收不会重新开始计时，并受本次 `--duration` 的剩余时间限制。调试版本尚未就绪时，报告分别记录 `client-exit-before-endpoint`（客户端已结束）、`duration-before-endpoint`（运行时长已到）或 `endpoint-unavailable`（调试等待截止），避免把不同停止原因统一写成等待超时。
+
 CDP 断开时关闭旧页面会话；target 仍存在则在下一轮枚举重新连接。初次连接、重连和顶层导航后都会延迟检查 bootstrap/bundle，避免已有 bootstrap 不再发送 `ready` 时漏注入。同一执行上下文的并发 `ready` 合并为一次业务注入；上下文销毁或会话关闭后，迟到结果作废，停止后续策略切换及重试。DOM script 注入使用执行完成标记识别 CSP 阻止或脚本异常，失败后按所选策略回退，不把无异常的 CDP 响应当作脚本已成功执行。配置广播使用 `{kind:"config", values:...}` 包装；原生宿主的完整快照另带 `replace:true` 以删除已移除的旧共享键，不带该标记时保留增量合并语义。同实例重连复用已有配置桥水合最新完整快照，不重复安装监听或面板。
 
 运行报告累计保留历次 target 会话的统计；断线重连或页面关闭不会抹去此前成功注入的计数，也不会因此误报“没有完成任何业务注入”。
@@ -355,7 +371,7 @@ CDP 断开时关闭旧页面会话；target 仍存在则在下一轮枚举重新
 
 | 参数 | 默认/范围 | 行为 |
 | --- | --- | --- |
-| `--panel` / `--no-panel` | 面板由 Windows 页面规则决定，默认考试页显示 | 启用或关闭业务悬浮面板；关闭后 bootstrap 折叠壳也不会挂载。 |
+| `--panel` / `--no-panel` | 面板由 Windows 页面规则决定，默认考试页显示 | 启用或关闭业务悬浮面板；关闭后不挂载 bootstrap 折叠壳，也不显示手动答题就绪和按键反馈浮层，快捷键答题仍可用。 |
 | `--panel-collapsed` / `--panel-expanded` | 默认折叠 | 设置首次出现时的展开状态。 |
 | `--panel-top <px>` / `--panel-right <px>` | `16`，`0-10000` | 设置面板距视口上边和右边的距离。 |
 | `--panel-width <px>` | `460`，`320-800` | 设置面板宽度。 |
@@ -672,6 +688,9 @@ $env:CX_NATIVE_HOST_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\c
 $env:CX_NATIVE_INJECTION_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\injection-tests.exe').Path
 $env:CX_NATIVE_ASSETS_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\assets-tests.exe').Path
 $env:CX_NATIVE_OPTIONS_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\options-tests.exe').Path
+$env:CX_NATIVE_CACHE_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\discovery-cache-driver.exe').Path
+$env:CX_NATIVE_CACHE_HOST_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\discovery-cache-host-tests.exe').Path
+$env:CX_DISCOVERY_TEST_DRIVER = $env:CX_NATIVE_CACHE_EXE
 $env:CX_NATIVE_SESSION_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\session-tests.exe').Path
 $env:CX_NATIVE_SELECTION_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\selection-tests.exe').Path
 $env:CX_NATIVE_CLI_SELECTION_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\cli-selection-tests.exe').Path
@@ -687,9 +706,11 @@ $env:CX_NATIVE_DPI_CHILD_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\
 $env:CX_NATIVE_PROCESS_CHECK_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\process-check-tests.exe').Path
 $env:CX_NATIVE_PROCESS_FIXTURE_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\process-fixture.exe').Path
 try {
+  node --test scripts/windows-native-cache.test.mjs scripts/windows-native-discovery.test.mjs
   node --test scripts/windows-native-host.test.mjs scripts/windows-native-self-check.test.mjs scripts/windows-native-assets.test.mjs scripts/windows-native-options.test.mjs scripts/windows-native-session.test.mjs scripts/windows-native-selection.test.mjs scripts/windows-native-cli-selection.test.mjs scripts/windows-native-transport.test.mjs scripts/windows-native-audit.test.mjs scripts/windows-native-config.test.mjs scripts/windows-native-diagnostics.test.mjs scripts/windows-native-elevation.test.mjs scripts/windows-native-dpi.test.mjs scripts/windows-native-process-check.test.mjs
   node --test scripts/windows-native-injection.browser.mjs scripts/windows-native-assets.browser.mjs scripts/windows-native-lifecycle.browser.mjs scripts/windows-native-audit.browser.mjs scripts/windows-native-config.browser.mjs
 } finally {
+  Remove-Item Env:CX_NATIVE_CACHE_EXE, Env:CX_NATIVE_CACHE_HOST_EXE, Env:CX_DISCOVERY_TEST_DRIVER -ErrorAction SilentlyContinue
   Remove-Item Env:CX_NATIVE_HOST_EXE, Env:CX_NATIVE_INJECTION_EXE, Env:CX_NATIVE_ASSETS_EXE, Env:CX_NATIVE_OPTIONS_EXE, Env:CX_NATIVE_SESSION_EXE, Env:CX_NATIVE_SELECTION_EXE, Env:CX_NATIVE_CLI_SELECTION_EXE, Env:CX_NATIVE_TRANSPORT_EXE, Env:CX_NATIVE_AUDIT_EXE, Env:CX_NATIVE_CONFIG_EXE, Env:CX_NATIVE_DIAGNOSTICS_EXE, Env:CX_NATIVE_ELEVATION_EXE, Env:CX_NATIVE_ELEVATION_HOST_EXE, Env:CX_NATIVE_DPI_EXE, Env:CX_NATIVE_DPI_PROCESS_EXE, Env:CX_NATIVE_DPI_CHILD_EXE, Env:CX_NATIVE_PROCESS_CHECK_EXE, Env:CX_NATIVE_PROCESS_FIXTURE_EXE -ErrorAction SilentlyContinue
 }
 ```
@@ -715,6 +736,10 @@ try {
 2026-10-28 已有客户端检查阶段验证记录：显式展开 60 个 `scripts/*.test.mjs`，587/587 通过、0 失败、0 跳过；已设置全部原生测试 EXE 变量及窗口冒烟开关。原生注入/资源/生命周期/审计/配置和 Swal iframe 浏览器回归 42/42 通过。类型检查、扩展构建、Chrome75 构建、无警告原生 `-BuildTests`、Node self-check 与 `git diff --check` 均退出 0；原生 EXE 为 522240 字节，导入表只含系统 DLL。新增能力红测先失败，完成后通过；真实测试自有进程验证已有客户端保持运行，确定性驱动还覆盖 `proc_launch` 复查及晚冲突的 DPI 恢复。没有启动真实考试客户端或触发真实 UAC，仍不代表 CEF75 登录后或旧 Windows 环境验收。
 
 2026-10-28 扫描与生成器完善验证记录：显式展开 61 个 `scripts/*.test.mjs`，614 项中 610 通过、0 失败、4 项可选窗口显示冒烟跳过；全部原生测试程序变量指向本轮构建。另行执行 Node 实际 Chromium 注入回归 17/17、Swal iframe 回归 8/8。类型检查、扩展构建、Chrome75 构建、原生 `-BuildTests`、Node self-check 与 `git diff --check` 均退出 0，self-check 为 0 失败、0 警告；原生 EXE 为 523264 字节，导入表仅含 Windows 系统 DLL。新增回归先失败后通过，覆盖默认扫描缓存复用、范围失效、frame 子树清理、消息身份校验、原生生成命令/JSON 的选择族覆盖和字符串容量。生成器在 PowerShell 5.1/7 与 cmd 中实跑只读入口，验证 JSON、中文、引号、尾反斜杠和工作目录；桌面 1280 与手机 390 宽度布局已检查。没有执行真实 CEF75 客户端登录后、真实 UAC 或旧 Windows 干净环境验收；内存执行、启动清理、自毁仍禁用。
+
+2026-10-28 无人工配合的收尾验证：显式展开 65 个 `scripts/*.test.mjs`，共 650 项，646 通过、0 失败，4 项需要显示原生窗口的可选冒烟跳过；全部原生编译测试变量和发现器驱动均指向本轮默认构建，新增缓存驱动已实际执行。另跑 Node 注入、Swal 及五个原生浏览器回归文件，59/59 通过、0 跳过。类型检查、扩展构建、Chrome75 构建、原生 `-BuildTests`、Node self-check 和差异检查均退出 0，自检为 0 失败、0 警告。原生 EXE 为 530432 字节，导入表只有 Windows 系统 DLL，无额外 CRT；旧 Windows 干净环境仍未验证。
+
+本轮修复并锁定无面板模式的手动答题提示、Node UAC 参数保真、原生 HTTP/Upgrade 总截止与准确停止原因、原生常规扫描缓存及嵌套未实现能力的显式拒绝。PowerShell 5.1/7 参数回归只运行无权限参数探针；自动化使用自有 mock 服务和现代 Chromium，收尾阶段没有再次启动考试客户端或申请 UAC。真实客户端结果以前文人工运行表为准，客户端 2 的注入兼容性、客户端 3 的登录环境及旧系统适配仍未验收；内存执行、启动清理和自毁继续禁用。
 
 原生 Win32 选择窗口的实际显示与自动选择冒烟需单独启用，整个过程中不会启动考试客户端：
 
