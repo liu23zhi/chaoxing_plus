@@ -196,6 +196,7 @@ handler 返回 `boolean | undefined`：`true` 跳过、`false` 与 `undefined` �
   - 窗口结果合约：输出文件 JSON `{path,cancelled,error}`；`--self-check` 只构建控件（`-Probe`，不显示窗口）；`--ui gui` 在非 Windows/窗口不可用时必须显式报错，不得静默降级。
   - 自动化验证：`node --test scripts/windows-selection-window.test.mjs`（含 WinForms 控件探针）；真实窗口冒烟用 `CX_TEST_NATIVE_WINDOW=1`，并依赖 `CXPLUS_SELECTION_AUTO_CLOSE_MS` 自动关闭，禁止在自动化中阻塞等待人工点击。
 - **原生 EXE 的客户端选择窗口**：由 `windows/native/selection.c` 使用 Win32 控件和 `GetOpenFileNameW` 实现，不依赖 Node、PowerShell、WinForms 或 CRT。保留序号、架构、版本、完整路径和推荐项；无候选仍可浏览；选中路径必须重新校验有效 PE 和系统架构，取消不得启动客户端。编译 `selection-tests.exe` 后设置 `CX_NATIVE_SELECTION_EXE` 运行 `scripts/windows-native-selection.test.mjs`；隐藏控件探针无需显示窗口，真实显示/取消/选择冒烟需显式设置 `CX_TEST_NATIVE_WINDOW=1`，自动取消变量为 `CXPLUS_NATIVE_SELECTION_AUTO_CLOSE_MS`。测试不得执行所选客户端。
+- **Node 参数生成器的进程参数传递**：Windows PowerShell 5.1 的普通原生命令调用及 `start-windows.cmd` 的 `%*` 转交都可能丢失内联 JSON 双引号。生成器使用 `ProcessStartInfo`、`UseShellExecute=false` 和逐项 Win32 参数引用，直接启动 Node，并显式设置项目工作目录；不要改回批处理转交。修改命令生成时必须实际执行 PowerShell 5.1/7 输出，检查 JSON、中文、引号、尾反斜杠与 shell 字符逐项保真，测试以 `--help` 停止，不得启动考试客户端。
 - 真实考试客户端验证需要 UAC 与人工登录，不能在自动化测试里宣称已完成；汇报时明确区分“mock CDP / 真实 Chromium 冒烟（宿主链路）”“原生选择窗口冒烟”与“真实 CEF 75 客户端页面验证”。
 
 ### Windows 相关验证命令

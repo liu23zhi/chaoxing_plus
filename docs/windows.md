@@ -305,6 +305,8 @@ vendor/sweetalert2.min.css  config.example.json  package-manifest.json
 
 原生 EXE 的 `--ui gui` / `--select-client` 则调用 `windows/native/selection.c`，没有 PowerShell 子进程。其隐藏控件探针由 `selection-tests.exe` 执行；实际显示、取消和选择 Unicode 路径的交互冒烟需显式设置 `CX_TEST_NATIVE_WINDOW=1`，测试通过 `CXPLUS_NATIVE_SELECTION_AUTO_CLOSE_MS` 自动取消，避免等待人工操作。该测试不会执行所选客户端。
 
+原生 EXE 的 `--ui cli` 列出候选序号、架构、版本、完整路径和推荐项；`--list-clients` 同样输出这些元信息。终端交互接受完整数字序号、Enter 选择推荐项、`q`/`Q` 取消（退出码 `3`），也接受有效 `CXExam.exe` 路径或安装目录，支持中文、空格及外层双引号。没有扫描候选时仍可手动输入路径；非法输入或输入流结束会明确失败，不会擅自启动推荐客户端。
+
 常规扫描依次检查用户桌面、OneDrive Desktop、Program Files、Program Files (x86)、AppData/ProgramData 等常见根目录，以及所有可访问固定磁盘根目录；每个根目录只检查根目录自身和一级子目录。跳过符号链接、不可访问目录和 Windows 系统目录。常规扫描找到候选后不再递归全盘，即使候选只有 x64 也一样。普通自动选择时，递归回退按固定磁盘和子目录的确定性顺序遍历，记住首个 x64，发现首个 x86 后停止；未发现 x86 时选首个 x64。为支持用户显式选择，`--client-index`、`--select-client` 和 `--list-clients` 会完整枚举全盘结果。架构校验允许 x86 Windows 选择 x86 客户端，x64 Windows 选择 x86/x64 客户端；这不代表当前 Node 宿主已覆盖所有这些系统。自动推荐优先 x86，x64 CEF 客户端尚未做真实客户端验证。
 
 选择参数互斥：`--client` 不可与扫描参数（`--scan-clients`、`--scan-mode`、`--rescan`）、`--client-index`、`--client-first`、`--select-client` 或 `--list-clients` 同用；`--client-index` 不可与 `--client-first`、`--select-client` 或 `--list-clients` 同用；`--select-client` 与 `--list-clients` 不可同用。这样可避免“显式路径被扫描结果覆盖”的歧义。
@@ -413,7 +415,9 @@ CDP 断开时关闭旧页面会话；target 仍存在则在下一轮枚举重新
 
 ### Windows 参数生成器与启动示例
 
-`windows/parameter-generator.html` 是离线单文件参数生成器，可在浏览器中打开，生成 PowerShell、cmd、JSON 配置和参数摘要。启动脚本默认根据 HTML 所在位置定位到项目根目录的 `start-windows.cmd`，也可在页面中修改；单独复制 HTML 时需自行指定实际启动器路径。页面不联网、不执行命令、不保存输入。
+`windows/parameter-generator.html` 是离线单文件参数生成器，可在浏览器中打开，生成 PowerShell、cmd、JSON 配置和参数摘要。Node 宿主脚本默认根据 HTML 所在位置定位到 `windows\host\main.mjs`；单独复制 HTML 时需填写实际脚本的绝对路径，只接受 Windows 驱动器绝对路径（支持 `C:/`）或包含服务器及共享名的完整 UNC 路径，不接受普通相对路径、`C:foo` 或仅以 `\` 开头的根相对路径。两种命令都需要 Node.js 22+，并以该脚本对应的项目根目录为工作目录，保持相对配置路径和数据目录的原有含义。生成器针对 Node 宿主，不用于直接生成原生 EXE 命令。页面不联网、不执行命令、不保存输入。
+
+PowerShell 输出兼容 Windows PowerShell 5.1 和 PowerShell 7：通过 `ProcessStartInfo` 直接启动 `node.exe`，显式关闭 shell 执行，按 Win32 参数规则保留 JSON 双引号、中文、空格、单引号、尾反斜杠与 shell 字符，等待结束后设置 `$LASTEXITCODE`。不要把内联 JSON 改回 `start-windows.cmd` 的 `%*` 转交链路，普通 PowerShell 单引号引用不能保证该链路保留 JSON。cmd 输出为单行直接 Node 命令；遇到内联 JSON、命令解释符、百分号、感叹号、双引号、换行、尾反斜杠参数或 UNC 项目目录时停止导出 cmd，使用 PowerShell 输出或配置文件。
 
 页面按客户端扫描 / 配置和数据 / 执行模式 / 面板 / 答题 / 日志与诊断 / 启动清理 / 自毁分组，提供 8 个预设。绝对静默型只生成下方第一阶段普通启动子集；友好交互型、懒人型、手动答题型、仅扫描型、直接路径型和全盘扫描型均为普通运行。**启动清理型（`startupClean`）是不可执行的设计预设**：选中后说明缺失能力并清空命令与 JSON 输出，不能生成去掉清理开关的普通命令冒充清理启动。
 
@@ -559,9 +563,18 @@ CDP 断开时关闭旧页面会话；target 仍存在则在下一轮枚举重新
 
 **8. 内联 JSON 型**
 
+下面的普通参数示例使用与生成器相同的直接进程启动方式；执行前位于项目根目录。复杂 JSON 请交给生成器完成引用，不要手工拼入批处理。
+
 ```powershell
-& ".\start-windows.cmd" `
-  --options-json '{"scanMode":"fallback-all","clientFirst":true,"panel":true,"answerMode":"auto","answerThreads":4}'
+$start = New-Object System.Diagnostics.ProcessStartInfo
+$start.FileName = (Get-Command node.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+$start.UseShellExecute = $false
+$start.WorkingDirectory = (Get-Location).Path
+$start.Arguments = '"windows\host\main.mjs" --options-json "{\"scanMode\":\"fallback-all\",\"clientFirst\":true,\"panel\":true,\"answerMode\":\"auto\",\"answerThreads\":4}"'
+$hostProcess = [System.Diagnostics.Process]::Start($start)
+$hostProcess.WaitForExit()
+$global:LASTEXITCODE = $hostProcess.ExitCode
+$hostProcess.Dispose()
 ```
 
 其他常用组合：指定客户端和自定义数据目录：
@@ -653,6 +666,7 @@ $env:CX_NATIVE_ASSETS_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin
 $env:CX_NATIVE_OPTIONS_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\options-tests.exe').Path
 $env:CX_NATIVE_SESSION_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\session-tests.exe').Path
 $env:CX_NATIVE_SELECTION_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\selection-tests.exe').Path
+$env:CX_NATIVE_CLI_SELECTION_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\cli-selection-tests.exe').Path
 $env:CX_NATIVE_TRANSPORT_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\transport-tests.exe').Path
 $env:CX_NATIVE_AUDIT_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\audit-tests.exe').Path
 $env:CX_NATIVE_CONFIG_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\config-store-tests.exe').Path
@@ -665,10 +679,10 @@ $env:CX_NATIVE_DPI_CHILD_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\
 $env:CX_NATIVE_PROCESS_CHECK_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\process-check-tests.exe').Path
 $env:CX_NATIVE_PROCESS_FIXTURE_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\process-fixture.exe').Path
 try {
-  node --test scripts/windows-native-host.test.mjs scripts/windows-native-self-check.test.mjs scripts/windows-native-assets.test.mjs scripts/windows-native-options.test.mjs scripts/windows-native-session.test.mjs scripts/windows-native-selection.test.mjs scripts/windows-native-transport.test.mjs scripts/windows-native-audit.test.mjs scripts/windows-native-config.test.mjs scripts/windows-native-diagnostics.test.mjs scripts/windows-native-elevation.test.mjs scripts/windows-native-dpi.test.mjs scripts/windows-native-process-check.test.mjs
+  node --test scripts/windows-native-host.test.mjs scripts/windows-native-self-check.test.mjs scripts/windows-native-assets.test.mjs scripts/windows-native-options.test.mjs scripts/windows-native-session.test.mjs scripts/windows-native-selection.test.mjs scripts/windows-native-cli-selection.test.mjs scripts/windows-native-transport.test.mjs scripts/windows-native-audit.test.mjs scripts/windows-native-config.test.mjs scripts/windows-native-diagnostics.test.mjs scripts/windows-native-elevation.test.mjs scripts/windows-native-dpi.test.mjs scripts/windows-native-process-check.test.mjs
   node --test scripts/windows-native-injection.browser.mjs scripts/windows-native-assets.browser.mjs scripts/windows-native-lifecycle.browser.mjs scripts/windows-native-audit.browser.mjs scripts/windows-native-config.browser.mjs
 } finally {
-  Remove-Item Env:CX_NATIVE_HOST_EXE, Env:CX_NATIVE_INJECTION_EXE, Env:CX_NATIVE_ASSETS_EXE, Env:CX_NATIVE_OPTIONS_EXE, Env:CX_NATIVE_SESSION_EXE, Env:CX_NATIVE_SELECTION_EXE, Env:CX_NATIVE_TRANSPORT_EXE, Env:CX_NATIVE_AUDIT_EXE, Env:CX_NATIVE_CONFIG_EXE, Env:CX_NATIVE_DIAGNOSTICS_EXE, Env:CX_NATIVE_ELEVATION_EXE, Env:CX_NATIVE_ELEVATION_HOST_EXE, Env:CX_NATIVE_DPI_EXE, Env:CX_NATIVE_DPI_PROCESS_EXE, Env:CX_NATIVE_DPI_CHILD_EXE, Env:CX_NATIVE_PROCESS_CHECK_EXE, Env:CX_NATIVE_PROCESS_FIXTURE_EXE -ErrorAction SilentlyContinue
+  Remove-Item Env:CX_NATIVE_HOST_EXE, Env:CX_NATIVE_INJECTION_EXE, Env:CX_NATIVE_ASSETS_EXE, Env:CX_NATIVE_OPTIONS_EXE, Env:CX_NATIVE_SESSION_EXE, Env:CX_NATIVE_SELECTION_EXE, Env:CX_NATIVE_CLI_SELECTION_EXE, Env:CX_NATIVE_TRANSPORT_EXE, Env:CX_NATIVE_AUDIT_EXE, Env:CX_NATIVE_CONFIG_EXE, Env:CX_NATIVE_DIAGNOSTICS_EXE, Env:CX_NATIVE_ELEVATION_EXE, Env:CX_NATIVE_ELEVATION_HOST_EXE, Env:CX_NATIVE_DPI_EXE, Env:CX_NATIVE_DPI_PROCESS_EXE, Env:CX_NATIVE_DPI_CHILD_EXE, Env:CX_NATIVE_PROCESS_CHECK_EXE, Env:CX_NATIVE_PROCESS_FIXTURE_EXE -ErrorAction SilentlyContinue
 }
 ```
 
@@ -719,7 +733,7 @@ try {
 - `windows-injection-lifecycle.test.mjs`：并发注入合并、上下文销毁、关闭后停止重试、CDP 断线关闭会话、新文档注册被拒绝后继续实际上下文注入、首次漏报上下文的定时补注入，以及注册期间关闭只取消不误报降级。
 - `windows-injection.browser.mjs`：真实 Chromium CDP 下 runtime/script/hybrid、CSP 回退、注入重试、导航、移除 iframe、断线重连恢复及会话资源释放；使用自动化测试页面，不代表真实 CEF 75 考试页面验收。
 - `windows-client-process.test.mjs`：本次宿主客户端子进程的退出/启动错误事件只处理一次，取消观察和已结束进程边界。
-- `windows-parameter-generator.test.mjs`：离线生成器加载、普通预设输出可被宿主解析器重新解析、实时校验（互斥、no-disk-write、线程/面板宽度/清理重试、内联 JSON、自毁快捷键冲突）与禁用能力阻止导出；`startupClean` 只展示设计说明且不生成命令或 JSON。
+- `windows-parameter-generator.test.mjs`：离线生成器加载、普通预设输出可被宿主解析器重新解析、实时校验（互斥、no-disk-write、线程/面板宽度/清理重试、内联 JSON、自毁快捷键冲突）与禁用能力阻止导出；Windows 上实际执行 PowerShell 5.1/7 和安全 cmd 输出，通过预加载器强制宿主停在 `--help`，逐项检查 argv、中文/JSON/shell 字符保真和项目工作目录，不扫描或启动客户端；`startupClean` 只展示设计说明且不生成命令或 JSON。
 - `windows-native-host.test.mjs`：原生源码边界与构建选项；设置 `CX_NATIVE_HOST_EXE` 后执行 CLI 回归，设置 `CX_NATIVE_INJECTION_EXE` 后执行已编译的实际注入逻辑测试。内部清理器或状态机测试仅证明模块行为，不表示 Node 或原生入口支持启动清理、自毁。
 - `windows-native-self-check.test.mjs`：设置 `CX_NATIVE_HOST_EXE` 后验证单独 EXE、中文客户端路径、内嵌/显式资源、容量限制、占用端口和 attach 不连接、配置错误、quiet、字段脱敏和不写业务文件；不执行客户端。
 - `windows-native-elevation.test.mjs`：设置 `CX_NATIVE_ELEVATION_EXE`、`CX_NATIVE_ELEVATION_HOST_EXE` 和 `CX_NATIVE_HOST_EXE`，验证标准 UAC 的按需交接、防重复重启、原参数/工作目录/已选客户端保留和取消退出码；不触发真实 UAC。
