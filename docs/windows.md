@@ -415,15 +415,19 @@ CDP 断开时关闭旧页面会话；target 仍存在则在下一轮枚举重新
 
 ### Windows 参数生成器与启动示例
 
-`windows/parameter-generator.html` 是离线单文件参数生成器，可在浏览器中打开，生成 PowerShell、cmd、JSON 配置和参数摘要。Node 宿主脚本默认根据 HTML 所在位置定位到 `windows\host\main.mjs`；单独复制 HTML 时需填写实际脚本的绝对路径，只接受 Windows 驱动器绝对路径（支持 `C:/`）或包含服务器及共享名的完整 UNC 路径，不接受普通相对路径、`C:foo` 或仅以 `\` 开头的根相对路径。两种命令都需要 Node.js 22+，并以该脚本对应的项目根目录为工作目录，保持相对配置路径和数据目录的原有含义。生成器针对 Node 宿主，不用于直接生成原生 EXE 命令。页面不联网、不执行命令、不保存输入。
+`windows/parameter-generator.html` 是离线单文件参数生成器，可在浏览器中打开，生成 PowerShell、cmd、JSON 配置和参数摘要。先选择“Node 开发宿主”或“原生单文件 EXE”，再套用预设；切换预设保留宿主类型和入口路径。页面不联网、不执行命令、不保存输入。
 
-PowerShell 输出兼容 Windows PowerShell 5.1 和 PowerShell 7：通过 `ProcessStartInfo` 直接启动 `node.exe`，显式关闭 shell 执行，按 Win32 参数规则保留 JSON 双引号、中文、空格、单引号、尾反斜杠与 shell 字符，等待结束后设置 `$LASTEXITCODE`。不要把内联 JSON 改回 `start-windows.cmd` 的 `%*` 转交链路，普通 PowerShell 单引号引用不能保证该链路保留 JSON。cmd 输出为单行直接 Node 命令；遇到内联 JSON、命令解释符、百分号、感叹号、双引号、换行、尾反斜杠参数或 UNC 项目目录时停止导出 cmd，使用 PowerShell 输出或配置文件。
+Node 模式需要 Node.js 22+，默认根据 HTML 所在位置定位 `windows\host\main.mjs`，并以该脚本对应的项目根目录作为工作目录，数据目录默认 `windows\data`。原生模式直接启动填写的 `chaoxing_plus.exe`，无需 Node.js，以 EXE 所在目录作为工作目录，数据目录默认 `.data`。两种模式的相对配置、数据与报告路径均按对应工作目录解析；切换宿主只调整未自定义的默认数据/诊断目录。入口只接受 Windows 驱动器绝对路径（支持 `C:/`）或包含服务器及共享名的完整 UNC 路径，不接受相对路径、`C:foo` 或仅以 `\` 开头的路径；生成器无法确认文件存在，请填写实际发布文件的位置。
+
+PowerShell 输出兼容 Windows PowerShell 5.1 和 PowerShell 7：通过 `ProcessStartInfo` 直接启动 `node.exe` 或原生 EXE，显式关闭 shell 执行，按 Win32 参数规则保留 JSON 双引号、中文、空格、单引号、尾反斜杠与 shell 字符，等待结束后设置 `$LASTEXITCODE`。不要把内联 JSON 改回 `start-windows.cmd` 的 `%*` 转交链路，普通 PowerShell 单引号引用不能保证该链路保留 JSON。cmd 输出为单行直接宿主命令；遇到内联 JSON、命令解释符、百分号、感叹号、双引号、换行、尾反斜杠参数或 UNC 工作目录时停止导出 cmd，使用 PowerShell 输出或配置文件。
 
 页面按客户端扫描 / 配置和数据 / 执行模式 / 面板 / 答题 / 日志与诊断 / 启动清理 / 自毁分组，提供 8 个预设。绝对静默型只生成下方第一阶段普通启动子集；友好交互型、懒人型、手动答题型、仅扫描型、直接路径型和全盘扫描型均为普通运行。**启动清理型（`startupClean`）是不可执行的设计预设**：选中后说明缺失能力并清空命令与 JSON 输出，不能生成去掉清理开关的普通命令冒充清理启动。
 
 实时校验包括客户端选择互斥、`--no-disk-write` 冲突、答题线程/面板宽度/清理重试范围、内联 JSON 的范围/枚举/类型、`--delete-config` 与 `--config` 关联、归一化后的答题/自毁快捷键冲突、非法序号和以 `--` 开头的参数值。只导出已支持的普通启动、扫描、面板、答题、日志、诊断和普通数据生命周期参数；面板主题仍为预留接口。启动清理、内存执行、删除挂起和自毁控件显示“当前宿主不可执行”，即使从内联 JSON 或程序化方式请求也必须阻止导出。生成结果由宿主解析器回归校验。
 
-常规路径扫描会检查桌面、OneDrive Desktop、Program Files、Program Files (x86)、AppData/ProgramData，以及所有可识别固定磁盘根目录；每个根目录只检查根目录自身和一级直接子目录。若常规扫描找到候选，默认不递归全盘。常规无候选时 `fallback-all` 才递归固定磁盘；`all` 直接全盘扫描。扫描结果会按模式写入数据目录的 `scan-cache.json`，缓存默认 5 分钟有效；命中前逐个检查文件仍存在且 PE 架构未变化，任何候选失效、缓存过期或解析失败都会自动实时重扫。`--no-scan-cache` 和 `--no-disk-write` 都完全禁止缓存读写。`--ui cli`、`--ui gui` 或 `--select-client` 会显示完整候选列表；`--select-client`/`--ui gui` 使用 Windows 原生选择窗口（支持手动浏览），即使扫描没有候选也可以手动浏览。终端提示则支持输入列表序号或带引号的手动 `CXExam.exe` 路径。`--ui auto` 优先使用配置中的客户端路径；没有配置路径时，交互终端提示选择，Windows 非交互环境显示原生选择窗口，quiet/client-first 模式则直接使用推荐候选。
+原生模式另行校验自身入口的边界：面板坐标/宽度必须是整数，序号最大 `2147483647`，快捷键使用原生支持的 `Ctrl` / `Alt` / `Shift` / `Win` 与一个基础按键，不能重复修饰键。原生内联 JSON 不接受未知顶层键，也会校验被 CLI 覆盖前的 JSON 类型。路径参数最多为 1023 个 UTF-16 字符，Browser 文本、主题和快捷键最多为 127 个；表单与 JSON 使用相同限制。导出 JSON 会按原生 CLI 的覆盖规则规范化客户端选择参数族及诊断反向别名，避免命令可运行而 JSON 冲突。原生 `--no-retain-data` / `--delete-config` 仍未接入，表单中禁用这些控件；既有 Node 清理请求或内联 JSON 含这些请求时阻止导出，不能悄悄去掉参数。可切回 Node 取消选项或重置。原生诊断仅为页面布局采样，不含窗口 DPI 和截图；选择“友好交互型”也不会改变这个能力边界。
+
+常规路径扫描会检查桌面、OneDrive Desktop、Program Files、Program Files (x86)、AppData/ProgramData，以及所有可识别固定磁盘根目录；每个根目录只检查根目录自身和一级直接子目录。若常规扫描找到候选，默认不递归全盘。常规无候选时 `fallback-all` 才递归固定磁盘；`all` 直接全盘扫描。扫描结果会按模式写入数据目录的 `scan-cache.json`，缓存默认 5 分钟有效；命中前逐个检查文件仍存在且 PE 架构未变化，任何候选失效、缓存过期或解析失败都会自动实时重扫。缓存还会核对当前常规根目录、固定磁盘及目录排除策略；这些范围变化或旧版缓存会实时重扫。默认 `fallback-all` 可复用已完整完成根目录和一级子目录扫描的常规命中结果；提前停止的递归结果不缓存，不能冒充完整候选列表。`--no-scan-cache` 和 `--no-disk-write` 都完全禁止缓存读写。`--ui cli`、`--ui gui` 或 `--select-client` 会显示完整候选列表；`--select-client`/`--ui gui` 使用 Windows 原生选择窗口（支持手动浏览），即使扫描没有候选也可以手动浏览。终端提示则支持输入列表序号或带引号的手动 `CXExam.exe` 路径。`--ui auto` 优先使用配置中的客户端路径；没有配置路径时，交互终端提示选择，Windows 非交互环境显示原生选择窗口，quiet/client-first 模式则直接使用推荐候选。
 
 #### 启动示例
 
@@ -705,6 +709,8 @@ try {
 2026-10-28 按需 UAC 阶段验证记录：显式展开 58 个 `scripts/*.test.mjs`，579/579 通过、0 跳过；设置所有原生测试 EXE 变量及 `CX_TEST_NATIVE_WINDOW=1`，包含新增的两个提权测试驱动。原生注入/资源/生命周期/审计/配置与 Swal iframe 浏览器回归合计 42/42 通过。类型检查、扩展构建、Chrome75 构建、无警告原生 `-BuildTests`、Node self-check 和 `git diff --check` 均退出 0；原生 EXE 为 517120 字节，导入表仅含 Windows 系统 DLL。参数往返测试真实读取中文空格临时工作目录，740、token、取消、父资源释放及报告交接使用 Win32 调用替身；没有触发真实 UAC 或启动真实考试客户端，仍需人工验收。
 
 2026-10-28 已有客户端检查阶段验证记录：显式展开 60 个 `scripts/*.test.mjs`，587/587 通过、0 失败、0 跳过；已设置全部原生测试 EXE 变量及窗口冒烟开关。原生注入/资源/生命周期/审计/配置和 Swal iframe 浏览器回归 42/42 通过。类型检查、扩展构建、Chrome75 构建、无警告原生 `-BuildTests`、Node self-check 与 `git diff --check` 均退出 0；原生 EXE 为 522240 字节，导入表只含系统 DLL。新增能力红测先失败，完成后通过；真实测试自有进程验证已有客户端保持运行，确定性驱动还覆盖 `proc_launch` 复查及晚冲突的 DPI 恢复。没有启动真实考试客户端或触发真实 UAC，仍不代表 CEF75 登录后或旧 Windows 环境验收。
+
+2026-10-28 扫描与生成器完善验证记录：显式展开 61 个 `scripts/*.test.mjs`，614 项中 610 通过、0 失败、4 项可选窗口显示冒烟跳过；全部原生测试程序变量指向本轮构建。另行执行 Node 实际 Chromium 注入回归 17/17、Swal iframe 回归 8/8。类型检查、扩展构建、Chrome75 构建、原生 `-BuildTests`、Node self-check 与 `git diff --check` 均退出 0，self-check 为 0 失败、0 警告；原生 EXE 为 523264 字节，导入表仅含 Windows 系统 DLL。新增回归先失败后通过，覆盖默认扫描缓存复用、范围失效、frame 子树清理、消息身份校验、原生生成命令/JSON 的选择族覆盖和字符串容量。生成器在 PowerShell 5.1/7 与 cmd 中实跑只读入口，验证 JSON、中文、引号、尾反斜杠和工作目录；桌面 1280 与手机 390 宽度布局已检查。没有执行真实 CEF75 客户端登录后、真实 UAC 或旧 Windows 干净环境验收；内存执行、启动清理、自毁仍禁用。
 
 原生 Win32 选择窗口的实际显示与自动选择冒烟需单独启用，整个过程中不会启动考试客户端：
 
