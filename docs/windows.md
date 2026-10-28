@@ -30,13 +30,28 @@ Node 宿主当前仍需 Node.js 22+，其客户端选择窗口还使用 PowerShe
 
 下文完整参数和 `start-windows.cmd` 示例以 Node 宿主为准；原生原型的具体参数以它自己的 `--help`、`--capabilities` 和已执行测试为准，不默认宣称与 Node 全部等价。两条宿主都不提供启动清理、内存执行、删除挂起或自毁能力；这些请求必须明确拒绝，不能静默降级为普通运行。
 
-普通退出的数据生命周期也尚未在两条入口间对齐：Node 支持 `--no-retain-data`、`--delete-config` 和 `--self-check`；原生原型明确拒绝这些参数及 JSON 中的 `retainData:false`、`deleteConfig:true`，避免接受参数却忽略请求。
+普通退出的数据生命周期仍未在两条入口间对齐：Node 支持 `--no-retain-data`、`--delete-config`；原生原型明确拒绝这两个参数及 JSON 中的 `retainData:false`、`deleteConfig:true`，避免接受参数却忽略请求。两条入口均支持 `--self-check`，但检查范围和输出行为以各自说明为准。
 
 三份本地样本的静态审计结果：V4.1.4.25512 的两个学校版本 EXE 相同，V4.3.0.4 的 EXE 不同，三者均为 x86，所带 CEF 均为 `75.1.4+g4210896 / Chromium 75.0.3770.100`。该结论仅代表文件架构与版本，未完成这些客户端在各 Windows 版本上的启动、登录及答题验证。
 
 “单文件”和“旧系统兼容”需要分别验收：[Node 24 官方平台要求](https://github.com/nodejs/node/blob/v24.12.0/BUILDING.md)为 Windows 10 / Server 2016 起，Windows 发布架构为 x64/arm64；[SEA 打包](https://nodejs.org/download/release/v24.12.0/docs/api/single-executable-applications.html)不能降低这一系统要求。[Go 1.21 起](https://go.dev/doc/go1.21#windows)也以 Windows 10 / Server 2016 为最低要求，原设计的 Go 1.22+ 静态构建不能据此宣称覆盖 Windows 7。Chromium 75 [官方构建说明](https://github.com/chromium/chromium/blob/75.0.3770.100/build/config/win/BUILD.gn)仍以 Windows 7 为受支持系统；样本 PE 头的 `5.1` 声明不能证明客户端支持 Windows XP。
 
 后续普通单文件宿主仍须补齐与 Node 的参数行为差异，并在明确的 x86/x64、旧版和现代 Windows 干净环境中验证。当前 CDP 使用 TCP/WebSocket 通信，宿主与客户端无需相同位数；没有必要仅为页面注入拆分两套业务资源。现代 Chromium 自动化已覆盖原生实际 WebSocket 注入、导航、iframe、新 target、CSP 回退和限时关闭；历史探针和样式诊断只证明当时记录的局部行为，**本次 Windows 6.2.0 第一阶段尚未完成真实 CEF75 客户端端到端验收**。
+
+### 原生环境自检
+
+原生 `chaoxing_plus.exe --self-check` 在配置合并、参数校验后执行，检查当前 Windows 架构、token 提升状态、内嵌资源、实际选择的四项资源和注入容量、显式客户端 PE 与架构、可绑定的本机端口。`--capabilities` 的 `selfCheck:true` 仅表示这些启动前检查可用。
+
+```text
+chaoxing_plus.exe --self-check --client "D:\Exam\CXExam.exe" --no-disk-write
+chaoxing_plus.exe --self-check --assets "D:\Debug Assets" --port 38123
+```
+
+自检不进入普通运行：不扫描默认根目录或全盘、不显示选择窗口、不申请 UAC、不启动客户端、不连接 CDP、不写日志/诊断/报告或配置，即使同时传入 `--log`、`--diagnose`、`--report` 也是如此。显式 `--client` 安装目录仍按客户端解析规则检查该目录及一级直接子目录；未指定客户端时只警告未检查，不自动搜索。`--attach` 模式跳过绑定和连接检查；普通端口检查仅临时绑定后关闭，不保留端口，启动时仍须重新校验。
+
+标准输出是单份 JSON，包含 `mode`、`host`、`version`、`success`、`scope`、`port`、带稳定 `id/status/detail/ok` 的 `checks` 以及 `warnings`、`failures` 标识列表。结果不包含绝对路径、原始配置、密钥、题目或答案；`--quiet` 抑制 JSON，仍保留退出码。成功或仅警告返回 `0`，环境检查失败返回 `1`；参数、配置解析错误和未实现功能请求仍在自检之前返回 `2`，不保证 JSON。通过只证明静态启动前提和当前端口可绑定，不证明客户端能启动或真实 CEF 页面兼容。调用方捕获 GUI 子系统 EXE 结果时应等待进程结束，不能使用 PowerShell 未等待时遗留的 `$LASTEXITCODE`。
+
+2026-10-28 对本任务三个客户端的只读复核：版本依次为 `4.1.4.25512`、`4.3.0.4`、`4.1.4.25512`，均为 x86，三份 `libcef.dll` 字节和 SHA256 相同，版本为 `75.1.4+g4210896+chromium-75.0.3770.100`。三个主 EXE manifest 均要求管理员权限；当前原生 `CreateProcessW` 启动路径没有自动 UAC 提升流程，普通用户可能遇到 Win32 740，需以管理员身份启动宿主。原生自检对三者均返回 `0`、无失败，并如实报告普通用户权限警告；没有启动客户端。客户端主 EXE 的 PE 版本字段不能用来证明旧版 Windows 可运行，仍需完整依赖和目标环境验收。
 
 ### 原生共享配置与热更新
 
@@ -129,6 +144,7 @@ windows/
   native/session.c             上下文/导航/就绪任务状态机与取消代次
   native/host-session.inc      原生 target 轮询、真实 WebSocket 会话与生命周期适配
   native/host-config.inc       原生配置排队、启动优先级、文件热更新与串行广播
+  native/host-self-check.inc   不进入普通运行的结构化环境检查，无自动扫描/启动/连接/写盘
   native/config-store.c        共享 JSON 规范合并、变更键选择与配置文件安全替换
   native/audit.c               无 CRT 的 UTC 固定事件日志、独立 JSON 运行报告与写入失败降级
   native/diagnostics.c         一次性页面布局 JSON、字段白名单与采样写入失败降级
@@ -596,7 +612,7 @@ $env:CX_NATIVE_AUDIT_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\
 $env:CX_NATIVE_CONFIG_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\config-store-tests.exe').Path
 $env:CX_NATIVE_DIAGNOSTICS_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\diagnostics-tests.exe').Path
 try {
-  node --test scripts/windows-native-host.test.mjs scripts/windows-native-assets.test.mjs scripts/windows-native-options.test.mjs scripts/windows-native-session.test.mjs scripts/windows-native-selection.test.mjs scripts/windows-native-transport.test.mjs scripts/windows-native-audit.test.mjs scripts/windows-native-config.test.mjs scripts/windows-native-diagnostics.test.mjs
+  node --test scripts/windows-native-host.test.mjs scripts/windows-native-self-check.test.mjs scripts/windows-native-assets.test.mjs scripts/windows-native-options.test.mjs scripts/windows-native-session.test.mjs scripts/windows-native-selection.test.mjs scripts/windows-native-transport.test.mjs scripts/windows-native-audit.test.mjs scripts/windows-native-config.test.mjs scripts/windows-native-diagnostics.test.mjs
   node --test scripts/windows-native-injection.browser.mjs scripts/windows-native-assets.browser.mjs scripts/windows-native-lifecycle.browser.mjs scripts/windows-native-audit.browser.mjs scripts/windows-native-config.browser.mjs
 } finally {
   Remove-Item Env:CX_NATIVE_HOST_EXE, Env:CX_NATIVE_INJECTION_EXE, Env:CX_NATIVE_ASSETS_EXE, Env:CX_NATIVE_OPTIONS_EXE, Env:CX_NATIVE_SESSION_EXE, Env:CX_NATIVE_SELECTION_EXE, Env:CX_NATIVE_TRANSPORT_EXE, Env:CX_NATIVE_AUDIT_EXE, Env:CX_NATIVE_CONFIG_EXE, Env:CX_NATIVE_DIAGNOSTICS_EXE -ErrorAction SilentlyContinue
@@ -610,6 +626,8 @@ try {
 2026-10-28 配置同步阶段验证记录：显式展开 55 个 `scripts/*.test.mjs`，560/560 通过、0 跳过；原有 6 个浏览器回归文件共 50/50 通过，新增原生配置浏览器回归 8/8 通过，合计 58 项。类型检查、扩展构建、Chrome75 构建、原生 `-BuildTests` 均退出 0；Node 宿主 self-check 为 0 失败、0 警告。当时原生 EXE 为 498176 字节，导入表仅含 Windows 系统 DLL。编译后的故障回归先失败、修复后通过，覆盖写盘失败期间不丢失更新的内存配置；浏览器回归覆盖新宿主接管旧文档，以及默认/显式配置文件删除后的不同恢复行为。自有宿主、浏览器和监听端口已关闭。以上为本地驱动、mock CDP 与现代 Chromium 自动化证据，尚未执行真实 CEF75 客户端登录后验证；后续执行时应重新展开测试文件并报告当次实际数量。
 
 2026-10-28 页面诊断接线阶段验证记录：显式展开 56 个 `scripts/*.test.mjs`，共 567 项、563 通过、0 失败、4 项可选窗口显示测试跳过；原生 EXE、注入、资源、参数、会话、传输、日志、配置和诊断测试变量均设置为本次构建产物，页面诊断的 6 个现代 Chromium 用例及诊断模块测试实际执行。原生注入/资源/生命周期/审计/配置浏览器回归 34/34 通过；Swal iframe 浏览器回归 8/8 通过。类型检查、扩展构建、Chrome75 构建、原生 `-BuildTests`、Node self-check、`git diff --check` 均退出 0。原生 EXE 为 508928 字节，导入表仅含系统 DLL。诊断开关的 8 个编译后断言先失败再修复通过，覆盖 CLI 最后一次生效和 JSON 分层；仍未执行真实 CEF75 人工登录或旧 Windows 干净环境验证。
+
+2026-10-28 原生自检阶段验证记录：显式展开 57 个 `scripts/*.test.mjs`，575/575 通过、0 跳过；已设置全部原生测试 EXE 变量，并通过 `CX_TEST_NATIVE_WINDOW=1` 执行自动关闭的窗口显示冒烟。新增自检的首轮 7 项红测失败，完善后 8 项编译版回归通过；全量曾发现测试读取并行重建的构建目录而失败，现改为测试自有资源夹具，并在构建后顺序重跑通过。原生浏览器回归 34/34 通过；类型检查、扩展构建、Chrome75 构建、原生 `-BuildTests` 和 Node self-check 均退出 0。原生 EXE 为 513024 字节，导入表仍仅含系统 DLL；对三个真实客户端目录的只读自检均无失败、均报告普通用户权限警告，不代表已完成客户端启动、UAC 或 CEF 登录后验收。
 
 原生 Win32 选择窗口的实际显示与自动选择冒烟需单独启用，整个过程中不会启动考试客户端：
 
@@ -640,6 +658,7 @@ try {
 - `windows-client-process.test.mjs`：本次宿主客户端子进程的退出/启动错误事件只处理一次，取消观察和已结束进程边界。
 - `windows-parameter-generator.test.mjs`：离线生成器加载、普通预设输出可被宿主解析器重新解析、实时校验（互斥、no-disk-write、线程/面板宽度/清理重试、内联 JSON、自毁快捷键冲突）与禁用能力阻止导出；`startupClean` 只展示设计说明且不生成命令或 JSON。
 - `windows-native-host.test.mjs`：原生源码边界与构建选项；设置 `CX_NATIVE_HOST_EXE` 后执行 CLI 回归，设置 `CX_NATIVE_INJECTION_EXE` 后执行已编译的实际注入逻辑测试。内部清理器或状态机测试仅证明模块行为，不表示 Node 或原生入口支持启动清理、自毁。
+- `windows-native-self-check.test.mjs`：设置 `CX_NATIVE_HOST_EXE` 后验证单独 EXE、中文客户端路径、内嵌/显式资源、容量限制、占用端口和 attach 不连接、配置错误、quiet、字段脱敏和不写业务文件；不执行客户端。
 - `windows-native-assets.test.mjs`：仅复制 EXE/driver 到中文空格目录，逐项比对宿主与 driver 内嵌资源的长度/SHA256，并覆盖外部资源缺失、空文件、超限及禁止落盘解包。
 - `windows-native-options.test.mjs`：实际 C 参数测试，覆盖扫描别名和 CLI/JSON 的客户端选择优先级。
 - `windows-native-session.test.mjs`：实际 C 会话状态机，覆盖导航和 frame 子树销毁、就绪通知期间不重入、URL 过滤、顶层兜底及容量边界；不以模型通过代替宿主适配器验证。
