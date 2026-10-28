@@ -253,8 +253,10 @@ $env:CX_TEST_NATIVE_WINDOW='1'; node --test scripts/windows-selection-window.tes
 - 原生 DOM script 执行须同时检查完成标记和严格布尔确认；CDP 无异常不代表 CSP 允许脚本执行。原生入口的生命周期和参数支持须分别验收，不得以 Node 宿主通过或参数可解析推导原生实现完整。
 - 原生 `session.c` 管理上下文就绪、导航、frame 子树销毁和取消代次，`host-session.inc` 负责真实 target 轮询、WebSocket、重连及顶层兜底；保持三种注入策略的顺序：`runtime` 只用 Runtime，`script` 先 DOM script 后 Runtime，`hybrid` 先 Runtime 后 DOM script。修改生命周期须同时运行已编译会话/传输测试和 `windows-native-lifecycle.browser.mjs`，不能只测纯状态模型或 C 生成的表达式。
 - 原生目标刷新与 WebSocket 建连前都须重新验证本次启动进程的监听归属；失败时关闭既有会话，不能沿用首次验证结果重连。iframe 重连不得依赖 console 历史 ready：成功复用 bootstrap 后，DOM 已就绪时通过现有 `requestBundle()` 恢复通知，业务包继续按文档标记去重；须保留清空 console 历史后的实际浏览器回归。
-- 原生原型已接入持续会话、Win32 选择、共享配置同步/持久化/热更新、文件日志和运行报告（`configReload:true`、`configPersistence:true`、`fileLogging:true`、`runReport:true`），渲染诊断仍未接入（`renderDiagnostics:false`）；内存执行、删除挂起、启动清理、自毁仍须显式拒绝。现代 Chromium 中真实 WebSocket 的自动化结果不代表真实 CEF75 客户端登录后验收，也不能证明旧 Windows 干净环境兼容性。
+- 原生原型已接入持续会话、Win32 选择、共享配置同步/持久化/热更新、文件日志、运行报告和页面布局采样（`pageRenderDiagnostics:true`）。完整宿主渲染诊断仍不支持（`renderDiagnostics:false`，不采集窗口 DPI 或截图）；内存执行、删除挂起、启动清理、自毁仍须显式拒绝。现代 Chromium 中真实 WebSocket 的自动化结果不代表真实 CEF75 客户端登录后验收，也不能证明旧 Windows 干净环境兼容性。
 - 原生构建当前使用 `/Gs9999999`，不生成栈探针；大路径、环境变量、表达式和控件缓冲区须使用堆或静态存储，避免大栈帧跨过 Windows guard page。修改默认扫描根目录时须实际执行已编译的 `--list-clients --scan-mode common --quiet` 回归，不能只使用人工提供根目录的测试。
+- 无 CRT 测试程序也须遵守栈限制，`CX_OPTIONS` 等大对象不能放在测试函数栈上。GUI 子系统测试程序须由 Node `spawnSync` 或 `Start-Process -Wait` 等待并检查实际退出码；PowerShell 直接调用后遗留的 `$LASTEXITCODE` 不构成通过证据。
+- 原生页面诊断只在首次成功的顶层 bundle 确认后尝试一次，不能把子 iframe 的任务触发为顶层采样。保持字段白名单、三位小数量化、URL 样式拒绝和失败非致命；`--no-diagnose` 必须覆盖配置中的 `diagnose:true`，正反 CLI 开关最后一次生效，`--no-disk-write` 禁止创建诊断目录。修改此链路后设置 `CX_NATIVE_DIAGNOSTICS_EXE=<diagnostics-tests.exe>` 与 `CX_NATIVE_HOST_EXE=<chaoxing_plus.exe>` 运行 `node --test scripts/windows-native-diagnostics.test.mjs`，保留真实 Chromium 的分数 DPR、CSS URL canary 和文件失败回归。
 
 ### 原生日志与运行报告
 

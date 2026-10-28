@@ -131,6 +131,7 @@ windows/
   native/host-config.inc       原生配置排队、启动优先级、文件热更新与串行广播
   native/config-store.c        共享 JSON 规范合并、变更键选择与配置文件安全替换
   native/audit.c               无 CRT 的 UTC 固定事件日志、独立 JSON 运行报告与写入失败降级
+  native/diagnostics.c         一次性页面布局 JSON、字段白名单与采样写入失败降级
   native/build.ps1             x86 构建、RCDATA 与导入表审计；-BuildTests 生成 C 测试程序
   data/                        本地配置与日志（gitignore）：config.json / logs/
 build.windows.mjs              Windows 构建（target chrome75 + 语法闸门 + manifest）
@@ -593,17 +594,22 @@ $env:CX_NATIVE_SELECTION_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\
 $env:CX_NATIVE_TRANSPORT_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\transport-tests.exe').Path
 $env:CX_NATIVE_AUDIT_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\audit-tests.exe').Path
 $env:CX_NATIVE_CONFIG_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\config-store-tests.exe').Path
+$env:CX_NATIVE_DIAGNOSTICS_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\diagnostics-tests.exe').Path
 try {
-  node --test scripts/windows-native-host.test.mjs scripts/windows-native-assets.test.mjs scripts/windows-native-options.test.mjs scripts/windows-native-session.test.mjs scripts/windows-native-selection.test.mjs scripts/windows-native-transport.test.mjs scripts/windows-native-audit.test.mjs scripts/windows-native-config.test.mjs
+  node --test scripts/windows-native-host.test.mjs scripts/windows-native-assets.test.mjs scripts/windows-native-options.test.mjs scripts/windows-native-session.test.mjs scripts/windows-native-selection.test.mjs scripts/windows-native-transport.test.mjs scripts/windows-native-audit.test.mjs scripts/windows-native-config.test.mjs scripts/windows-native-diagnostics.test.mjs
   node --test scripts/windows-native-injection.browser.mjs scripts/windows-native-assets.browser.mjs scripts/windows-native-lifecycle.browser.mjs scripts/windows-native-audit.browser.mjs scripts/windows-native-config.browser.mjs
 } finally {
-  Remove-Item Env:CX_NATIVE_HOST_EXE, Env:CX_NATIVE_INJECTION_EXE, Env:CX_NATIVE_ASSETS_EXE, Env:CX_NATIVE_OPTIONS_EXE, Env:CX_NATIVE_SESSION_EXE, Env:CX_NATIVE_SELECTION_EXE, Env:CX_NATIVE_TRANSPORT_EXE, Env:CX_NATIVE_AUDIT_EXE, Env:CX_NATIVE_CONFIG_EXE -ErrorAction SilentlyContinue
+  Remove-Item Env:CX_NATIVE_HOST_EXE, Env:CX_NATIVE_INJECTION_EXE, Env:CX_NATIVE_ASSETS_EXE, Env:CX_NATIVE_OPTIONS_EXE, Env:CX_NATIVE_SESSION_EXE, Env:CX_NATIVE_SELECTION_EXE, Env:CX_NATIVE_TRANSPORT_EXE, Env:CX_NATIVE_AUDIT_EXE, Env:CX_NATIVE_CONFIG_EXE, Env:CX_NATIVE_DIAGNOSTICS_EXE -ErrorAction SilentlyContinue
 }
 ```
 
+`diagnostics-tests.exe` 通过 `CX_NATIVE_DIAGNOSTICS_EXE` 纳入测试，检查实际文件写入、诊断 schema、CSS URL 拒绝、禁用开关和失败降级；其测试目录由 Node 驱动创建并清理。原生测试是 GUI 子系统程序，应使用 Node `spawnSync` 或 `Start-Process -Wait` 等待结束并读取真实退出码，不要将 PowerShell 直接调用后留下的旧 `$LASTEXITCODE` 当作测试结果。`windows-native-diagnostics.test.mjs` 还通过 `CX_NATIVE_HOST_EXE` 执行现代 Chromium 采样回归，覆盖顶层 bundle 确认、分数缩放、CSS URL 脱敏、诊断关闭和路径失败；未设置这些变量时会明确跳过。
+
 `-BuildTests` 编译实际原生宿主注入代码与确定性 mock CDP 传输，输出 `injection-tests.exe`，同时生成 `assets-tests.exe`、`options-tests.exe`、`json-tests.exe`、`session-tests.exe`、`selection-tests.exe`、`transport-tests.exe`、`audit-tests.exe` 和 `config-store-tests.exe`。`CX_NATIVE_INJECTION_EXE` 启用策略顺序、重试上限、CDP 请求 ID 及执行确认测试；`CX_NATIVE_ASSETS_EXE` 启用资源字节校验；`CX_NATIVE_OPTIONS_EXE` 启用实际 C 参数回归；`CX_NATIVE_SESSION_EXE` 检查导航、iframe、取消代次、配置任务和启用恢复；`CX_NATIVE_SELECTION_EXE` 构建真实 Win32 隐藏控件；`CX_NATIVE_TRANSPORT_EXE` 检查分段 WebSocket 消息、零超时和控制帧截止时间；`CX_NATIVE_AUDIT_EXE` 检查真实日志/报告文件、中文路径、quiet/noDiskWrite、UTF-8/JSON 转义和文件失败降级；`CX_NATIVE_CONFIG_EXE` 检查共享键解码去重、容量边界、真实文件 patch、原文件保留和自有临时文件清理。未设置对应变量时会显示跳过，不能称为已完成编译验证。`json-tests.exe` 可直接执行验证 JSON 解析。`CX_NATIVE_HOST_EXE` 用于原生 CLI、现代 Chromium 生命周期、审计及配置回归，`--capabilities` 校验内嵌资源并报告 `embeddedResources:true`、资源数量以及 `configReload:true`/`configPersistence:true`/`fileLogging:true`/`runReport:true`。`build/pe-imports.txt` 是导入表审计记录；这些测试仍不等同于真实客户端验收。
 
-2026-10-28 本轮验证记录：显式展开 55 个 `scripts/*.test.mjs`，560/560 通过、0 跳过；原有 6 个浏览器回归文件共 50/50 通过，新增原生配置浏览器回归 8/8 通过，合计 58 项。类型检查、扩展构建、Chrome75 构建、原生 `-BuildTests` 均退出 0；Node 宿主 self-check 为 0 失败、0 警告。本轮原生 EXE 为 498176 字节，导入表仅含 Windows 系统 DLL。编译后的故障回归先失败、修复后通过，覆盖写盘失败期间不丢失更新的内存配置；浏览器回归覆盖新宿主接管旧文档，以及默认/显式配置文件删除后的不同恢复行为。自有宿主、浏览器和监听端口已关闭。以上为本地驱动、mock CDP 与现代 Chromium 自动化证据，尚未执行真实 CEF75 客户端登录后验证；后续执行时应重新展开测试文件并报告当次实际数量。
+2026-10-28 配置同步阶段验证记录：显式展开 55 个 `scripts/*.test.mjs`，560/560 通过、0 跳过；原有 6 个浏览器回归文件共 50/50 通过，新增原生配置浏览器回归 8/8 通过，合计 58 项。类型检查、扩展构建、Chrome75 构建、原生 `-BuildTests` 均退出 0；Node 宿主 self-check 为 0 失败、0 警告。当时原生 EXE 为 498176 字节，导入表仅含 Windows 系统 DLL。编译后的故障回归先失败、修复后通过，覆盖写盘失败期间不丢失更新的内存配置；浏览器回归覆盖新宿主接管旧文档，以及默认/显式配置文件删除后的不同恢复行为。自有宿主、浏览器和监听端口已关闭。以上为本地驱动、mock CDP 与现代 Chromium 自动化证据，尚未执行真实 CEF75 客户端登录后验证；后续执行时应重新展开测试文件并报告当次实际数量。
+
+2026-10-28 页面诊断接线阶段验证记录：显式展开 56 个 `scripts/*.test.mjs`，共 567 项、563 通过、0 失败、4 项可选窗口显示测试跳过；原生 EXE、注入、资源、参数、会话、传输、日志、配置和诊断测试变量均设置为本次构建产物，页面诊断的 6 个现代 Chromium 用例及诊断模块测试实际执行。原生注入/资源/生命周期/审计/配置浏览器回归 34/34 通过；Swal iframe 浏览器回归 8/8 通过。类型检查、扩展构建、Chrome75 构建、原生 `-BuildTests`、Node self-check、`git diff --check` 均退出 0。原生 EXE 为 508928 字节，导入表仅含系统 DLL。诊断开关的 8 个编译后断言先失败再修复通过，覆盖 CLI 最后一次生效和 JSON 分层；仍未执行真实 CEF75 人工登录或旧 Windows 干净环境验证。
 
 原生 Win32 选择窗口的实际显示与自动选择冒烟需单独启用，整个过程中不会启动考试客户端：
 
@@ -689,6 +695,8 @@ node windows\host\main.mjs --attach 9333 --duration 5000 --report windows\data\s
 ## 渲染诊断与“悬浮窗附近模糊”排查
 
 本节的系统 DPI、窗口截图和完整诊断产物说明仅适用于 Node 宿主。原生宿主只提供页面布局采样（`pageRenderDiagnostics:true`），记录页面视口与页面内面板布局/样式信息；它不采集 Windows 窗口 DPI、不判断系统位图缩放，也不生成页面或客户端窗口截图（`renderDiagnostics:false`）。原生采样文件写入失败属于非致命诊断故障，不应阻断宿主继续运行或客户端启动；`--no-disk-write` 则完全跳过目录和文件创建。
+
+原生采样需使用 `--diagnose` 开启，在首次成功的顶层业务 bundle 确认后执行，每次宿主运行最多尝试一次；子 iframe 的注入不会触发采样。输出位于 `--diagnostics-dir` 下的独立运行子目录，默认基于 `.data/diagnostics`，只生成 `render-diagnostics.json`。坐标与缩放保留三位小数，CSS 中的 URL 或不允许字符会使该样式值被省略；不读取页面 URL、题目、答案或其他正文。`--diagnose` / `--no-diagnose` 以最后一次 CLI 开关为准并覆盖 JSON；`--no-diagnose` 与 `--no-disk-write` 都阻止创建诊断目录。采样不等待后续异步面板挂载，因此首次顶层文档没有面板时 `topPanel` 为 `null`，不代表后续页面也没有面板。
 
 启动模式默认开启渲染诊断（`--no-diagnose` 可关闭）。每次运行会写入：
 
