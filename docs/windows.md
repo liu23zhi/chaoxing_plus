@@ -71,6 +71,26 @@ chaoxing_plus.exe --self-check --assets "D:\Debug Assets" --port 38123
 
 自动化使用受控 Win32 调用替身验证提权分支、参数传递和退出码，不批准真实 UAC，也不启动真实考试客户端。这不代表已完成 UAC 人工确认、真实 CEF75 登录后页面或旧 Windows 干净环境验收；内存执行、启动清理和自毁能力仍不可用。
 
+### 原生临时 DPI 兼容层
+
+真实子进程回归使用 `dpi-process-tests.exe`（`CX_NATIVE_DPI_PROCESS_EXE`）调用 `proc_launch` 启动 `dpi-child.exe`（`CX_NATIVE_DPI_CHILD_EXE`）的测试自有副本。该无窗口、无文件输出、`asInvoker` 程序用退出码报告 `IsProcessDPIAware()` 状态：普通启动应为 unaware，临时覆盖并在进程创建后立即恢复时应为 aware，再次普通启动应回到 unaware；同时检查测试 EXE 路径的兼容层值已不存在。它只临时操作测试自有 EXE 的对应值，不启动考试客户端，不申请 UAC；测试副本及目录由 Node 清理。
+
+原生宿主支持 `--dpi-aware`，能力标记为 `temporaryDpiOverride:true`。它只为本次普通启动的客户端临时设置系统 DPI 兼容层；这不表示已经支持完整窗口 DPI 诊断或截图，`renderDiagnostics:false` 的边界仍然有效。
+
+| 原生参数或 JSON 字段 | 默认 | 行为 |
+| --- | --- | --- |
+| `--dpi-aware` | 关闭 | 启动客户端前应用临时 `HIGHDPIAWARE`，`CreateProcessW` 返回后立即恢复。 |
+| `dpiAwareness` | `""` | JSON 只接受空字符串或 `"system"`；`"system"` 启用，空字符串关闭，其它值或类型报错。 |
+| `dpiAware` | `false` | JSON 布尔别名；同一层同时出现时优先于 `dpiAwareness`，跨层仍按完整配置优先级合并。 |
+
+例如，原生普通启动可使用 `chaoxing_plus.exe --client "D:\Exam\CXExam.exe" --dpi-aware`；配置文件可使用 `{"dpiAwareness":"system"}`。原生 `dpiAware:true` 或等效 CLI 不能与 `--no-disk-write`、`--attach` 同用，最终配置校验会明确拒绝，不能一边请求禁止写入、一边静默修改注册表。帮助、能力输出、有效配置、自检和仅列出客户端不会应用临时兼容层；它们仍须先通过参数校验。
+
+临时设置使用当前用户 `HKCU\Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers` 的 64 位注册表视图，只操作所选客户端绝对路径对应的一个值。本宿主实例通过会话内互斥量串行化这一临界区。原值最多 64 KiB，支持 `REG_SZ`、`REG_EXPAND_SZ`，按原始类型和字节保存；不可读取、类型无效或超限时不启动客户端。临时值保留非 DPI 兼容标记，去掉冲突的 `DPIUNAWARE`、`GDIDPISCALING` 并添加 `HIGHDPIAWARE`；原值已含 `HIGHDPIAWARE` 且没有冲突时不写入。
+
+客户端创建成功或失败都会先恢复兼容层；若启动返回 `740`，也必须恢复成功后才能交接 UAC。恢复前重新检查值的类型和字节，观察到外部写入其它值时不覆盖并报告失败。恢复写入或删除最多尝试三次，仍失败则停止本次运行；若已经启动客户端，只结束本次宿主拥有的客户端。原值不存在时只删除本次创建的目标值，不删除整个 `Layers` 键；如果键原先不存在，新建的空键可能保留。
+
+普通注册表读写与比对不是原子 compare-and-swap，外部程序仍可能在检查和写入之间修改值；进程崩溃、强制结束或系统中断也不能保证恢复。因此不能把临时覆盖理解为绝对无残留。恢复失败时应查看当前用户对应的 `Layers` 值和宿主报告，不应自动覆盖外部修改。上述是原生宿主的事务与失败策略，不代表 Node 宿主已经具备相同的冲突检测及重试行为。
+
 ### 原生共享配置与热更新
 
 原生 EXE 的默认配置是 **EXE 同级的 `chaoxing-plus.json`**，与 Node 的 `windows/data/config.json` 不同，也不随原生 `--data-dir` 改变。`--config <path>` 选择配置回写目标，相对路径按进程工作目录解析；显式文件在启动时必须可读取。未指定 `--config` 且默认文件不存在时使用内存默认值，首次有效页面修改才按需创建默认文件及父目录。
@@ -631,17 +651,22 @@ $env:CX_NATIVE_CONFIG_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin
 $env:CX_NATIVE_DIAGNOSTICS_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\diagnostics-tests.exe').Path
 $env:CX_NATIVE_ELEVATION_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\elevation-tests.exe').Path
 $env:CX_NATIVE_ELEVATION_HOST_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\elevation-host-tests.exe').Path
+$env:CX_NATIVE_DPI_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\dpi-tests.exe').Path
+$env:CX_NATIVE_DPI_PROCESS_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\dpi-process-tests.exe').Path
+$env:CX_NATIVE_DPI_CHILD_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\dpi-child.exe').Path
 try {
-  node --test scripts/windows-native-host.test.mjs scripts/windows-native-self-check.test.mjs scripts/windows-native-assets.test.mjs scripts/windows-native-options.test.mjs scripts/windows-native-session.test.mjs scripts/windows-native-selection.test.mjs scripts/windows-native-transport.test.mjs scripts/windows-native-audit.test.mjs scripts/windows-native-config.test.mjs scripts/windows-native-diagnostics.test.mjs scripts/windows-native-elevation.test.mjs
+  node --test scripts/windows-native-host.test.mjs scripts/windows-native-self-check.test.mjs scripts/windows-native-assets.test.mjs scripts/windows-native-options.test.mjs scripts/windows-native-session.test.mjs scripts/windows-native-selection.test.mjs scripts/windows-native-transport.test.mjs scripts/windows-native-audit.test.mjs scripts/windows-native-config.test.mjs scripts/windows-native-diagnostics.test.mjs scripts/windows-native-elevation.test.mjs scripts/windows-native-dpi.test.mjs
   node --test scripts/windows-native-injection.browser.mjs scripts/windows-native-assets.browser.mjs scripts/windows-native-lifecycle.browser.mjs scripts/windows-native-audit.browser.mjs scripts/windows-native-config.browser.mjs
 } finally {
-  Remove-Item Env:CX_NATIVE_HOST_EXE, Env:CX_NATIVE_INJECTION_EXE, Env:CX_NATIVE_ASSETS_EXE, Env:CX_NATIVE_OPTIONS_EXE, Env:CX_NATIVE_SESSION_EXE, Env:CX_NATIVE_SELECTION_EXE, Env:CX_NATIVE_TRANSPORT_EXE, Env:CX_NATIVE_AUDIT_EXE, Env:CX_NATIVE_CONFIG_EXE, Env:CX_NATIVE_DIAGNOSTICS_EXE, Env:CX_NATIVE_ELEVATION_EXE, Env:CX_NATIVE_ELEVATION_HOST_EXE -ErrorAction SilentlyContinue
+  Remove-Item Env:CX_NATIVE_HOST_EXE, Env:CX_NATIVE_INJECTION_EXE, Env:CX_NATIVE_ASSETS_EXE, Env:CX_NATIVE_OPTIONS_EXE, Env:CX_NATIVE_SESSION_EXE, Env:CX_NATIVE_SELECTION_EXE, Env:CX_NATIVE_TRANSPORT_EXE, Env:CX_NATIVE_AUDIT_EXE, Env:CX_NATIVE_CONFIG_EXE, Env:CX_NATIVE_DIAGNOSTICS_EXE, Env:CX_NATIVE_ELEVATION_EXE, Env:CX_NATIVE_ELEVATION_HOST_EXE, Env:CX_NATIVE_DPI_EXE, Env:CX_NATIVE_DPI_PROCESS_EXE, Env:CX_NATIVE_DPI_CHILD_EXE -ErrorAction SilentlyContinue
 }
 ```
 
 `diagnostics-tests.exe` 通过 `CX_NATIVE_DIAGNOSTICS_EXE` 纳入测试，检查实际文件写入、诊断 schema、CSS URL 拒绝、禁用开关和失败降级；其测试目录由 Node 驱动创建并清理。原生测试是 GUI 子系统程序，应使用 Node `spawnSync` 或 `Start-Process -Wait` 等待结束并读取真实退出码，不要将 PowerShell 直接调用后留下的旧 `$LASTEXITCODE` 当作测试结果。`windows-native-diagnostics.test.mjs` 还通过 `CX_NATIVE_HOST_EXE` 执行现代 Chromium 采样回归，覆盖顶层 bundle 确认、分数缩放、CSS URL 脱敏、诊断关闭和路径失败；未设置这些变量时会明确跳过。
 
 `elevation-tests.exe`（`CX_NATIVE_ELEVATION_EXE`）通过系统调用替身测试 token、`runas`、等待和取消，真实读取中文临时工作目录并验证参数逐项往返；`elevation-host-tests.exe`（`CX_NATIVE_ELEVATION_HOST_EXE`）编译实际宿主代码，验证 740 交接、父资源关闭、保留已选客户端、不重复选择、父报告不覆盖以及 `WinMain` 退出码。两者均不触发真实 UAC，不启动考试客户端；`CX_NATIVE_HOST_EXE` 还验证能力标记及内部参数在只读动作中的拒绝。
+
+`dpi-tests.exe`（`CX_NATIVE_DPI_EXE`）在隔离的自有 HKCU 测试键中操作真实注册表，并用写入/删除调用替身模拟故障，检查原值类型及字节恢复、兼容标记合并、容量、外部修改冲突和恢复重试；测试不打开真实 `AppCompatFlags\Layers`。`elevation-host-tests.exe` 还验证实际 `h_run`/`WinMain` 的 DPI 应用、恢复及 UAC 交接顺序。`windows-native-dpi.test.mjs` 通过编译版宿主检查能力、帮助、JSON 类型和参数冲突；这些自动化不启动真实客户端，不能代替真实 CEF75 的 DPI 效果验收。
 
 `-BuildTests` 编译实际原生宿主注入代码与确定性 mock CDP 传输，输出 `injection-tests.exe`，同时生成 `assets-tests.exe`、`options-tests.exe`、`json-tests.exe`、`session-tests.exe`、`selection-tests.exe`、`transport-tests.exe`、`audit-tests.exe` 和 `config-store-tests.exe`。`CX_NATIVE_INJECTION_EXE` 启用策略顺序、重试上限、CDP 请求 ID 及执行确认测试；`CX_NATIVE_ASSETS_EXE` 启用资源字节校验；`CX_NATIVE_OPTIONS_EXE` 启用实际 C 参数回归；`CX_NATIVE_SESSION_EXE` 检查导航、iframe、取消代次、配置任务和启用恢复；`CX_NATIVE_SELECTION_EXE` 构建真实 Win32 隐藏控件；`CX_NATIVE_TRANSPORT_EXE` 检查分段 WebSocket 消息、零超时和控制帧截止时间；`CX_NATIVE_AUDIT_EXE` 检查真实日志/报告文件、中文路径、quiet/noDiskWrite、UTF-8/JSON 转义和文件失败降级；`CX_NATIVE_CONFIG_EXE` 检查共享键解码去重、容量边界、真实文件 patch、原文件保留和自有临时文件清理。未设置对应变量时会显示跳过，不能称为已完成编译验证。`json-tests.exe` 可直接执行验证 JSON 解析。`CX_NATIVE_HOST_EXE` 用于原生 CLI、现代 Chromium 生命周期、审计及配置回归，`--capabilities` 校验内嵌资源并报告 `embeddedResources:true`、资源数量以及 `configReload:true`/`configPersistence:true`/`fileLogging:true`/`runReport:true`。`build/pe-imports.txt` 是导入表审计记录；这些测试仍不等同于真实客户端验收。
 
@@ -684,6 +709,7 @@ try {
 - `windows-native-host.test.mjs`：原生源码边界与构建选项；设置 `CX_NATIVE_HOST_EXE` 后执行 CLI 回归，设置 `CX_NATIVE_INJECTION_EXE` 后执行已编译的实际注入逻辑测试。内部清理器或状态机测试仅证明模块行为，不表示 Node 或原生入口支持启动清理、自毁。
 - `windows-native-self-check.test.mjs`：设置 `CX_NATIVE_HOST_EXE` 后验证单独 EXE、中文客户端路径、内嵌/显式资源、容量限制、占用端口和 attach 不连接、配置错误、quiet、字段脱敏和不写业务文件；不执行客户端。
 - `windows-native-elevation.test.mjs`：设置 `CX_NATIVE_ELEVATION_EXE`、`CX_NATIVE_ELEVATION_HOST_EXE` 和 `CX_NATIVE_HOST_EXE`，验证标准 UAC 的按需交接、防重复重启、原参数/工作目录/已选客户端保留和取消退出码；不触发真实 UAC。
+- `windows-native-dpi.test.mjs`：设置 `CX_NATIVE_DPI_EXE`、`CX_NATIVE_DPI_PROCESS_EXE`、`CX_NATIVE_DPI_CHILD_EXE`、`CX_NATIVE_HOST_EXE`，验证临时兼容层、原值恢复、外部修改与故障处理、参数校验及真实测试子进程 DPI 状态；宿主级 DPI/UAC 顺序另由 `CX_NATIVE_ELEVATION_HOST_EXE` 驱动。
 - `windows-native-assets.test.mjs`：仅复制 EXE/driver 到中文空格目录，逐项比对宿主与 driver 内嵌资源的长度/SHA256，并覆盖外部资源缺失、空文件、超限及禁止落盘解包。
 - `windows-native-options.test.mjs`：实际 C 参数测试，覆盖扫描别名和 CLI/JSON 的客户端选择优先级。
 - `windows-native-session.test.mjs`：实际 C 会话状态机，覆盖导航和 frame 子树销毁、就绪通知期间不重入、URL 过滤、顶层兜底及容量边界；不以模型通过代替宿主适配器验证。
@@ -783,7 +809,7 @@ windows/data/diagnostics/<时间戳>/
 
 修复路径：
 
-1. 如果是 DPI 不一致（125%/150% 缩放 + 客户端 DPI-unaware）：用 `start-windows.cmd --dpi-aware` 启动一次，或在 `windows/data/config.json` 设置 `"dpiAwareness": "system"`。宿主会临时写入 `HKCU\...\AppCompatFlags\Layers` 的 `~ HIGHDPIAWARE`（等价于“属性 → 兼容性 → 替代高 DPI 缩放行为：应用程序”），进程启动后立即恢复原值，不持久改系统设置。
+1. 如果是 DPI 不一致（125%/150% 缩放 + 客户端 DPI-unaware）：Node 宿主可用 `start-windows.cmd --dpi-aware` 启动一次，或在 `windows/data/config.json` 设置 `"dpiAwareness": "system"`。正常启动流程会临时设置 `HKCU\...\AppCompatFlags\Layers` 的 `HIGHDPIAWARE`（等价于“属性 → 兼容性 → 替代高 DPI 缩放行为：应用程序”），进程创建后恢复原值。原生 EXE 的用法、冲突校验和恢复失败边界见“原生临时 DPI 兼容层”，两条实现均不能保证进程崩溃或强制结束后的恢复。
 2. 如果是页面可疑项：按 `render-diagnostics.json` 的 findings 修复样式/定位（面板已默认不使用 backdrop-filter、不透明底色、紧凑阴影、位置吸附设备像素网格）。
 3. 把 `render-diagnostics.json` + 两张 png + `windows/data/logs/` 最新日志反馈即可定位。
 
@@ -804,6 +830,7 @@ windows/data/diagnostics/<时间戳>/
 | --- | --- |
 | `启动客户端需要管理员权限` | 用 `start-windows.cmd`（会自动 UAC），或右键“以管理员身份运行”终端后执行 `npm run windows` |
 | 原生启动返回 Win32 `740` | 移除 `--no-elevate` 允许系统 UAC 确认，或手动以管理员身份运行原生 EXE；不要自行添加内部 `--elevated` 标记。取消 UAC 的退出码为 `3`，不是启动成功。 |
+| 原生 DPI 应用或恢复失败 | 查看 `dpi-override-failed` / `dpi-restore-failed` 报告及当前用户对应的 `Layers` 值；宿主会停止本次启动流程，不能把该失败当作已恢复或继续自动 UAC。`--dpi-aware` 不能与 `--no-disk-write`、`--attach` 同用。 |
 | `没有找到可绑定的调试端口` | 检查 `netsh int ipv4 show excludedportrange protocol=tcp`；或把配置 `port` 改为 0 |
 | `检测到已有 CXExam 客户端进程` | 全部退出后重试 |
 | `调试端点 Browser 与期望不匹配` | 端口被其它 Chromium 占用；换端口或关闭占用程序 |
