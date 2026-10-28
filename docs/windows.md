@@ -283,7 +283,7 @@ vendor/sweetalert2.min.css  config.example.json  package-manifest.json
 | 键 | 说明 |
 | --- | --- |
 | `clientPath` | 客户端 `CXExam.exe` 绝对路径；未配置时按扫描规则选择 |
-| `port` | `0` = 自动选择可绑定端口；固定端口不可绑定时宿主会报错，不会静默换端口 |
+| `port` | `0` = 自动选择可绑定端口；CEF 75 普通启动仅接受 `1024-65534`，固定端口不可绑定时宿主会报错，不会静默换端口 |
 | `expectedBrowser` | `/json/version` 的 Browser 必须包含的字符串，默认 `Chrome/`，用于避免误连其它浏览器 |
 | `stopClientOnExit` | 宿主退出时是否结束本次启动的客户端进程树 |
 | `injectBlankFrames` | 是否向 about:blank/srcdoc 等不透明 origin 的 frame 注入（考试页面常用 document.write 生成题目 iframe，默认 true） |
@@ -363,6 +363,8 @@ vendor/sweetalert2.min.css  config.example.json  package-manifest.json
 
 原生宿主的 HTTP 请求和 WebSocket Upgrade 均按一次总截止时间执行，连接、发送、分块接收不会重新开始计时，并受本次 `--duration` 的剩余时间限制。调试版本尚未就绪时，报告分别记录 `client-exit-before-endpoint`（客户端已结束）、`duration-before-endpoint`（运行时长已到）或 `endpoint-unavailable`（调试等待截止），避免把不同停止原因统一写成等待超时。
 
+原生报告另提供 `endpointProbe`，仅保存有界计数和固定原因码：`no-listener`、`listener-not-owned`、`listener-query-failed`、`listener-binding-rejected`、`http-failed`、`invalid-version`、`browser-mismatch`、`ready`。`attempts` 与 `reasonCounts` 记录初始端点等待，不混入后续 target 轮询；`elapsedMs` 为该阶段耗时。`listenerSeen`、`ownershipVerified`、`versionResponseReceived` 表示曾确证的状态，查询失败且 `listenerSeen=false` 不能证明绝无监听。显式 attach 收到版本响应后可确认存在监听，但不宣称进程归属。未执行探测时为 `not-started`。失败仅写一次 `[endpoint-probe]` 汇总，不记录响应体、页面地址或配置；版本格式无效仍保留兼容停止原因 `browser-mismatch`，以 `lastReason=invalid-version` 细分。旧报告没有这些字段，无法事后还原客户端 2 的具体失败类别。
+
 CDP 断开时关闭旧页面会话；target 仍存在则在下一轮枚举重新连接。初次连接、重连和顶层导航后都会延迟检查 bootstrap/bundle，避免已有 bootstrap 不再发送 `ready` 时漏注入。同一执行上下文的并发 `ready` 合并为一次业务注入；上下文销毁或会话关闭后，迟到结果作废，停止后续策略切换及重试。DOM script 注入使用执行完成标记识别 CSP 阻止或脚本异常，失败后按所选策略回退，不把无异常的 CDP 响应当作脚本已成功执行。配置广播使用 `{kind:"config", values:...}` 包装；原生宿主的完整快照另带 `replace:true` 以删除已移除的旧共享键，不带该标记时保留增量合并语义。同实例重连复用已有配置桥水合最新完整快照，不重复安装监听或面板。
 
 运行报告累计保留历次 target 会话的统计；断线重连或页面关闭不会抹去此前成功注入的计数，也不会因此误报“没有完成任何业务注入”。
@@ -377,12 +379,14 @@ CDP 断开时关闭旧页面会话；target 仍存在则在下一轮枚举重新
 | `--panel-width <px>` | `460`，`320-800` | 设置面板宽度。 |
 | `--panel-theme <name>` | `pink` | 预留主题名；当前页面仍使用内置主题样式。 |
 | `--answer-mode auto\|manual` | `auto` | 自动模式按页面设置流程运行；manual 由快捷键为题目处理发放许可。 |
-| `--answer-key <shortcut>` | `F8` | 手动模式快捷键；示例 `Ctrl+Alt+Shift+S`。仅支持一个基础按键，可组合 Ctrl/Alt/Shift/Win。 |
-| `--answer-threads <n>` | `4`，`1-4` | 每次手动许可放行/并行处理的题目数量；超出范围或非整数直接报错。 |
+| `--answer-key <shortcut>` | `F8` | 手动模式快捷键；示例 `Ctrl+Alt+Shift+S`。仅支持一个基础按键，可组合 Ctrl/Alt/Shift/Win。方向键推荐使用 `ArrowUp` / `ArrowDown` / `ArrowLeft` / `ArrowRight`，同时兼容 `Up` / `Down` / `Left` / `Right`。 |
+| `--answer-threads <n>` | `4`，`1-4` | 每次手动许可放行/并行处理的题目数量；超出范围或非整数直接报错。同一分页任务保留未用许可，新建重答任务不继承旧批次余量。 |
 | `--answer-countdown <sec>` | `5`，整数 `0-3600` | 自动模式开始前的倒计时秒数；`0` 不自动倒计时，等待用户确认。 |
 | `--answer-retry <n>` | 默认 `3`，`0-20` | 设置单题额外重试次数；必须为整数，`0` 表示不额外重试。 |
 | `--show-answer-dialog` / `--hide-answer-dialog` | 显示 | 控制自动答题确认弹窗。 |
 | `--no-auto-submit` | 关闭 | 禁止 Windows 宿主自动提交，章节、作业和考试改为保存；未指定时保留配置文件及业务默认行为。 |
+
+手动模式等待按键的时间不计入搜题超时，只有真正开始搜题才启动请求截止。关闭任务会取消授权等待，不再应用迟到结果；完成后再点击重答会重新建立按键监听。并发任务共用一次按键的许可总数，避免重复放行；同一分页任务可以将一次授权用于后续页面，关闭后清空。快捷键须使用实际按键名，`F08` 等前导零名称无效。
 
 #### 日志、诊断和运行
 
@@ -396,7 +400,7 @@ CDP 断开时关闭旧页面会话；target 仍存在则在下一轮枚举重新
 | `--execution-mode normal` | `normal` | 当前唯一支持的执行模式。`memory`、`delete-suspend`、`--memory-exec` 和 `--delete-suspend` 会明确报错，不会静默降级。 |
 | `--stop-client-on-exit` | 关闭 | 宿主退出时结束本次启动的客户端进程树。 |
 | `--dpi-aware` | 关闭 | 本次启动临时添加 HIGHDPIAWARE 兼容层，进程创建后立即恢复原注册表值。 |
-| `--port <n>` | `0` | `0` 使用自动端口；`1-65535` 指定端口。 |
+| `--port <n>` | `0` | `0` 使用自动端口；CEF 75 普通启动指定端口范围为 `1024-65534`。CLI、JSON 与生成器均校验；仅测试用的 `--attach` 保持 `1-65535`。 |
 | `--assets <dir>` | `dist-windows` | 指定注入资源目录。 |
 | `--duration <ms>` | `0`，不限时 | 测试模式运行指定时长后退出；仅接受 `0-2147483647` 整数毫秒，两条宿主一致。 |
 | `--attach <port>` | 不启用 | 仅测试/调试连接已存在端点；不会启动客户端或校验进程归属。 |
@@ -627,6 +631,8 @@ $hostProcess.Dispose()
 
 Node 与原生宿主均在 target 刷新和 WebSocket 连接前重新检查监听进程归属；查询失败或归属变化时关闭已有会话，等待后续轮询重新验证，不能沿用启动时的结果。Node 定时轮询不会重叠；target 的 WebSocket 只接受指定端口的 `ws://127.0.0.1` 或 `ws://localhost`，后者固定连接已校验的 IPv4 回环地址。`--attach` 仍是显式调试例外，不检查进程归属，但保留本机同端口限制。发送命令时发现 WebSocket 已进入关闭状态，会立即取消等待请求并通知重连，不再等待默认命令超时。
 
+Node 的普通启动归属检查目前要求监听 PID 等于本次直接启动的 PID；如果客户端把调试监听交给子进程，Node 会拒绝连接。原生宿主另以保留句柄、创建时间和父子链验证本次启动的后代进程。自有父子进程测试已确认这一差异，但尚无证据表明客户端 2 使用了该交接方式；不能用当前父 PID 相同或关闭归属校验来推断安全接管。
+
 数据生命周期示例（普通退出时清理本轮登记的宿主产物，并删除显式指定的外部配置）：
 
 ```powershell
@@ -741,6 +747,10 @@ try {
 
 本轮修复并锁定无面板模式的手动答题提示、Node UAC 参数保真、原生 HTTP/Upgrade 总截止与准确停止原因、原生常规扫描缓存及嵌套未实现能力的显式拒绝。PowerShell 5.1/7 参数回归只运行无权限参数探针；自动化使用自有 mock 服务和现代 Chromium，收尾阶段没有再次启动考试客户端或申请 UAC。真实客户端结果以前文人工运行表为准，客户端 2 的注入兼容性、客户端 3 的登录环境及旧系统适配仍未验收；内存执行、启动清理和自毁继续禁用。
 
+2026-10-28 手动答题与参数边界完善验证：显式展开 67 个 `scripts/*.test.mjs`，690 项中 686 通过、0 失败，4 项可选窗口显示冒烟跳过；全部原生编译测试变量及缓存发现驱动指向本轮默认构建。9 个浏览器文件最终完整复测 69/69 通过、0 跳过，包含 Swal、面板、配置和全部注入策略。原生配置文件的旧夹具曾使用不合法的启动端口 `1`，已改为合法端口并新增非法端口热更新拒绝检查。类型检查、扩展构建、Chrome75 构建、原生 `-BuildTests` 均退出 0；Node self-check 为 0 失败、0 警告，独立编译 JSON 驱动 20/20 通过。
+
+新增真实 Chromium 双运行时回归覆盖手动长等待、实际搜题截止、关闭、初始化失败、并发许可、分页一键四题及完成后重答；原生端点探测新增脱敏固定分类，并以编译测试确认进程树枚举失败不接受部分结果。原生 EXE 为 532992 字节，SHA256 为 `37DFE9E8246C8E54C6CA4E9C0A61BFD6267224484289FB486CB7FE6DC168404F`，导入表仅有 9 项 Windows 系统 DLL。此次仍为自有 mock、现代 Chromium 和本地编译驱动验证，没有再次启动真实考试客户端、申请 UAC 或完成旧 Windows 干净环境验收，不能据此宣布客户端 2 已兼容。
+
 原生 Win32 选择窗口的实际显示与自动选择冒烟需单独启用，整个过程中不会启动考试客户端：
 
 ```powershell
@@ -769,6 +779,8 @@ try {
 - `windows-injection.browser.mjs`：真实 Chromium CDP 下 runtime/script/hybrid、CSP 回退、注入重试、导航、移除 iframe、断线重连恢复及会话资源释放；使用自动化测试页面，不代表真实 CEF 75 考试页面验收。
 - `windows-client-process.test.mjs`：本次宿主客户端子进程的退出/启动错误事件只处理一次，取消观察和已结束进程边界。
 - `windows-parameter-generator.test.mjs`：离线生成器加载、普通预设输出可被宿主解析器重新解析、实时校验（互斥、no-disk-write、线程/面板宽度/清理重试、内联 JSON、自毁快捷键冲突）与禁用能力阻止导出；Windows 上实际执行 PowerShell 5.1/7 和安全 cmd 输出，通过预加载器强制宿主停在 `--help`，逐项检查 argv、中文/JSON/shell 字符保真和项目工作目录，不扫描或启动客户端；`startupClean` 只展示设计说明且不生成命令或 JSON。
+- `windows-manual-answer-worker.test.mjs`：实际 Chromium 同时执行 Worker TS 与运行期 JS，验证按键等待不消耗搜题截止、实际请求超时与迟到答案隔离、关闭取消、初始化失败收尾、单一监听与并发许可、跨页余量及新重答不继承旧许可；`windows-no-panel-notice.test.mjs` 另以真实方向键事件验证旧名称和 `Arrow*` 名称均可触发。
+- `windows-native-endpoint-probe.test.mjs`：编译后宿主通过自有 loopback 服务区分 HTTP 失败、无效 JSON、缺失/错误 Browser 与正常端点；检查固定原因计数、attach 不宣称归属、失败只记录一次及响应原文不入日志。监听归属与进程树错误分类由编译进程检查驱动补充覆盖。
 - `windows-native-host.test.mjs`：原生源码边界与构建选项；设置 `CX_NATIVE_HOST_EXE` 后执行 CLI 回归，设置 `CX_NATIVE_INJECTION_EXE` 后执行已编译的实际注入逻辑测试。内部清理器或状态机测试仅证明模块行为，不表示 Node 或原生入口支持启动清理、自毁。
 - `windows-native-self-check.test.mjs`：设置 `CX_NATIVE_HOST_EXE` 后验证单独 EXE、中文客户端路径、内嵌/显式资源、容量限制、占用端口和 attach 不连接、配置错误、quiet、字段脱敏和不写业务文件；不执行客户端。
 - `windows-native-elevation.test.mjs`：设置 `CX_NATIVE_ELEVATION_EXE`、`CX_NATIVE_ELEVATION_HOST_EXE` 和 `CX_NATIVE_HOST_EXE`，验证标准 UAC 的按需交接、防重复重启、原参数/工作目录/已选客户端保留和取消退出码；不触发真实 UAC。
