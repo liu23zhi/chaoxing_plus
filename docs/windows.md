@@ -48,6 +48,8 @@ Node 宿主当前仍需 Node.js 22+，其客户端选择窗口还使用 PowerShe
 
 随后一次 `hybrid` 人工运行中，用户确认登录页出现，并在约 59 秒时手动关闭窗口。该轮报告为 `client-exit-before-endpoint`，553 次初始探测均为 `no-listener`，没有进入页面注入。此结果只说明该段登录页等待期间未发现调试监听，不代表客户端自动退出或登录后不兼容。用户提出调试连接可能在完成登录后才开放，尚需在下一轮登录后观察；不要把“先确认连接”设为允许人工登录的前置条件。
 
+同日用户进一步明确人工观察：“客户端在登录页未加载任何脚本，只有登录完成才能正常加载，然后才出现了悬浮面板。”用户要求保留该行为，只记录以免误判。因此停留登录页时未出现答题脚本或悬浮面板，不单独判为注入失败，应允许人工完成登录后再观察。该反馈没有指定本次客户端序号，不能据此宣布三个客户端均已验收；也不能把用户可见的加载时机等同于 CDP 端点开放时机，或反推所有登录文档都没有宿主技术 bootstrap。
+
 “单文件”和“旧系统兼容”需要分别验收：[Node 24 官方平台要求](https://github.com/nodejs/node/blob/v24.12.0/BUILDING.md)为 Windows 10 / Server 2016 起，Windows 发布架构为 x64/arm64；[SEA 打包](https://nodejs.org/download/release/v24.12.0/docs/api/single-executable-applications.html)不能降低这一系统要求。[Go 1.21 起](https://go.dev/doc/go1.21#windows)也以 Windows 10 / Server 2016 为最低要求，原设计的 Go 1.22+ 静态构建不能据此宣称覆盖 Windows 7。Chromium 75 [官方构建说明](https://github.com/chromium/chromium/blob/75.0.3770.100/build/config/win/BUILD.gn)仍以 Windows 7 为受支持系统；样本 PE 头的 `5.1` 声明不能证明客户端支持 Windows XP。
 
 后续普通单文件宿主仍须补齐与 Node 的参数行为差异，并在明确的 x86/x64、旧版和现代 Windows 干净环境中验证。当前 CDP 使用 TCP/WebSocket 通信，宿主与客户端无需相同位数；没有必要仅为页面注入拆分两套业务资源。现代 Chromium 自动化已覆盖原生实际 WebSocket 注入、导航、iframe、新 target、CSP 回退和限时关闭；历史探针和样式诊断只证明当时记录的局部行为，**本次 Windows 6.2.0 第一阶段尚未完成真实 CEF75 客户端端到端验收**。
@@ -315,9 +317,11 @@ vendor/sweetalert2.min.css  config.example.json  package-manifest.json
 | `--scan-all` / `--no-scan-all` | 默认 fallback-all | `--scan-all` 启用常规无结果后的递归回退；`--no-scan-all` 将扫描限制为常规路径。 |
 | `--scan-clients` / `--rescan` | 关闭 | 忽略配置中的现有客户端路径并执行扫描；扫描结果默认缓存到数据目录的 `scan-cache.json`，`--rescan` 仍会执行本次实时扫描并更新缓存。 |
 | `--no-scan-cache` | 关闭 | 不读取或写入扫描缓存；实时扫描仍照常执行。 |
-| `--ui auto\|gui\|cli` | `auto` | `gui` 使用 Windows 原生选择窗口；`cli` 使用终端交互；`auto` 优先使用已配置客户端路径，否则交互终端提示选择，Windows 非交互环境默认显示原生选择窗口，其他非交互环境使用推荐候选。显式 `--client` 在三种界面模式下均跳过扫描和选择窗口。Windows `auto` 窗口不可用时回退推荐候选；需要窗口时，`gui` 在非 Windows 平台或窗口不可用时直接报错。`--quiet` 或 `--client-first` 会关闭 `auto` 原生选择窗口并使用推荐候选。 |
+| `--ui auto\|gui\|cli` | `auto`；Windows 真正无参数入口使用 `gui` | `gui` 使用 Windows 原生选择窗口；`cli` 使用终端交互；显式 `auto` 优先使用已配置客户端路径，否则交互终端提示选择，Windows 非交互环境默认显示原生选择窗口，其他非交互环境使用推荐候选。显式 `--client` 在三种界面模式下均跳过扫描和选择窗口。Windows `auto` 窗口不可用时回退推荐候选；需要窗口时，`gui` 在非 Windows 平台或窗口不可用时直接报错。`--quiet` 或 `--client-first` 会关闭 `auto` 原生选择窗口并使用推荐候选。 |
 
 此处参数表描述 Node 宿主。它的选择窗口使用 Windows 自带的 PowerShell（5.1+）与 WinForms，不新增 npm 依赖：窗口列出扫描到的 `CXExam.exe`（架构、完整路径），支持双击/按钮确认与“手动浏览”选择任意 `CXExam.exe`，取消返回 `cancelled`。`windows/host/selection-window.ps1` **必须保持纯 ASCII**（Windows PowerShell 5.1 对无 BOM 的 `.ps1` 按 ANSI/OEM 解析，中文文案会破坏语法），所有界面文案经 UTF-8 JSON 传入；`--self-check` 会构建一次窗口控件做冒烟（不显示窗口），`--capabilities` 的 `supported.nativeClientSelection` 在 Windows 上为 true。自动化验证可用环境变量 `CXPLUS_SELECTION_AUTO_CLOSE_MS=<ms>` 让窗口自动关闭（仅测试/调试，避免无人值守阻塞）。
+
+Windows 上直接双击 `start-windows.cmd`、无参数运行 Node 宿主或直接双击原生 EXE，都会先显示客户端选择 GUI，即使配置已经保存客户端路径。取消选择不启动客户端；UAC 重启继续使用本次选择，不再弹出选择窗口。此规则仅针对真正无参数入口：带有 `--config`、`--options-json` 或其他参数时，仍按参数和配置优先级运行；需要沿用已保存路径时可显式传 `--ui auto`。这里的 GUI 是客户端选择窗口，完整参数表单仍使用离线 `windows/parameter-generator.html`。
 
 原生 EXE 的 `--ui gui` / `--select-client` 则调用 `windows/native/selection.c`，没有 PowerShell 子进程。其隐藏控件探针由 `selection-tests.exe` 执行；实际显示、取消和选择 Unicode 路径的交互冒烟需显式设置 `CX_TEST_NATIVE_WINDOW=1`，测试通过 `CXPLUS_NATIVE_SELECTION_AUTO_CLOSE_MS` 自动取消，避免等待人工操作。该测试不会执行所选客户端。
 
@@ -362,6 +366,8 @@ vendor/sweetalert2.min.css  config.example.json  package-manifest.json
 | `--bundle-timeout <ms>` | `120000`，`1000-300000` | 单次 bootstrap/bundle CDP 执行超时。 |
 
 参考项目中的 `cef-hook` 是当前进程内的 CEF/Detours hook，不能安全地作为通用外部注入器复用；本宿主因此采用“启动客户端时注入受控远程调试参数 + 校验 Browser/PID/端口归属 + CDP 多路径页面注入”。宿主不会自动连接任意已有端口；`--attach` 仅用于测试/调试。
+
+Node 宿主在每轮 target 刷新和 WebSocket 建连前仍实时查询监听归属，但直接调用 Windows 系统目录的 `netstat.exe -ano -p tcp`，避免每次启动 PowerShell 查询带来的数秒开销。只接受精确 `127.0.0.1:port` 的唯一 `TCP LISTENING` 记录及有效 PID，不缓存上次结果；查询失败、输出不完整、重复监听或无法识别的状态均拒绝连接。`scripts/windows-listener-owner.test.mjs` 包含真实临时回环监听的归属、非监听连接和关闭后失效回归；本机耗时测量不代表其他 Windows 环境或真实考试客户端的端到端启动耗时。
 
 原生宿主的 HTTP 请求和 WebSocket Upgrade 均按一次总截止时间执行，连接、发送、分块接收不会重新开始计时，并受本次 `--duration` 的剩余时间限制。调试版本尚未就绪时，报告分别记录 `client-exit-before-endpoint`（客户端已结束）、`duration-before-endpoint`（运行时长已到）或 `endpoint-unavailable`（调试等待截止），避免把不同停止原因统一写成等待超时。
 

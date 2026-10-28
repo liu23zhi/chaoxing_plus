@@ -198,7 +198,9 @@ handler 返回 `boolean | undefined`：`true` 跳过、`false` 与 `undefined` �
 - **原生 EXE 的客户端选择窗口**：由 `windows/native/selection.c` 使用 Win32 控件和 `GetOpenFileNameW` 实现，不依赖 Node、PowerShell、WinForms 或 CRT。保留序号、架构、版本、完整路径和推荐项；无候选仍可浏览；选中路径必须重新校验有效 PE 和系统架构，取消不得启动客户端。编译 `selection-tests.exe` 后设置 `CX_NATIVE_SELECTION_EXE` 运行 `scripts/windows-native-selection.test.mjs`；隐藏控件探针无需显示窗口，真实显示/取消/选择冒烟需显式设置 `CX_TEST_NATIVE_WINDOW=1`，自动取消变量为 `CXPLUS_NATIVE_SELECTION_AUTO_CLOSE_MS`。测试不得执行所选客户端。
 - **Node 参数生成器的进程参数传递**：Windows PowerShell 5.1 的普通原生命令调用及 `start-windows.cmd` 的 `%*` 转交都可能丢失内联 JSON 双引号。生成器使用 `ProcessStartInfo`、`UseShellExecute=false` 和逐项 Win32 参数引用，直接启动 Node，并显式设置项目工作目录；不要改回批处理转交。修改命令生成时必须实际执行 PowerShell 5.1/7 输出，检查 JSON、中文、引号、尾反斜杠与 shell 字符逐项保真，测试以 `--help` 停止，不得启动考试客户端。
 - Node 的标准 UAC 重启同样须将逐项 Win32 引用后的完整参数串传给 `Start-Process -ArgumentList`；不能直接传原始字符串数组（该 API 只以空格拼接）。修改时运行 `scripts/windows-elevation-arguments.test.mjs`，用不提权的 PowerShell 5.1/7 子进程复核 JSON、空参数、中文、引号、尾反斜杠、路径及工作目录，测试不得请求 UAC 或启动客户端。
+- **Windows 无参数启动必须先选客户端**：Node 实际入口将真正无参数转换为显式 `--ui gui`，原生入口由无参数状态强制完整扫描与 GUI；已保存客户端路径不能绕过。带参数仍保持配置优先级。UAC 交接必须传实际选择，已完成的扫描/序号请求不能在子实例再执行；Node 的 `--no-scan-cache` 也会触发扫描，须与 CLI 扫描族一起处理，明确 `--client` 还须覆盖低层配置的 `rescan` / `noScanCache`。修改时运行 client-selection、host、elevation-arguments 及已编译 native-elevation 回归。
 - 真实考试客户端验证需要 UAC 与人工登录，不能在自动化测试里宣称已完成；汇报时明确区分“mock CDP / 真实 Chromium 冒烟（宿主链路）”“原生选择窗口冒烟”与“真实 CEF 75 客户端页面验证”。
+- **登录阶段的人工观察（2026-10-28）**：用户确认客户端登录页未加载答题脚本，完成登录后才正常加载并出现悬浮面板，并明确要求只记录、不修复此行为。停留登录页时无脚本/无面板不能单独判定注入失败，应允许人工登录后再观察；该反馈未标明本次客户端序号，不扩展为三份样本都已验收。区分用户可见业务加载、技术 bootstrap、CDP 端点及面板显示，不由其中一个阶段反推其他阶段；不要把等待日志中的“可能需登录”写成已证实的端点开放条件。
 
 ### Windows 相关验证命令
 
