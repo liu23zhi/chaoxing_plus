@@ -69,19 +69,22 @@ chaoxing_plus.exe --self-check --assets "D:\Debug Assets" --port 38123
 
 2026-10-28 对本任务三个客户端的只读复核：版本依次为 `4.1.4.25512`、`4.3.0.4`、`4.1.4.25512`，均为 x86，三份 `libcef.dll` 字节和 SHA256 相同，版本为 `75.1.4+g4210896+chromium-75.0.3770.100`。三个主 EXE manifest 均要求管理员权限，普通用户直接 `CreateProcessW` 启动会遇到 Win32 740；原生宿主的按需 UAC 处理见下节。原生自检对三者均返回 `0`、无失败，并如实报告普通用户权限警告；没有启动客户端。客户端主 EXE 的 PE 版本字段不能用来证明旧版 Windows 可运行，仍需完整依赖和目标环境验收。
 
-### 原生启动权限与 UAC
+### 启动权限与 UAC
 
-原生宿主先按当前权限扫描、选择、校验客户端并尝试 `CreateProcessW`。只有普通启动实际返回 `ERROR_ELEVATION_REQUIRED`（Win32 `740`），且未禁止自动提权时，才通过 Windows 标准 `runas` 请求重启宿主本身；是否批准由系统 UAC 确认框决定。不要求管理员权限的客户端仍按普通权限启动，不会预先申请 UAC。
+两种宿主默认先按当前权限扫描、选择、校验客户端并尝试启动。只有普通启动实际返回 `ERROR_ELEVATION_REQUIRED`（Win32 `740`），且未禁止自动提权时，才通过 Windows 标准 `runas` 请求重启宿主本身；是否批准由系统 UAC 确认框决定。不要求管理员权限的客户端仍按普通权限启动，不会预先申请 UAC。Node 宿主通过纯 ASCII 的 PowerShell `CreateProcessW` 包装器获取准确的 Win32 错误码，不能仅凭 `EACCES` / `EPERM` 猜测需要管理员权限。
 
-| 原生参数 | 默认 | 行为 |
+显式添加 `--elevate-on-start`（或 JSON `"elevateOnStart": true`）时，在扫描、选择 GUI 和客户端启动之前申请管理员权限；已是管理员时直接继续。仅传这个参数仍使用无参数启动的常规扫描和 GUI。它与 `--no-elevate` 冲突，参数校验直接报错。帮助、自检、能力输出、有效配置输出、仅扫描列表及 attach 均不请求 UAC。
+
+| 参数 | 默认 | 行为 |
 | --- | --- | --- |
+| `--elevate-on-start` | 关闭 | 启动时先申请管理员权限，再扫描、显示 GUI 和启动客户端；JSON 对应 `elevateOnStart` 布尔值。 |
 | `--no-elevate` | 关闭 | 禁止自动申请 UAC；仍可启动不要求管理员权限的客户端。遇到 `740` 时报告权限错误，可移除此参数重试或手动以管理员身份运行宿主。 |
 | `--elevated` | 内部标记 | 表示本轮已通过 UAC 重启，禁止再次自动重启；标记不能替代真实 token 提升状态检查，不应由用户手动添加。 |
-| `--elevated-client <path>` | 内部参数 | 携带提权前已选中的绝对客户端路径；仅与内部重启标记及真实已提升 token 配套使用，重新校验客户端后直接启动，避免重复扫描或选择。 |
+| `--elevated-client <path>` | 内部参数，仅原生 | 携带提权前已选中的绝对客户端路径；仅与内部重启标记及真实已提升 token 配套使用，重新校验客户端后直接启动，避免重复扫描或选择。Node 使用内部生成的显式 `--client` 交接实际选择。 |
 
 父宿主先关闭配置、资源和审计句柄，再请求 UAC；重启保留原始参数、工作目录和已选客户端，含中文、空格、引号和内联 JSON 的参数也须保持原值。配置文件会按原有优先级重新读取，相对路径仍以保留的工作目录解析。提升后的宿主继续使用既有 `CreateProcessW` 和本次启动进程的监听归属检查，不通过 `ShellExecute` 单独启动客户端。
 
-父宿主等待提升后的实例结束并回传其退出码；用户取消 UAC 返回 `3`，不得当作客户端已启动。实际权限查询失败、已重启实例仍遇到 `740` 或指定 `--no-elevate` 时直接失败，不循环请求权限。`--quiet` 不能抑制系统 UAC 确认框。帮助、能力输出、有效配置输出、自检、仅列出客户端以及显式 `--attach` 均不申请 UAC。
+原生父宿主等待提升后的实例结束并回传其退出码；Node 交接启动后退出父实例，不等待提升实例运行结束。用户取消 UAC 返回 `3`，不得当作客户端已启动。原生权限查询失败、已重启实例仍遇到 `740` 或指定 `--no-elevate` 时直接失败，不循环请求权限。`--quiet` 不能抑制系统 UAC 确认框。帮助、能力输出、有效配置输出、自检、仅列出客户端以及显式 `--attach` 均不申请 UAC。
 
 `runas` 不保证继承父实例的重定向标准输出，跨权限交接后的诊断应使用显式报告或日志。若在 UAC 中使用另一个管理员账户，系统环境变量和映射盘可能不同；保留工作目录不能替代该账户对客户端及配置文件的访问权限。
 
@@ -160,10 +163,10 @@ Node 开发宿主的 UAC 重启先对每一项参数执行 Win32 引用，再将
 start-windows.cmd
   -> windows/host/main.mjs
      1. 读取 windows/data/config.json（clientPath / port / settings）
-     2. 需要管理员：自动用 UAC 重启自身（--elevated），否则提示手动提权
+     2. 指定 --elevate-on-start 时先申请 UAC；默认保持当前权限
      3. 选端口：优先配置端口，否则按候选表用 bind() 实测（Windows 保留端口会 bind 失败）
      4. 检查是否已有 CXExam.exe 进程：有则拒绝启动，避免连接真实考试会话
-     5. CreateProcess(clientPath, --remote-debugging-port=N --remote-debugging-address=127.0.0.1)
+     5. CreateProcess(clientPath, --remote-debugging-port=N --remote-debugging-address=127.0.0.1)；仅 Win32 740 才请求 UAC 并携带所选客户端重启
      6. 等待 /json/version，校验 Browser 前缀；用 Get-NetTCPConnection 校验监听 PID == 本次启动的 PID
      7. 轮询 /json/list，为每个 page target 建立 WebSocket：
           Page.enable -> Page.getFrameTree -> Runtime.enable
@@ -312,7 +315,7 @@ vendor/sweetalert2.min.css  config.example.json  package-manifest.json
 | `--client-index <n>` | 未指定，`n >= 1` | 启动扫描结果第 n 个；常规候选按完整路径排序，全盘候选按遍历顺序。为确保序号可用，全盘扫描会完整枚举候选，不在首个 x86 提前停止。 |
 | `--client-first` | 关闭 | 选择推荐候选；常规扫描结果中 x86 优先，同架构按路径排序。 |
 | `--list-clients` | 关闭 | 列出候选和架构后退出，不启动客户端。 |
-| `--select-client` | 关闭 | 扫描后显示 **Windows 原生选择窗口**（候选列表 + “手动浏览”选择任意位置的 `CXExam.exe`）；窗口不可用时回退终端逐项选择，非交互终端回退推荐候选；用户取消时以退出码 3 结束，不启动客户端。 |
+| `--select-client` | 关闭 | 扫描后显示 **Windows 原生选择窗口**，可选择候选、手动浏览或点击“全盘扫描”刷新列表；全盘扫描后仍须确认选择，不自动启动。窗口不可用时回退终端逐项选择，非交互终端回退推荐候选；用户取消时以退出码 3 结束，不启动客户端。 |
 | `--scan-mode common\|fallback-all\|all` | `fallback-all` | `common` 只扫常规根目录及一级直接子目录；`fallback-all` 仅在常规扫描为零结果时递归固定磁盘；`all` 直接递归固定磁盘。 |
 | `--scan-all` / `--no-scan-all` | 默认 fallback-all | `--scan-all` 启用常规无结果后的递归回退；`--no-scan-all` 将扫描限制为常规路径。 |
 | `--scan-clients` / `--rescan` | 关闭 | 忽略配置中的现有客户端路径并执行扫描；扫描结果默认缓存到数据目录的 `scan-cache.json`，`--rescan` 仍会执行本次实时扫描并更新缓存。 |
@@ -321,7 +324,11 @@ vendor/sweetalert2.min.css  config.example.json  package-manifest.json
 
 此处参数表描述 Node 宿主。它的选择窗口使用 Windows 自带的 PowerShell（5.1+）与 WinForms，不新增 npm 依赖：窗口列出扫描到的 `CXExam.exe`（架构、完整路径），支持双击/按钮确认与“手动浏览”选择任意 `CXExam.exe`，取消返回 `cancelled`。`windows/host/selection-window.ps1` **必须保持纯 ASCII**（Windows PowerShell 5.1 对无 BOM 的 `.ps1` 按 ANSI/OEM 解析，中文文案会破坏语法），所有界面文案经 UTF-8 JSON 传入；`--self-check` 会构建一次窗口控件做冒烟（不显示窗口），`--capabilities` 的 `supported.nativeClientSelection` 在 Windows 上为 true。自动化验证可用环境变量 `CXPLUS_SELECTION_AUTO_CLOSE_MS=<ms>` 让窗口自动关闭（仅测试/调试，避免无人值守阻塞）。
 
-Windows 上直接双击 `start-windows.cmd`、无参数运行 Node 宿主或直接双击原生 EXE，都会先显示客户端选择 GUI，即使配置已经保存客户端路径。取消选择不启动客户端；UAC 重启继续使用本次选择，不再弹出选择窗口。此规则仅针对真正无参数入口：带有 `--config`、`--options-json` 或其他参数时，仍按参数和配置优先级运行；需要沿用已保存路径时可显式传 `--ui auto`。这里的 GUI 是客户端选择窗口，完整参数表单仍使用离线 `windows/parameter-generator.html`。
+Windows 上直接双击 `start-windows.cmd`、无参数运行 Node 宿主或直接双击原生 EXE，都会只做常规扫描（根目录及一级直接子目录），然后显示客户端选择 GUI，即使配置已保存客户端路径或全盘扫描模式。常规无结果也不自动递归全盘，仍显示窗口供手动浏览或点击“全盘扫描”；Node 全盘扫描失败时保留现有候选，原生宿主失败时明确退出。取消选择不启动客户端；默认到启动客户端时才按需请求 UAC，提权后继续使用本次选择，不再弹出选择窗口。仅传 `--elevate-on-start` 时保留此常规扫描和 GUI 行为，但先申请管理员权限。带有 `--config`、`--options-json` 等其他参数时，仍按参数和配置优先级运行；需要沿用已保存路径时可显式传 `--ui auto`。这里的 GUI 是客户端选择窗口，完整参数表单仍使用离线 `windows/parameter-generator.html`。
+
+WinForms 窗口在 `Shown` 时显式调用 `ShowWindow` 并请求前台显示：隐藏 PowerShell 控制台的启动设置可能使首个窗口仍不可见，不能仅凭控件探针或 `ShowDialog` 运行判定窗口已显示。回归包含操作系统 `IsWindowVisible` 检查及全盘扫描按钮的真实点击。
+
+点击全盘扫描后选择窗口会关闭，扫描完成后重新打开；当前扫描期间没有进度或取消窗口，大容量磁盘可能需要较长等待。
 
 原生 EXE 的 `--ui gui` / `--select-client` 则调用 `windows/native/selection.c`，没有 PowerShell 子进程。其隐藏控件探针由 `selection-tests.exe` 执行；实际显示、取消和选择 Unicode 路径的交互冒烟需显式设置 `CX_TEST_NATIVE_WINDOW=1`，测试通过 `CXPLUS_NATIVE_SELECTION_AUTO_CLOSE_MS` 自动取消，避免等待人工操作。该测试不会执行所选客户端。
 
@@ -414,7 +421,8 @@ CDP 断开时关闭旧页面会话；target 仍存在则在下一轮枚举重新
 | `--attach <port>` | 不启用 | 仅测试/调试连接已存在端点；不会启动客户端或校验进程归属。 |
 | `--self-check` / `--help` | 关闭 | 只做环境检查或输出参数帮助。 |
 | `--capabilities` | 关闭 | 输出机器可读的能力标记。Node 宿主列出普通运行、扫描、参数生成器与（Windows）原生选择窗口；启动清理、内存执行、删除挂起和自毁均标记为不支持，并保留设计 schema。原生宿主单独输出自身能力，不得把两者的已支持项合并推断。 |
-| `--no-elevate` | 关闭 | Node 宿主在非管理员时直接报错，不自动申请 UAC（便于自动化/调试）；原生宿主仅在客户端实际需要提权时失败，见“原生启动权限与 UAC”。 |
+| `--elevate-on-start` | 关闭 | 两种宿主均在扫描和 GUI 前请求管理员权限；JSON 字段为 `elevateOnStart`。已提升时不重复请求，只读模式不请求；与 `--no-elevate` 冲突。 |
+| `--no-elevate` | 关闭 | 禁止自动申请 UAC；普通权限可启动的客户端照常运行，实际启动返回 Win32 `740` 时失败。 |
 
 #### 禁用能力的参数设计
 
@@ -595,7 +603,22 @@ PowerShell 输出兼容 Windows PowerShell 5.1 和 PowerShell 7：通过 `Proces
   --answer-mode auto
 ```
 
-**8. 内联 JSON 型**
+**8. 启动时申请管理员权限**
+
+```powershell
+# 原生 EXE：先显示系统 UAC，批准后常规扫描并打开客户端选择 GUI
+& "C:\Tools\chaoxing_plus.exe" --elevate-on-start
+
+# Node 宿主同样支持；不传这个参数时，到启动客户端需要权限时才申请
+& ".\start-windows.cmd" --elevate-on-start
+
+# 直接指定客户端并提前申请权限
+& "C:\Tools\chaoxing_plus.exe" --elevate-on-start --client "D:\Exam\CXExam.exe"
+```
+
+配置文件也可使用 `{"elevateOnStart":true}`。取消 UAC 不启动客户端；此参数不能绕过系统授权，也不与 `--no-elevate` 同用。
+
+**9. 内联 JSON 型**
 
 下面的普通参数示例使用与生成器相同的直接进程启动方式；执行前位于项目根目录。复杂 JSON 请交给生成器完成引用，不要手工拼入批处理。
 
@@ -926,7 +949,7 @@ windows/data/diagnostics/<时间戳>/
 
 | 现象 | 处理 |
 | --- | --- |
-| `启动客户端需要管理员权限` | 用 `start-windows.cmd`（会自动 UAC），或右键“以管理员身份运行”终端后执行 `npm run windows` |
+| `启动客户端需要管理员权限` | 默认仅在客户端普通启动返回 Win32 `740` 后申请 UAC；可添加 `--elevate-on-start` 提前申请，或检查是否配置了 `--no-elevate`。 |
 | 原生启动返回 Win32 `740` | 移除 `--no-elevate` 允许系统 UAC 确认，或手动以管理员身份运行原生 EXE；不要自行添加内部 `--elevated` 标记。取消 UAC 的退出码为 `3`，不是启动成功。 |
 | 原生 DPI 应用或恢复失败 | 查看 `dpi-override-failed` / `dpi-restore-failed` 报告及当前用户对应的 `Layers` 值；宿主会停止本次启动流程，不能把该失败当作已恢复或继续自动 UAC。`--dpi-aware` 不能与 `--no-disk-write`、`--attach` 同用。 |
 | 原生 `client-already-running` / `process-check-failed` | 前者需自行退出已有同名客户端；后者表示无法可靠完成系统进程快照检查，应查看权限或系统错误后重试。宿主不会结束已有客户端，也不会将枚举失败当作无客户端继续启动。 |
