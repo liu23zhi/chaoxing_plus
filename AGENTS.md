@@ -274,6 +274,8 @@ $env:CX_TEST_NATIVE_WINDOW='1'; node --test scripts/windows-selection-window.tes
 
 ### 原生日志与运行报告
 
+- 面板内「连接与注入日志」由构建布尔 `__CXPLUS_WINDOWS_INJECTION_LOG__` 控制，仓库默认关闭；仅通过 gitignored `windows/local-features.json` 的 `injectionLog:true` 在本机开启，不得提交本地配置。扩展构建始终关闭，发布前执行 `npm run build:windows -- --release` 强制关闭后再构建原生 EXE；`package-manifest.json` 的 `features.injectionLog` 须与实际 bundle 一致。修改此链路须实跑 `scripts/windows-build-features.test.mjs`，并在发布关闭和本机开启两种真实构建下运行 `scripts/windows-host-log.test.mjs` 的 built-bundle 浏览器用例。
+- 宿主面板诊断只传最近 100 条固定事件码及序号、经过时间、级别；不得传任意日志文本、路径、URL、Token、题目或答案。bootstrap 验证固定 source、本轮 instance、完整快照格式，接管新宿主须清旧记录；日志不走配置持久化或 localStorage。只向已确认 bootstrap 完成的顶层文档投递，回调只入队，原生 CDP 发送须串行且检查严格 true；发送失败非致命并节流重试，导航、关闭、重连须取消旧文档状态。`--no-panel` 禁止 UI 和投递，`--no-disk-write` 仍允许内存记录。修改须运行 bootstrap、memory-diagnostics、host-log、注入生命周期及 Node/原生实际 Chromium 回归，不能宣称为真实 CEF75 登录后验收。
 - `windows/native/audit.c` 使用无 BOM 的 UTF-8 单行日志，包含 UTC 时间、级别及事件种类；宿主只传入预先脱敏的固定事件，不得加入原始配置 JSON、Token、题目、答案或 URL 查询参数/片段。页面 console/异常只输出省略原文的固定事件；关闭 `captureConsole` 不得阻断注入就绪或 bootstrap 控制错误。
 - 原生普通运行默认数据目录为进程工作目录下的 `.data`，日志位于其 `logs/windows-host-<UTC时间>-<宿主PID>.log`；`--data-dir` 与 `--report` 的相对路径按审计对象创建时的进程工作目录解析，不能套用 Node 的 `windows/data` 默认值。日志使用 `CREATE_NEW`，不覆盖已有会话文件。
 - `--quiet` 只抑制控制台，不能关闭文件日志或显式报告；`--no-log` 只关闭日志文件，报告独立；`--no-disk-write` 必须禁止日志、报告及相应目录创建。`--list-clients` 即使默认 log=true 也不创建日志，仅显式 `--report` 才输出报告，列表不得混入审计事件。日志创建/写入失败不阻止主流程，写入失败须关闭该句柄并继续控制台事件，不反复重试。报告完整生成及 UTF-8 校验失败时保留原报告，写入失败只返回错误，不宣称原子替换。
