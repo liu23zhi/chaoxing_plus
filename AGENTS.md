@@ -257,6 +257,7 @@ $env:CX_TEST_NATIVE_WINDOW='1'; node --test scripts/windows-selection-window.tes
 - 原生构建当前使用 `/Gs9999999`，不生成栈探针；大路径、环境变量、表达式和控件缓冲区须使用堆或静态存储，避免大栈帧跨过 Windows guard page。修改默认扫描根目录时须实际执行已编译的 `--list-clients --scan-mode common --quiet` 回归，不能只使用人工提供根目录的测试。
 - 无 CRT 测试程序也须遵守栈限制，`CX_OPTIONS` 等大对象不能放在测试函数栈上。GUI 子系统测试程序须由 Node `spawnSync` 或 `Start-Process -Wait` 等待并检查实际退出码；PowerShell 直接调用后遗留的 `$LASTEXITCODE` 不构成通过证据。
 - 原生 `--self-check` 必须在普通 `h_run()` 之前独立返回；不得自动扫描常见根目录或全盘、启动客户端、申请 UAC、连接 CDP、创建日志/诊断/报告/配置。显式客户端目录按既有一级规则解析。保留权限真实状态、显式外部资源不回退、普通注入容量限制、实际 loopback bind 后关闭、quiet 静默和参数错误退出 `2`；设置 `CX_NATIVE_HOST_EXE` 实跑 `scripts/windows-native-self-check.test.mjs`。自检通过不能当作客户端启动或 CEF 页面验收证据。
+- 原生 UAC 仅由普通 `proc_launch` 返回 Win32 `740` 触发，使用标准 `runas` 重启同一宿主，不能只提权客户端而丢失进程归属。`--no-elevate`、已重启标记、实际已提升 token 或权限查询失败均阻止重复申请；内部已选路径必须经真实 token 校验并重新验证 PE，不能重新扫描/打开选择窗口。保留原始 argv 和工作目录，父实例先释放资源、跳过交接阶段报告后再等待子实例；取消返回 `3`。修改此链路后生成 `elevation-tests.exe`、`elevation-host-tests.exe`，设置 `CX_NATIVE_ELEVATION_EXE`、`CX_NATIVE_ELEVATION_HOST_EXE`、`CX_NATIVE_HOST_EXE` 实跑 `scripts/windows-native-elevation.test.mjs`；调用替身测试不能宣称真实 UAC 人工批准或 CEF 登录后验证。
 - 原生页面诊断只在首次成功的顶层 bundle 确认后尝试一次，不能把子 iframe 的任务触发为顶层采样。保持字段白名单、三位小数量化、URL 样式拒绝和失败非致命；`--no-diagnose` 必须覆盖配置中的 `diagnose:true`，正反 CLI 开关最后一次生效，`--no-disk-write` 禁止创建诊断目录。修改此链路后设置 `CX_NATIVE_DIAGNOSTICS_EXE=<diagnostics-tests.exe>` 与 `CX_NATIVE_HOST_EXE=<chaoxing_plus.exe>` 运行 `node --test scripts/windows-native-diagnostics.test.mjs`，保留真实 Chromium 的分数 DPR、CSS URL canary 和文件失败回归。
 
 ### 原生日志与运行报告

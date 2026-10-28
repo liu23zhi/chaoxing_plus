@@ -51,7 +51,25 @@ chaoxing_plus.exe --self-check --assets "D:\Debug Assets" --port 38123
 
 标准输出是单份 JSON，包含 `mode`、`host`、`version`、`success`、`scope`、`port`、带稳定 `id/status/detail/ok` 的 `checks` 以及 `warnings`、`failures` 标识列表。结果不包含绝对路径、原始配置、密钥、题目或答案；`--quiet` 抑制 JSON，仍保留退出码。成功或仅警告返回 `0`，环境检查失败返回 `1`；参数、配置解析错误和未实现功能请求仍在自检之前返回 `2`，不保证 JSON。通过只证明静态启动前提和当前端口可绑定，不证明客户端能启动或真实 CEF 页面兼容。调用方捕获 GUI 子系统 EXE 结果时应等待进程结束，不能使用 PowerShell 未等待时遗留的 `$LASTEXITCODE`。
 
-2026-10-28 对本任务三个客户端的只读复核：版本依次为 `4.1.4.25512`、`4.3.0.4`、`4.1.4.25512`，均为 x86，三份 `libcef.dll` 字节和 SHA256 相同，版本为 `75.1.4+g4210896+chromium-75.0.3770.100`。三个主 EXE manifest 均要求管理员权限；当前原生 `CreateProcessW` 启动路径没有自动 UAC 提升流程，普通用户可能遇到 Win32 740，需以管理员身份启动宿主。原生自检对三者均返回 `0`、无失败，并如实报告普通用户权限警告；没有启动客户端。客户端主 EXE 的 PE 版本字段不能用来证明旧版 Windows 可运行，仍需完整依赖和目标环境验收。
+2026-10-28 对本任务三个客户端的只读复核：版本依次为 `4.1.4.25512`、`4.3.0.4`、`4.1.4.25512`，均为 x86，三份 `libcef.dll` 字节和 SHA256 相同，版本为 `75.1.4+g4210896+chromium-75.0.3770.100`。三个主 EXE manifest 均要求管理员权限，普通用户直接 `CreateProcessW` 启动会遇到 Win32 740；原生宿主的按需 UAC 处理见下节。原生自检对三者均返回 `0`、无失败，并如实报告普通用户权限警告；没有启动客户端。客户端主 EXE 的 PE 版本字段不能用来证明旧版 Windows 可运行，仍需完整依赖和目标环境验收。
+
+### 原生启动权限与 UAC
+
+原生宿主先按当前权限扫描、选择、校验客户端并尝试 `CreateProcessW`。只有普通启动实际返回 `ERROR_ELEVATION_REQUIRED`（Win32 `740`），且未禁止自动提权时，才通过 Windows 标准 `runas` 请求重启宿主本身；是否批准由系统 UAC 确认框决定。不要求管理员权限的客户端仍按普通权限启动，不会预先申请 UAC。
+
+| 原生参数 | 默认 | 行为 |
+| --- | --- | --- |
+| `--no-elevate` | 关闭 | 禁止自动申请 UAC；仍可启动不要求管理员权限的客户端。遇到 `740` 时报告权限错误，可移除此参数重试或手动以管理员身份运行宿主。 |
+| `--elevated` | 内部标记 | 表示本轮已通过 UAC 重启，禁止再次自动重启；标记不能替代真实 token 提升状态检查，不应由用户手动添加。 |
+| `--elevated-client <path>` | 内部参数 | 携带提权前已选中的绝对客户端路径；仅与内部重启标记及真实已提升 token 配套使用，重新校验客户端后直接启动，避免重复扫描或选择。 |
+
+父宿主先关闭配置、资源和审计句柄，再请求 UAC；重启保留原始参数、工作目录和已选客户端，含中文、空格、引号和内联 JSON 的参数也须保持原值。配置文件会按原有优先级重新读取，相对路径仍以保留的工作目录解析。提升后的宿主继续使用既有 `CreateProcessW` 和本次启动进程的监听归属检查，不通过 `ShellExecute` 单独启动客户端。
+
+父宿主等待提升后的实例结束并回传其退出码；用户取消 UAC 返回 `3`，不得当作客户端已启动。实际权限查询失败、已重启实例仍遇到 `740` 或指定 `--no-elevate` 时直接失败，不循环请求权限。`--quiet` 不能抑制系统 UAC 确认框。帮助、能力输出、有效配置输出、自检、仅列出客户端以及显式 `--attach` 均不申请 UAC。
+
+`runas` 不保证继承父实例的重定向标准输出，跨权限交接后的诊断应使用显式报告或日志。若在 UAC 中使用另一个管理员账户，系统环境变量和映射盘可能不同；保留工作目录不能替代该账户对客户端及配置文件的访问权限。
+
+自动化使用受控 Win32 调用替身验证提权分支、参数传递和退出码，不批准真实 UAC，也不启动真实考试客户端。这不代表已完成 UAC 人工确认、真实 CEF75 登录后页面或旧 Windows 干净环境验收；内存执行、启动清理和自毁能力仍不可用。
 
 ### 原生共享配置与热更新
 
@@ -336,7 +354,7 @@ CDP 断开时关闭旧页面会话；target 仍存在则在下一轮枚举重新
 | `--attach <port>` | 不启用 | 仅测试/调试连接已存在端点；不会启动客户端或校验进程归属。 |
 | `--self-check` / `--help` | 关闭 | 只做环境检查或输出参数帮助。 |
 | `--capabilities` | 关闭 | 输出机器可读的能力标记。Node 宿主列出普通运行、扫描、参数生成器与（Windows）原生选择窗口；启动清理、内存执行、删除挂起和自毁均标记为不支持，并保留设计 schema。原生宿主单独输出自身能力，不得把两者的已支持项合并推断。 |
-| `--no-elevate` | 关闭 | 非管理员时直接报错，不自动申请 UAC（便于自动化/调试）。 |
+| `--no-elevate` | 关闭 | Node 宿主在非管理员时直接报错，不自动申请 UAC（便于自动化/调试）；原生宿主仅在客户端实际需要提权时失败，见“原生启动权限与 UAC”。 |
 
 #### 禁用能力的参数设计
 
@@ -611,15 +629,19 @@ $env:CX_NATIVE_TRANSPORT_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\
 $env:CX_NATIVE_AUDIT_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\audit-tests.exe').Path
 $env:CX_NATIVE_CONFIG_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\config-store-tests.exe').Path
 $env:CX_NATIVE_DIAGNOSTICS_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\diagnostics-tests.exe').Path
+$env:CX_NATIVE_ELEVATION_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\elevation-tests.exe').Path
+$env:CX_NATIVE_ELEVATION_HOST_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\elevation-host-tests.exe').Path
 try {
-  node --test scripts/windows-native-host.test.mjs scripts/windows-native-self-check.test.mjs scripts/windows-native-assets.test.mjs scripts/windows-native-options.test.mjs scripts/windows-native-session.test.mjs scripts/windows-native-selection.test.mjs scripts/windows-native-transport.test.mjs scripts/windows-native-audit.test.mjs scripts/windows-native-config.test.mjs scripts/windows-native-diagnostics.test.mjs
+  node --test scripts/windows-native-host.test.mjs scripts/windows-native-self-check.test.mjs scripts/windows-native-assets.test.mjs scripts/windows-native-options.test.mjs scripts/windows-native-session.test.mjs scripts/windows-native-selection.test.mjs scripts/windows-native-transport.test.mjs scripts/windows-native-audit.test.mjs scripts/windows-native-config.test.mjs scripts/windows-native-diagnostics.test.mjs scripts/windows-native-elevation.test.mjs
   node --test scripts/windows-native-injection.browser.mjs scripts/windows-native-assets.browser.mjs scripts/windows-native-lifecycle.browser.mjs scripts/windows-native-audit.browser.mjs scripts/windows-native-config.browser.mjs
 } finally {
-  Remove-Item Env:CX_NATIVE_HOST_EXE, Env:CX_NATIVE_INJECTION_EXE, Env:CX_NATIVE_ASSETS_EXE, Env:CX_NATIVE_OPTIONS_EXE, Env:CX_NATIVE_SESSION_EXE, Env:CX_NATIVE_SELECTION_EXE, Env:CX_NATIVE_TRANSPORT_EXE, Env:CX_NATIVE_AUDIT_EXE, Env:CX_NATIVE_CONFIG_EXE, Env:CX_NATIVE_DIAGNOSTICS_EXE -ErrorAction SilentlyContinue
+  Remove-Item Env:CX_NATIVE_HOST_EXE, Env:CX_NATIVE_INJECTION_EXE, Env:CX_NATIVE_ASSETS_EXE, Env:CX_NATIVE_OPTIONS_EXE, Env:CX_NATIVE_SESSION_EXE, Env:CX_NATIVE_SELECTION_EXE, Env:CX_NATIVE_TRANSPORT_EXE, Env:CX_NATIVE_AUDIT_EXE, Env:CX_NATIVE_CONFIG_EXE, Env:CX_NATIVE_DIAGNOSTICS_EXE, Env:CX_NATIVE_ELEVATION_EXE, Env:CX_NATIVE_ELEVATION_HOST_EXE -ErrorAction SilentlyContinue
 }
 ```
 
 `diagnostics-tests.exe` 通过 `CX_NATIVE_DIAGNOSTICS_EXE` 纳入测试，检查实际文件写入、诊断 schema、CSS URL 拒绝、禁用开关和失败降级；其测试目录由 Node 驱动创建并清理。原生测试是 GUI 子系统程序，应使用 Node `spawnSync` 或 `Start-Process -Wait` 等待结束并读取真实退出码，不要将 PowerShell 直接调用后留下的旧 `$LASTEXITCODE` 当作测试结果。`windows-native-diagnostics.test.mjs` 还通过 `CX_NATIVE_HOST_EXE` 执行现代 Chromium 采样回归，覆盖顶层 bundle 确认、分数缩放、CSS URL 脱敏、诊断关闭和路径失败；未设置这些变量时会明确跳过。
+
+`elevation-tests.exe`（`CX_NATIVE_ELEVATION_EXE`）通过系统调用替身测试 token、`runas`、等待和取消，真实读取中文临时工作目录并验证参数逐项往返；`elevation-host-tests.exe`（`CX_NATIVE_ELEVATION_HOST_EXE`）编译实际宿主代码，验证 740 交接、父资源关闭、保留已选客户端、不重复选择、父报告不覆盖以及 `WinMain` 退出码。两者均不触发真实 UAC，不启动考试客户端；`CX_NATIVE_HOST_EXE` 还验证能力标记及内部参数在只读动作中的拒绝。
 
 `-BuildTests` 编译实际原生宿主注入代码与确定性 mock CDP 传输，输出 `injection-tests.exe`，同时生成 `assets-tests.exe`、`options-tests.exe`、`json-tests.exe`、`session-tests.exe`、`selection-tests.exe`、`transport-tests.exe`、`audit-tests.exe` 和 `config-store-tests.exe`。`CX_NATIVE_INJECTION_EXE` 启用策略顺序、重试上限、CDP 请求 ID 及执行确认测试；`CX_NATIVE_ASSETS_EXE` 启用资源字节校验；`CX_NATIVE_OPTIONS_EXE` 启用实际 C 参数回归；`CX_NATIVE_SESSION_EXE` 检查导航、iframe、取消代次、配置任务和启用恢复；`CX_NATIVE_SELECTION_EXE` 构建真实 Win32 隐藏控件；`CX_NATIVE_TRANSPORT_EXE` 检查分段 WebSocket 消息、零超时和控制帧截止时间；`CX_NATIVE_AUDIT_EXE` 检查真实日志/报告文件、中文路径、quiet/noDiskWrite、UTF-8/JSON 转义和文件失败降级；`CX_NATIVE_CONFIG_EXE` 检查共享键解码去重、容量边界、真实文件 patch、原文件保留和自有临时文件清理。未设置对应变量时会显示跳过，不能称为已完成编译验证。`json-tests.exe` 可直接执行验证 JSON 解析。`CX_NATIVE_HOST_EXE` 用于原生 CLI、现代 Chromium 生命周期、审计及配置回归，`--capabilities` 校验内嵌资源并报告 `embeddedResources:true`、资源数量以及 `configReload:true`/`configPersistence:true`/`fileLogging:true`/`runReport:true`。`build/pe-imports.txt` 是导入表审计记录；这些测试仍不等同于真实客户端验收。
 
@@ -628,6 +650,8 @@ try {
 2026-10-28 页面诊断接线阶段验证记录：显式展开 56 个 `scripts/*.test.mjs`，共 567 项、563 通过、0 失败、4 项可选窗口显示测试跳过；原生 EXE、注入、资源、参数、会话、传输、日志、配置和诊断测试变量均设置为本次构建产物，页面诊断的 6 个现代 Chromium 用例及诊断模块测试实际执行。原生注入/资源/生命周期/审计/配置浏览器回归 34/34 通过；Swal iframe 浏览器回归 8/8 通过。类型检查、扩展构建、Chrome75 构建、原生 `-BuildTests`、Node self-check、`git diff --check` 均退出 0。原生 EXE 为 508928 字节，导入表仅含系统 DLL。诊断开关的 8 个编译后断言先失败再修复通过，覆盖 CLI 最后一次生效和 JSON 分层；仍未执行真实 CEF75 人工登录或旧 Windows 干净环境验证。
 
 2026-10-28 原生自检阶段验证记录：显式展开 57 个 `scripts/*.test.mjs`，575/575 通过、0 跳过；已设置全部原生测试 EXE 变量，并通过 `CX_TEST_NATIVE_WINDOW=1` 执行自动关闭的窗口显示冒烟。新增自检的首轮 7 项红测失败，完善后 8 项编译版回归通过；全量曾发现测试读取并行重建的构建目录而失败，现改为测试自有资源夹具，并在构建后顺序重跑通过。原生浏览器回归 34/34 通过；类型检查、扩展构建、Chrome75 构建、原生 `-BuildTests` 和 Node self-check 均退出 0。原生 EXE 为 513024 字节，导入表仍仅含系统 DLL；对三个真实客户端目录的只读自检均无失败、均报告普通用户权限警告，不代表已完成客户端启动、UAC 或 CEF 登录后验收。
+
+2026-10-28 按需 UAC 阶段验证记录：显式展开 58 个 `scripts/*.test.mjs`，579/579 通过、0 跳过；设置所有原生测试 EXE 变量及 `CX_TEST_NATIVE_WINDOW=1`，包含新增的两个提权测试驱动。原生注入/资源/生命周期/审计/配置与 Swal iframe 浏览器回归合计 42/42 通过。类型检查、扩展构建、Chrome75 构建、无警告原生 `-BuildTests`、Node self-check 和 `git diff --check` 均退出 0；原生 EXE 为 517120 字节，导入表仅含 Windows 系统 DLL。参数往返测试真实读取中文空格临时工作目录，740、token、取消、父资源释放及报告交接使用 Win32 调用替身；没有触发真实 UAC 或启动真实考试客户端，仍需人工验收。
 
 原生 Win32 选择窗口的实际显示与自动选择冒烟需单独启用，整个过程中不会启动考试客户端：
 
@@ -659,6 +683,7 @@ try {
 - `windows-parameter-generator.test.mjs`：离线生成器加载、普通预设输出可被宿主解析器重新解析、实时校验（互斥、no-disk-write、线程/面板宽度/清理重试、内联 JSON、自毁快捷键冲突）与禁用能力阻止导出；`startupClean` 只展示设计说明且不生成命令或 JSON。
 - `windows-native-host.test.mjs`：原生源码边界与构建选项；设置 `CX_NATIVE_HOST_EXE` 后执行 CLI 回归，设置 `CX_NATIVE_INJECTION_EXE` 后执行已编译的实际注入逻辑测试。内部清理器或状态机测试仅证明模块行为，不表示 Node 或原生入口支持启动清理、自毁。
 - `windows-native-self-check.test.mjs`：设置 `CX_NATIVE_HOST_EXE` 后验证单独 EXE、中文客户端路径、内嵌/显式资源、容量限制、占用端口和 attach 不连接、配置错误、quiet、字段脱敏和不写业务文件；不执行客户端。
+- `windows-native-elevation.test.mjs`：设置 `CX_NATIVE_ELEVATION_EXE`、`CX_NATIVE_ELEVATION_HOST_EXE` 和 `CX_NATIVE_HOST_EXE`，验证标准 UAC 的按需交接、防重复重启、原参数/工作目录/已选客户端保留和取消退出码；不触发真实 UAC。
 - `windows-native-assets.test.mjs`：仅复制 EXE/driver 到中文空格目录，逐项比对宿主与 driver 内嵌资源的长度/SHA256，并覆盖外部资源缺失、空文件、超限及禁止落盘解包。
 - `windows-native-options.test.mjs`：实际 C 参数测试，覆盖扫描别名和 CLI/JSON 的客户端选择优先级。
 - `windows-native-session.test.mjs`：实际 C 会话状态机，覆盖导航和 frame 子树销毁、就绪通知期间不重入、URL 过滤、顶层兜底及容量边界；不以模型通过代替宿主适配器验证。
@@ -778,6 +803,7 @@ windows/data/diagnostics/<时间戳>/
 | 现象 | 处理 |
 | --- | --- |
 | `启动客户端需要管理员权限` | 用 `start-windows.cmd`（会自动 UAC），或右键“以管理员身份运行”终端后执行 `npm run windows` |
+| 原生启动返回 Win32 `740` | 移除 `--no-elevate` 允许系统 UAC 确认，或手动以管理员身份运行原生 EXE；不要自行添加内部 `--elevated` 标记。取消 UAC 的退出码为 `3`，不是启动成功。 |
 | `没有找到可绑定的调试端口` | 检查 `netsh int ipv4 show excludedportrange protocol=tcp`；或把配置 `port` 改为 0 |
 | `检测到已有 CXExam 客户端进程` | 全部退出后重试 |
 | `调试端点 Browser 与期望不匹配` | 端口被其它 Chromium 占用；换端口或关闭占用程序 |
