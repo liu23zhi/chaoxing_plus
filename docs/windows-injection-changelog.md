@@ -145,3 +145,25 @@ cdp-pipe: Target.getTargets attempt 4 status 0
 ```
 
 客户端正常启动但管道上没有任何响应 → 该客户端（或该 CEF 构建）未启用 `--remote-debugging-pipe`。因此 `injectModeSupport.cdp-pipe` 改回 `false`：管道通道仅对夹具（cdp-echo）可用，不能用于真实客户端。
+## 六、安全软件干扰（火绒）
+
+2026-10-29 测试期间系统提示"检测到火绒软件，疑似冲突"。以下现象与安全软件拦截**高度吻合**，在排除前不宜据此判定通道本身不可用：
+
+| 现象 | 可能是拦截点 |
+| --- | --- |
+| 客户端加载 winmm 代理后 `0xc0000142` | 无签名 DLL 的加载/初始化被拦截 |
+| 代理已安装但 `%TEMP%\cxhook-*.log` 缺失或日志不完整 | 文件写入/进程注入监控 |
+| `--remote-debugging-pipe` 客户端启动正常但管道无任何回包 | 调试端口/管道通信被防护拦截 |
+| 偶发的 `CreateProcessW` 失败（如 267/740 之外的错误） | 进程创建监控 |
+
+复测建议（需要用户操作）：
+
+1. 把以下路径加入火绒信任区：仓库根目录（尤其 `build-windows\`）、被测客户端目录、`%TEMP%` 下 `cx-*` 目录；
+2. 或临时退出火绒的"实时监控/主动防御"；
+3. 重新执行：
+   ```powershell
+   .\build-windows\bin\chaoxing_plus.exe --inject-mode cdp-pipe --client "<4.1.4 客户端>" --panel-all-pages
+   ```
+4. 若排除后管道仍无回包，才能确认"该 CEF 构建不支持 pipe 调试"这一结论。
+
+注意：`cdp-port`（端口）通道在同样装着火绒的机器上是**实测可用**的（两份 4.1.4 客户端均出面板），因此端口通道不受此干扰影响。
