@@ -624,3 +624,28 @@ uninstall-proxy: removed ...\version.dll
 ```
 
 回归：proxy-actions 增至 7 项，全量 864 项通过。
+### 端口自愈：失败后自动改用 settings-only 代理（2026-10-30，无 UAC 实测）
+
+**问题**：如果某个客户端忽略命令行开关、又没被打包壳标记为"加壳"，`auto` 会走端口方式并失败——之前只能干等 30 秒后报错。
+
+**改动**：`auto` 模式下端口尝试失败（拿不到端点）时，自动：
+
+1. 停掉本次启动的客户端，并轮询等待实例真正退出（否则重启会撞 `client-already-running`）；
+2. 安装 settings-only 代理（按导入表选载体、冲突时换载体）；
+3. 重新启动客户端，用代理强制 `remote_debugging_port`。
+
+触发条件严格限定：显式 `--inject-mode cdp-port`、`--attach`、或已经是代理模式时不重试。
+
+**构造验证场景（无 UAC）**：把 4.3.0.4 副本的 `.themida` 节名改成 `.xemida0`，让加壳检测落空（但客户端行为仍是忽略开关），于是 `auto` 先走端口并失败。
+
+实测输出：
+
+```
+端口方式未拿到端点，改用 settings-only 代理重试
+report: injectMode=dll-proxy ownershipVerified=True stopReason=duration
+after: proxy=False marker=False          ← 自愈期间装的代理在退出时也清理了
+```
+
+对比改造前：同样场景会直接以 `endpoint-unavailable` 结束、没有面板。
+
+回归：`windows-native-proxy-actions.test.mjs` 新增「端口拿不到端点时自动改用 settings-only 代理重试」用例（用夹具改名 `.xemida0` 构造同款场景），全量 865 项通过。
