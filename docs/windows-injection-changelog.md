@@ -321,3 +321,17 @@ cef_initialize:
 复测（4.3.0.4 asInvoker 副本）：`port-open-after=1s`、`listener=True`。
 
 补充说明：把代理装到 4.1.4 的 asInvoker 副本后，客户端自身在非管理员下会提前退出（`client-exit-before-endpoint`），因此"4.1.4 + 代理"这条组合仍**未经管理员真机验证**，不作为已支持结论。
+### 运行时 size 复核与未完成的验证（2026-10-30）
+
+代理新增一行运行日志，用于核对 IG5 静态结论：
+
+```
+winmm proxy: cef_initialize patched (pushret)
+winmm proxy: cef_settings size=228
+winmm proxy: cef settings port applied
+listener=True            ← 4.3.0.4 asInvoker 副本，端口正常
+```
+
+`cef_settings size=228` 与 IG5 反编译得到的 `0xE4(228)` 完全一致，静态结论与运行时行为对上。
+
+未完成项（如实记录）：把代理装进真实「河南 4.1.4」目录后运行宿主，**UAC 未获批准**，父实例等待到超时、未生成报告。已执行 `--uninstall-proxy` 还原该目录，当前三份客户端目录中只有 4.3.0.4 保留代理（这是它可用的前提）。"4.1.4 + 代理"仍未验证。
