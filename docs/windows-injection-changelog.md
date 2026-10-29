@@ -569,3 +569,27 @@ winmm proxy: cef settings port applied
 ```
 
 回归：`windows-native-proxy-actions.test.mjs` 新增 `--proxy-target version` 用例（断言不写 winmm.dll、卸载后零残留），全量 862 项通过。
+### 三载体与自动选择（2026-10-30，无 UAC 实测）
+
+新增 `uxtheme.dll` 载体，并把载体选择做成自动：
+
+```
+$ chaoxing_plus.exe --probe-client "<客户端>\CXExam.exe"
+probe: packed=themida
+probe: proxies=winmm,version,uxtheme     ← 按导入表实测得出
+probe: suggested=dll-proxy
+```
+
+- `--proxy-target winmm|version|uxtheme`：显式指定载体；
+- `--proxy-target auto`：按客户端导入表挑第一个可用载体（winmm → version → uxtheme），都不导入时回落 winmm；
+- 安装/卸载/自动安装的目标文件名由载体推导（`<carrier>.dll`），不再写死 winmm。
+
+三种载体在同一份 4.3.0.4 副本上的实测结果：
+
+| 载体 | 端口 | 日志要点 |
+| --- | --- | --- |
+| `winmm.dll` | 1 秒打开 | settings-only + size=228 + port applied |
+| `version.dll` | 1 秒打开 | 同上 |
+| `uxtheme.dll` | 1 秒打开 | 同上 |
+
+回归：`windows-native-proxy-actions.test.mjs` 增至 6 项（新增 uxtheme 与 auto 解析用例），全量 863 项通过。
