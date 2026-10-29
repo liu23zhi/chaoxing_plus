@@ -342,6 +342,30 @@ bash windows/native-source/build-windows.sh --skip-tests
 | `dpiAwareness` | `""`（默认）/`"system"`；`system` 会在启动客户端时临时加 Windows `HIGHDPIAWARE` 兼容层（启动后立即恢复注册表原值），用于修复系统缩放 125%/150% 下整个客户端窗口被位图缩放导致的模糊 |
 | `settings` | 共享配置快照（`common.settings.*`、`cx.new.*` 等），会被水合到所有 frame；面板里修改的设置也会回写到这里 |
 
+### 注入通道与 winmm 代理
+
+原生宿主提供三条注入通道，由 `--inject-mode` 选择：
+
+| 模式 | 启动方式 | 注入内容 |
+| --- | --- | --- |
+| `cdp-port`（默认，`auto` 等同于此） | 命令行传 `--remote-debugging-port=<port>` | bootstrap + bundle + 配置同步 |
+| `dll-proxy` | 命令行**不传**端口开关；宿主设置 `CX_INJECT_PORT`，客户端目录内的 `winmm.dll` 代理改写 `GetCommandLineW` 追加开关 | 同 `cdp-port` |
+| `cdp-pipe` | `--remote-debugging-pipe`，匿名管道 + `Target.attachToTarget` 取 sessionId | bootstrap + bundle + 配置同步 |
+
+`dll-proxy` 的部署流程：
+
+```powershell
+# 1) 安装（复制 winmm.dll 并写 cxhook-proxy.marker）
+chaoxing_plus.exe --install-proxy --proxy-source "build-windows\hook\winmm.dll" --client "<CXExam.exe>"
+# 2) 显式启用代理通道（auto 不会自动切换，保持默认行为可预测）
+chaoxing_plus.exe --inject-mode dll-proxy --client "<CXExam.exe>" --panel-all-pages
+# 3) 还原
+chaoxing_plus.exe --uninstall-proxy --client "<CXExam.exe>"
+```
+
+代理 DLL 由 `windows/hook-source/build-proxy.ps1` 构建（读取系统 winmm 导出表生成 180 个转发桩）；`--install-proxy` 只负责复制，不负责构建。
+
+诊断开关：`--pipe-test`（管道启动自检）、`--pipe-client <exe>`（管道握手）、`--pipe-call <exe> [--pipe-expr "<js>"]`（管道 CDP 全链路 open → getVersion → getTargets → attach → evaluate）。
 ### 完整启动参数
 
 命令行参数优先级高于 JSON 配置。重复的标量开关以命令行中最后一次设置为准；`--self-check`、`--help`、`--list-clients` 等动作型开关按各自语义执行。
@@ -1095,6 +1119,7 @@ render-diagnostics-host.json # 宿主级诊断摘要：launchMode/clientPid/窗�
 - 已有 `CXExam.exe` 时拒绝启动，避免连接真实考试会话。
 - 日志/报告不记录 URL 查询参数、Cookie、答案或账号数据；客户端目录的 `debug.log` 仍可能含页面信息，不要外发。
 - 本项目仅用于本机技术研究与自有账号环境；请勿在正式考试中使用。
+
 
 
 
