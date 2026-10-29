@@ -448,4 +448,29 @@ undefined4 cef_execute_process(undefined4 *param_1, undefined4 param_2, undefine
 ```
 
 也就是说调试端口只能在浏览器进程的 `cef_initialize` 里设置，子进程无法通过 settings 注入——这与我们"代理只钩 cef_initialize"的实现完全一致，属于设计闭环的最后一环证据。
+### 全自动通道选择（2026-10-30）
 
+`auto`（默认）现在是**完整自动**，不需要任何 `--inject-mode`：
+
+| 客户端 | 自动行为 | 报告 `injectMode` |
+| --- | --- | --- |
+| 无 `.themida` 节（4.1.4 ×2） | 直接用命令行端口，不碰客户端目录 | `cdp-port` |
+| 有 `.themida` 节 + 已有代理 | 走代理（cef_initialize 强制端口） | `dll-proxy` |
+| 有 `.themida` 节 + 无代理 | **自动安装代理**，运行结束自动还原 | `dll-proxy` |
+| 自动安装失败（目录只读等） | 打印可操作提示，不静默降级 | — |
+
+实测（asInvoker 副本，无 UAC）：
+
+```
+# 加壳客户端，起点无代理
+auto: 检测到加壳客户端，已自动安装代理并启用 dll-proxy（结束后还原）
+report: injectMode=dll-proxy ownershipVerified=True
+uninstall-proxy: removed ...\winmm.dll
+end-state: proxy=False marker=False
+
+# 非加壳客户端
+report: injectMode=cdp-port ownershipVerified=True
+end-state: proxy=False
+```
+
+回归：`windows-native-proxy-actions.test.mjs` 新增「auto 模式对加壳客户端自动选择 dll-proxy 并清理临时代理」，断言报告 `injectMode` 与目录零残留。
