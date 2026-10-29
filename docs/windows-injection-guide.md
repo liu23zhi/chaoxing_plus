@@ -49,7 +49,7 @@ probe: suggested=cdp-port
 # 2.1 构建代理（只需一次，产物在 build-windows\hook\winmm.dll）
 powershell -ExecutionPolicy Bypass -File windows\hook-source\build-proxy.ps1
 
-# 2.2 安装到客户端目录（写 winmm.dll + 标记 + 端口文件）
+# 2.2 安装到客户端目录（写 winmm.dll + 标记；带 --proxy-port 时才写固定端口文件）
 .\build-windows\bin\chaoxing_plus.exe --install-proxy `
   --proxy-source ".\build-windows\hook\winmm.dll" `
   --proxy-port 9222 `
@@ -142,4 +142,5 @@ powershell -ExecutionPolicy Bypass -File windows\hook-source\build-proxy.ps1
 提示：`--proxy-source` 建议用绝对路径（或确认当前目录是仓库根），避免复制到非预期位置。
 
 发布包会随附 `winmm-proxy.dll`（存在构建产物时）。不传 `--proxy-source` 时，`--install-proxy` 依次在宿主目录查找 `winmm-proxy.dll`、`winmm.dll`、`hook\winmm.dll`、`..\hook\winmm.dll`、`build-windows\hook\winmm.dll`，找到第一个即用。
+
 
