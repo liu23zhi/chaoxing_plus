@@ -189,3 +189,46 @@ cdp-pipe: Target.getTargets attempt 4 status 0
 3. 先用官方 Chrome 做对照（成功即实现正确），再回到 CEF 客户端。
 
 在完成上述改造前，`cdp-pipe` 维持 `false`（不可用），`cdp-port` 仍是唯一验证可用的注入通道。
+## 七、4.3.0.4 解决方案（2026-10-30，已实测打通端口）
+
+### 根因（IG5 + 运行时证据）
+
+| 证据 | 说明 |
+| --- | --- |
+| IG5 静态分析 | `CXExam.exe` 仅 2 个可识别函数，节表含 `.themida`(5.7MB) 与 `.boot`(3.4MB)，入口在 `.boot` → Themida 加壳，静态不可读 |
+| 字符串对照 | 4.1.4 EXE 含 `cef_initialize`/`cef_execute_process`；**4.3.0.4 EXE 只有 `cef_command_line_get_global`** → 初始化入口被壳隐藏 |
+| 运行时命令行 | 带 `--remote-debugging-port=38800` 启动后，浏览器进程命令行**仍含该开关**，但端口不开 → 客户端禁用了命令行开关（CEF `command_line_args_disabled` 语义） |
+| `/json/list` | 端口强制打开后返回 `[ ]`（登录前没有 page target） |
+
+结论：4.3.0.4 不是"不能注入"，而是**忽略命令行开关**；只要在 `cef_initialize` 里把 `CefSettings.remote_debugging_port` 写进去，端口立刻可用。
+
+### 解法（已实现于 winmm 代理）
+
+1. 在代理工作线程里定位 `libcef!cef_initialize`；
+2. 识别其 GCC/MinGW 序言 `55 89 E5 53 57 56`（6 字节完整指令边界），用 `push <hook>; ret` 做 6 字节补丁（另支持 `55 8B EC 83 EC` 的 MSVC 形态）；
+3. 钩子里按 `cef_settings_t.size` 定位 `remote_debugging_port`（size≥228 → offset 184；==216 → offset 172）并写入端口。
+
+### 实测结果（asInvoker 副本，无需 UAC）
+
+```
+winmm proxy: cef_initialize patched (pushret)
+winmm proxy: cef settings port applied
+port-open-after=1s
+/json/version → Browser: Chrome/75.0.3770.100
+                User-Agent: chaoxingExamPc/chaoxingExam_4.3.0.4_...
+```
+
+宿主完整流程：`ownershipVerified=True`（端点被发现且归属校验通过）；`pageSessions=0` 是因为**登录前没有 page target**（`/json/list` 为空），登录后应出现并可注入。
+
+### 使用方式
+
+```powershell
+# 1) 安装代理到 4.3.0.4 客户端目录
+.\build-windows\bin\chaoxing_plus.exe --install-proxy --proxy-source ".\build-windows\hook\winmm.dll" --client "<4.3.0.4>\CXExam.exe"
+# 2) 正常启动（会弹 UAC），登录后面板应出现
+.\build-windows\bin\chaoxing_plus.exe --client "<4.3.0.4>\CXExam.exe" --panel-all-pages
+# 3) 还原
+.\build-windows\bin\chaoxing_plus.exe --uninstall-proxy --client "<4.3.0.4>\CXExam.exe"
+```
+
+`--probe-client` 对加壳客户端现在输出 `suggested=dll-proxy-required`（未装代理）或 `dll-proxy`（已装）。
