@@ -698,3 +698,23 @@ exit=1（不产生任何文件）
 4. `--probe-client` 的 `proxies=` 也不再列出 KnownDLL 名字。
 
 回归：新增「KnownDLLs 里的名字（imm32）拒绝作为载体」用例，proxy-actions 共 10 项；全量 867 项通过。
+### 载体扩展到七个（2026-10-30，无 UAC 实测）
+
+新增 `oledlg.dll`（12800 字节）与 `wtsapi32.dll`（16896 字节），两者都不在 KnownDLLs 中：
+
+```
+probe: proxies=winmm,version,uxtheme,msimg32,sensapi,oledlg,wtsapi32
+```
+
+单个载体注入实测（4.3.0.4 asInvoker 副本）：
+
+```
+# 客户端目录只放 oledlg.dll
+listener=True   alive=True
+```
+
+- 载体表扩充为 7 项，`auto` 选择 / 冲突避让 / 探测输出自动跟随；
+- `--proxy-target` 可接受的名字同步扩展；
+- 回归用例的小载体列表扩为 `msimg32 / sensapi / oledlg / wtsapi32`。
+
+注意：`build-windows/hook/imm32.dll` 仍会被构建脚本产出（`-Target imm32` 手动构建），但宿主已把它列入 KnownDLL 黑名单，不会使用。
