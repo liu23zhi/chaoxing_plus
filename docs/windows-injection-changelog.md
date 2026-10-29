@@ -116,4 +116,14 @@ node --test scripts/windows-native-help-sync.test.mjs
 1. 三份客户端**都在本机**（`C:\Users\Zelly\Desktop` 下三个目录），此前"第三份缺失"的判断是搜索方式有误，已更正。
 2. `dll-proxy` 的 PEB 命令行改写**在客户端进程内确实生效**（诊断日志显示真实 `GetCommandLineW` 已含开关），但超星 4.3.0.4 仍不开端口 → 该客户端在应用层过滤/忽略调试开关，代理方案对它无效。
 3. 因此三条注入通道的实际适用范围：`cdp-port` 与 `cdp-pipe` 适用于两份 4.1.4 客户端；`dll-proxy` 不适用于任何已测客户端（仅保留作研究记录）。
+### 4.3.0.4 专项结论（结论：当前无法注入）
 
+针对"超星考试客户端 4.3.0.4"做了三轮尝试，均未打开调试端点：
+
+| 尝试 | 结果 |
+| --- | --- |
+| 命令行传 `--remote-debugging-port` | 30 秒 `no-listener`（该客户端忽略开关） |
+| winmm 代理改写 PEB 命令行 | 进程内 `GetCommandLineW` 确实返回带开关的字符串（日志 `| 1`），但 Chromium 仍未监听 → libcef 早于 winmm 加载，命令行已被读走 |
+| 代理挂 `cef_initialize` / `cef_command_line_get_global` | 该 EXE 只从 libcef 导入 `cef_command_line_get_global`；钩子能装上（日志 `command line getter hooked`），但应用未在关键时刻调用它，开关未追加成功 |
+
+结论：4.3.0.4 为 Themida 加壳版本，未暴露可用的 CDP 入口；建议使用两份 4.1.4 客户端（已实测可注入并可见面板）。
