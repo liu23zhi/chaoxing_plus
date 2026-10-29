@@ -753,3 +753,31 @@ B 仍然退出，但**不是宿主拦的**——进一步对照（两份同为 4
 附带验证：同一路径已有实例时仍会被正确拦截（`client-already-running`），不会因为改成路径比较而放行重复启动。
 
 回归：新增「实例检查按完整路径」用例；全量 869 项通过。
+### 通道矩阵终版（2026-10-30，无 UAC，三份客户端 × 两条通道）
+
+用 asInvoker 副本对三份客户端各跑两条通道（`--inject-mode` 显式指定，避免 auto 干扰）：
+
+| 客户端 | 通道 | 实际 injectMode | ownershipVerified | stopReason |
+| --- | --- | --- | --- | --- |
+| 科大 4.1.4 | cdp-port | cdp-port | ✅ True | duration |
+| 科大 4.1.4 | dll-proxy | dll-proxy | ✅ True | duration |
+| 河南 4.1.4 | cdp-port | cdp-port | ✅ True | duration |
+| 河南 4.1.4 | dll-proxy | dll-proxy | ✅ True | duration |
+| 超星 4.3.0.4 | cdp-port | cdp-port | ❌ False | endpoint-unavailable |
+| 超星 4.3.0.4 | dll-proxy | dll-proxy | ✅ True | duration |
+
+**两处需要更正的历史结论**：
+
+1. **"4.1.4 + 代理会崩"已不成立**：settings-only 改造后，两份 4.1.4 用 `dll-proxy` 都能 `ownershipVerified=True`、跑满时长不崩。之前那次 `0xC0000005` 来自"重复注入"（命令行本已生效还去改 PEB/IAT）。
+2. **"显式 `--inject-mode cdp-port` 会被 auto 静默改成代理"是本轮修掉的 bug**：auto 的加壳分支原先不检查显式模式，导致矩阵第一次跑出"4.3.0.4 cdp-port 也成功"的假象。现在 auto 分支只在未显式指定或显式 `auto` 时生效。
+
+复现命令（无需 UAC）：
+
+```powershell
+# 1) 复制客户端并改写清单为 asInvoker
+robocopy "<客户端目录>" "$env:TEMP\cx-copy" /E
+mt.exe -manifest asinvoker.manifest -outputresource:"$env:TEMP\cx-copy\CXExam.exe;#1"
+# 2) 分别跑两条通道
+chaoxing_plus.exe --inject-mode cdp-port  --client "$env:TEMP\cx-copy\CXExam.exe" --report "$env:TEMP\a.json" --no-log --no-diagnose
+chaoxing_plus.exe --inject-mode dll-proxy --client "$env:TEMP\cx-copy\CXExam.exe" --report "$env:TEMP\b.json" --no-log --no-diagnose
+```
