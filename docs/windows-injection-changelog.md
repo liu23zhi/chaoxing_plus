@@ -422,3 +422,29 @@ after: proxy=False marker=False      ← 目录已还原
 2. 加壳客户端在**已装代理**时仍打印「请用 --install-proxy」，该重复提示块已删除，改为由 auto 分支统一提示。
 
 注意：4.3.0.4 目录当前保留代理（用户日常可用）；即使删掉，下次以 `dll-proxy` 启动也会自动装好并在退出时清理。
+### `input` 模式正式移除（2026-10-30）
+
+`input` 从 `--inject-mode` 的可选值中移除，能力面同步：
+
+```json
+"injectModes":["auto","cdp-port","cdp-pipe","dll-proxy"]
+"injectModeSupport":{"auto":true,"cdp-port":true,"cdp-pipe":false,"dll-proxy":true}
+```
+
+显式传入时给出明确指引并退出：
+
+```
+$ chaoxing_plus.exe --inject-mode input --client "<客户端>"
+input 模式未实现：请改用 cdp-port（4.1.4 客户端）或 dll-proxy（加壳客户端，如 4.3.0.4）
+exit=4  stopReason=inject-input-unavailable
+```
+
+理由：该模式从来没有语义定义，长期以 `input:false` 挂在能力面会误导使用者。与其保留一个幻影开关，不如移除并在文档中说明三种真实通道。
+
+同一轮 IG5 反编译 `cef_execute_process`（0x100010ac）确认其签名只有 `CefMainArgs* / CefApp* / sandbox_info`，**没有 CefSettings**：
+
+```c
+undefined4 cef_execute_process(undefined4 *param_1, undefined4 param_2, undefined4 param_3)
+```
+
+也就是说调试端口只能在浏览器进程的 `cef_initialize` 里设置，子进程无法通过 settings 注入——这与我们"代理只钩 cef_initialize"的实现完全一致，属于设计闭环的最后一环证据。
