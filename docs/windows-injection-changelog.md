@@ -671,3 +671,30 @@ probe: proxies=winmm,version,uxtheme,msimg32,sensapi
 构建脚本的导出门槛从 8 降到 2，以便支持只有 3~5 个导出的小 DLL；报错文案也改成按目标名输出。
 
 回归：`--proxy-target msimg32 / sensapi` 的安装+卸载用例已加入，proxy-actions 共 9 项；全量 866 项通过。
+### imm32 谜团解开：它是 KnownDLLs（2026-10-30）
+
+上一轮 imm32 载体"能构建却不加载"，原因查明并已核实：
+
+```powershell
+# HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\KnownDLLs
+imm32 : KNOWN
+winmm / version / uxtheme / msimg32 / sensapi : not-listed
+```
+
+**KnownDLLs 里的 DLL 会被系统强制从 System32 加载**，应用目录放同名文件完全不起作用——所以我们的 imm32 代理永远不会被加载。这不是构建问题，也不是时序问题。
+
+处置：
+
+1. 载体表剔除 imm32（保持 winmm / version / uxtheme / msimg32 / sensapi 五个）；
+2. 新增 `h_carrier_is_known_dll()`（内置 KnownDLL 清单：imm32、kernel32、user32、gdi32、advapi32、ole32、oleaut32、shell32、shlwapi、comdlg32、comctl32、rpcrt4、ws2_32、msvcrt、ntdll、userenv、wininet、crypt32 等）；
+3. 显式指定这类名字时直接拒绝，避免用户白折腾：
+
+```
+$ chaoxing_plus.exe --install-proxy --proxy-target imm32 --client "<客户端>"
+install-proxy: 该名字在 KnownDLLs 里（系统强制从 System32 加载），应用目录放同名 DLL 无效；请换一个载体
+exit=1（不产生任何文件）
+```
+
+4. `--probe-client` 的 `proxies=` 也不再列出 KnownDLL 名字。
+
+回归：新增「KnownDLLs 里的名字（imm32）拒绝作为载体」用例，proxy-actions 共 10 项；全量 867 项通过。
