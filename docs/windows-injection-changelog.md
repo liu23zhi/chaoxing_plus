@@ -649,3 +649,25 @@ after: proxy=False marker=False          ← 自愈期间装的代理在退出�
 对比改造前：同样场景会直接以 `endpoint-unavailable` 结束、没有面板。
 
 回归：`windows-native-proxy-actions.test.mjs` 新增「端口拿不到端点时自动改用 settings-only 代理重试」用例（用夹具改名 `.xemida0` 构造同款场景），全量 865 项通过。
+### 五载体扩展与 imm32 否决（2026-10-30，无 UAC 实测）
+
+在 winmm / version / uxtheme 之外，新增 `msimg32` 与 `sensapi` 两个小载体，并把载体表集中为一处（`h_proxy_carriers`）：
+
+```
+probe: proxies=winmm,version,uxtheme,msimg32,sensapi
+```
+
+逐个载体实测（4.3.0.4 asInvoker 副本，无 UAC）：
+
+| 载体 | 端口 | 说明 |
+| --- | --- | --- |
+| `winmm.dll` | ✅ 1 秒 | 已验证 |
+| `version.dll` | ✅ 1 秒 | 已验证 |
+| `uxtheme.dll` | ✅ 1 秒 | 已验证 |
+| `msimg32.dll` | ✅ | `settings-only` + `size=228` + `port applied` |
+| `sensapi.dll` | ✅ | 同上 |
+| `imm32.dll` | ❌ | 代理能构建（19456 字节），但客户端进程里**没有加载记录**、端口不开；原因未查明，已从载体表移除 |
+
+构建脚本的导出门槛从 8 降到 2，以便支持只有 3~5 个导出的小 DLL；报错文案也改成按目标名输出。
+
+回归：`--proxy-target msimg32 / sensapi` 的安装+卸载用例已加入，proxy-actions 共 9 项；全量 866 项通过。
