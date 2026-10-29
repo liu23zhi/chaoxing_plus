@@ -1145,6 +1145,21 @@ render-diagnostics-host.json # 宿主级诊断摘要：launchMode/clientPid/窗�
 - `http-failed`（有监听但 HTTP 不通）；
 - 用户显式指定 `--inject-mode cdp-port` 或使用 `--attach`。
 
+### 交付前自检
+
+```powershell
+# 单客户端：会走哪条通道、能用哪些载体
+.\build-windows\bin\chaoxing_plus.exe --probe-client "<客户端>\CXExam.exe"
+#   probe: packed=themida
+#   probe: channel=dll-proxy
+#   probe: proxies=winmm,version,uxtheme,msimg32,sensapi,oledlg,wtsapi32
+
+# 全机：候选数量与通道分布
+.\build-windows\bin\chaoxing_plus.exe --probe-all --no-disk-write
+#   probe-all: candidates=3
+#   plan: clients=3 cdp-port=2 dll-proxy=1
+```
+
 ### 载体选择
 
 `auto` 按客户端导入表，从以下顺序挑第一个可用且不在 KnownDLLs 的载体：
@@ -1154,3 +1169,4 @@ winmm → version → uxtheme → msimg32 → sensapi → oledlg → wtsapi32
 ```
 
 目标位置已有第三方同名 DLL 时自动换下一个；`imm32` 等 KnownDLLs 名字会被拒绝（系统强制从 System32 加载）。
+
