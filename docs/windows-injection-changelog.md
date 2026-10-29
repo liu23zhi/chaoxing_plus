@@ -335,3 +335,46 @@ listener=True            ← 4.3.0.4 asInvoker 副本，端口正常
 `cef_settings size=228` 与 IG5 反编译得到的 `0xE4(228)` 完全一致，静态结论与运行时行为对上。
 
 未完成项（如实记录）：把代理装进真实「河南 4.1.4」目录后运行宿主，**UAC 未获批准**，父实例等待到超时、未生成报告。已执行 `--uninstall-proxy` 还原该目录，当前三份客户端目录中只有 4.3.0.4 保留代理（这是它可用的前提）。"4.1.4 + 代理"仍未验证。
+### 4.1.4 + 代理：实测崩溃，改为明确拒绝（2026-10-30）
+
+按用户要求做了 UAC 真机验证，结果不是"能用"，而是**崩溃**。系统事件日志：
+
+```
+出错应用程序名称： CXExam.exe，版本： 4.1.4.25512
+出错模块名称：     libcef.dll，版本： 75.1.4.0
+异常代码：         0xc0000005
+错误偏移：         0x0193c706
+```
+
+代理日志显示该进程同时做了三件事：
+
+```
+winmm proxy: cef_initialize patched (pushret)    ← 强制 settings 端口
+winmm proxy: cef_settings size=228
+winmm proxy: cef settings port applied           ← 出现两次
+winmm proxy: cef command line switch appended    ← vtable append(索引 76)
+winmm proxy: hook pass1 slots=21                 ← 另外还改了 21 个 IAT
+```
+
+处置（两条都已实测）：
+
+1. **停用高风险的 vtable append**：`cef_command_line_get_global` 的 vtable 索引在跨构建时不保证稳定，写错会破坏内存；端口改由 `cef_initialize` 设置即可，已默认不再调用。
+2. **对非加壳客户端直接拒绝 dll-proxy**：
+
+```
+$ chaoxing_plus.exe --inject-mode dll-proxy --client "<4.1.4>\CXExam.exe"
+非加壳客户端无需 dll-proxy：它支持命令行开关，请改用默认的 cdp-port
+（实测 4.1.4 客户端装代理后会在 libcef.dll 内 0xC0000005 崩溃）
+exit=4  stopReason=inject-proxy-not-needed
+```
+
+停用 vtable append 后复测 4.3.0.4 副本：
+
+```
+winmm proxy: cef_settings size=228
+winmm proxy: cef settings port applied
+port-open-after=1s          ← 仍然正常
+（无 "command line switch appended" 日志，符合预期）
+```
+
+结论更新：`dll-proxy` **只适用于加壳客户端（4.3.0.4）**；两份 4.1.4 客户端必须走 `cdp-port`。河南 4.1.4 目录已还原（`winmm=False`）。
