@@ -179,8 +179,8 @@ start-windows.cmd
 
 页面侧：
 
-- `windows/bootstrap/windows-bootstrap.js`：建立 `window.__CX_WIN_HOST__`、把宿主配置水合进 `localStorage` 与 `documentElement` 属性（供现有 `runtimeStore` 读取）、安装 Chrome75 缺失 API 的补丁、在 DOMContentLoaded 后通知宿主注入业务 bundle。
-- `windows/host/trampoline.js`：新文档启动探针（`Page.addScriptToEvaluateOnNewDocument`），只负责通知宿主“这里有新文档”，覆盖真实客户端上出现过的“文档已导航但没收到 executionContextCreated”的时序。该命令被拒绝时，Node 宿主记录明确降级日志，继续当前上下文注入并保留顶层补注入；会话关闭或连接断开仍按取消处理。
+- `windows/share-file/windows-bootstrap.js`：建立 `window.__CX_WIN_HOST__`、把宿主配置水合进 `localStorage` 与 `documentElement` 属性（供现有 `runtimeStore` 读取）、安装 Chrome75 缺失 API 的补丁、在 DOMContentLoaded 后通知宿主注入业务 bundle。
+- `windows/share-file/trampoline.js`：新文档启动探针（`Page.addScriptToEvaluateOnNewDocument`），只负责通知宿主“这里有新文档”，覆盖真实客户端上出现过的“文档已导航但没收到 executionContextCreated”的时序。该命令被拒绝时，Node 宿主记录明确降级日志，继续当前上下文注入并保留顶层补注入；会话关闭或连接断开仍按取消处理。
 - 业务 bundle：`dist-windows/chaoxing-plus.windows.js`，即把现有 `src/index.ts` 以 `target: chrome75` 重新构建（内置 SweetAlert2 一并转译、页面样式由宿主注入）。
 
 ## 目录
@@ -1090,6 +1090,7 @@ render-diagnostics-host.json # 宿主级诊断摘要：launchMode/clientPid/窗�
 - 已有 `CXExam.exe` 时拒绝启动，避免连接真实考试会话。
 - 日志/报告不记录 URL 查询参数、Cookie、答案或账号数据；客户端目录的 `debug.log` 仍可能含页面信息，不要外发。
 - 本项目仅用于本机技术研究与自有账号环境；请勿在正式考试中使用。
+
 
 
 
