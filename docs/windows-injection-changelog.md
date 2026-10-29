@@ -252,3 +252,14 @@ report: ownershipVerified=True pageSessions=1 bootstraps=6 bundles=6 stopReason=
 | 超星考试客户端 4.3.0.4 | `dll-proxy`（cef_initialize 强制设置端口） | ✅ bootstraps=6 bundles=6，面板可见 |
 
 注意：4.3.0.4 必须先把 `winmm.dll` 代理装进客户端目录（`--install-proxy`），否则它忽略命令行开关、端口不会打开。使用完可用 `--uninstall-proxy` 还原。
+### auto 模式自动切换（2026-10-30）
+
+`--inject-mode auto`（默认）现在会先探测客户端是否带 `.themida` 节：
+
+| 情况 | 行为 |
+| --- | --- |
+| 加壳 + 已装代理 | 自动启用 `dll-proxy`，打印「auto: 检测到加壳客户端，已自动启用 dll-proxy」 |
+| 加壳 + 未装代理 | 打印提示，要求先 `--install-proxy`（否则命令行开关会被忽略） |
+| 未加壳 | 保持 `cdp-port`，行为不变 |
+
+实测：4.3.0.4 命中自动切换；4.1.4 不触发。

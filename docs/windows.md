@@ -348,7 +348,7 @@ bash windows/native-source/build-windows.sh --skip-tests
 
 | 模式 | 启动方式 | 注入内容 |
 | --- | --- | --- |
-| `cdp-port`（默认，不传 `--inject-mode` 时；实测 4.3.0.4 客户端不响应调试开关，两份 4.1.4 客户端正常） | 命令行传 `--remote-debugging-port=<port>` | bootstrap + bundle + 配置同步 |
+| `cdp-port`（默认，不传 `--inject-mode` 时；实测 4.3.0.4 客户端不响应调试开关，两份 4.1.4 客户端正常；auto 模式会自动为加壳客户端切换到 dll-proxy） | 命令行传 `--remote-debugging-port=<port>` | bootstrap + bundle + 配置同步 |
 | `dll-proxy` | 命令行**不传**端口开关；宿主设置 `CX_INJECT_PORT`，客户端目录内的 `winmm.dll` 代理改写 `GetCommandLineW` 追加开关 | 同 `cdp-port` |
 | `cdp-pipe` | `--remote-debugging-pipe`，匿名管道 + `Target.attachToTarget` 取 sessionId | bootstrap + bundle + 配置同步 |
 
@@ -1124,6 +1124,7 @@ render-diagnostics-host.json # 宿主级诊断摘要：launchMode/clientPid/窗�
 - 已有 `CXExam.exe` 时拒绝启动，避免连接真实考试会话。
 - 日志/报告不记录 URL 查询参数、Cookie、答案或账号数据；客户端目录的 `debug.log` 仍可能含页面信息，不要外发。
 - 本项目仅用于本机技术研究与自有账号环境；请勿在正式考试中使用。
+
 
 
 
