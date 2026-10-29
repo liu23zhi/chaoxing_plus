@@ -276,3 +276,31 @@ report: ownershipVerified=True pageSessions=1 bootstraps=6 bundles=6 stopReason=
 结论：`cdp-pipe` 在 Windows 上对本项目的两种宿主都不可行（不是 CEF 客户端裁剪，也不是火绒拦截）。保留实现仅供夹具与排障使用，能力面维持 `cdp-pipe:false`。
 
 附带改进：`--pipe-call` 诊断改为 NUL 帧优先（1.5s 超时）再回退长度前缀，既保留夹具可用性，又避免长时间等待。
+## 八、IG5 反编译确认 cef_settings_t 布局（2026-10-30）
+
+对 `libcef.dll`（92MB，full 分析 605s、75,293 函数）反编译 `cef_initialize`（`0x10001181`）与其设置拷贝函数 `FUN_100030bc`，得到硬证据：
+
+```
+cef_initialize:
+  uStack_1c = *param_1;          // *settings = size
+  uStack_108 = 0xe4;             // 0xE4 = 228
+```
+
+`FUN_100030bc` 逐字段拷贝，偏移与 CEF 头文件完全一致：
+
+| 偏移 | 字段 |
+| --- | --- |
+| +0x04 | `no_sandbox` |
+| +0x2C (44) | `command_line_args_disabled` |
+| +0xB4 (180) | `pack_loading_disabled` |
+| **+0xB8 (184)** | **`remote_debugging_port`** |
+| +0xBC (188) | `uncaught_exception_stack_size` |
+| +0xC8 (200) | `background_color` |
+| +0xD8 (216) | `application_client_id_for_file_scanning` |
+| sizeof | **0xE4 = 228** |
+
+结论：代理里 `size>=228 → offset 184` 的判定不是猜测，与 libcef 实际布局一致；`--install-proxy` 后 4.3.0.4 端口 1 秒内打开可复现。
+
+同一轮还额外把 `command_line_args_disabled`（+44）清零作为防御性处理：实测该客户端本来就是 0（日志无 `command_line_args_disabled=N>0`），说明它忽略开关的原因在于应用自行构造命令行而非该字段，端口强制仍然有效。
+
+另：`cdp-pipe` 已用官方 Chrome 取得终局证据——Chrome 启动即报 `Remote debugging pipe file descriptors are not open`（exit 13），即该模式在 Windows 上不使用 stdin/stdout，本项目 `CreateProcessW` + 匿名管道模型无法满足。
