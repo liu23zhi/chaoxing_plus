@@ -232,3 +232,23 @@ port-open-after=1s
 ```
 
 `--probe-client` 对加壳客户端现在输出 `suggested=dll-proxy-required`（未装代理）或 `dll-proxy`（已装）。
+### 4.3.0.4 真机验收通过（2026-10-30，UAC 实测）
+
+用户批准 UAC 后，用真实「超星考试客户端 4.3.0.4」完整跑通：
+
+```
+代理日志：cef_initialize patched (pushret)
+report: ownershipVerified=True pageSessions=1 bootstraps=6 bundles=6 stopReason=client-exit
+```
+
+用户反馈：**"程序启动正常，并且看到面板了"**。
+
+至此三份客户端全部可用：
+
+| 客户端 | 通道 | 结果 |
+| --- | --- | --- |
+| 电子科技大学中山学院 4.1.4.25512 | `cdp-port` | ✅ bootstraps=6 bundles=6，面板可见 |
+| 河南应用技术职业学院 4.1.4.25512 | `cdp-port` | ✅ bootstraps=7 bundles=7，面板可见 |
+| 超星考试客户端 4.3.0.4 | `dll-proxy`（cef_initialize 强制设置端口） | ✅ bootstraps=6 bundles=6，面板可见 |
+
+注意：4.3.0.4 必须先把 `winmm.dll` 代理装进客户端目录（`--install-proxy`），否则它忽略命令行开关、端口不会打开。使用完可用 `--uninstall-proxy` 还原。
