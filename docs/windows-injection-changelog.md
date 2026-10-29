@@ -593,3 +593,34 @@ probe: suggested=dll-proxy
 | `uxtheme.dll` | 1 秒打开 | 同上 |
 
 回归：`windows-native-proxy-actions.test.mjs` 增至 6 项（新增 uxtheme 与 auto 解析用例），全量 863 项通过。
+### 载体冲突处理（2026-10-30，无 UAC 实测）
+
+客户端目录里可能已经存在第三方同名 DLL（例如别的软件放置的 `winmm.dll`）。现在的规则：
+
+| 场景 | 行为 |
+| --- | --- |
+| 目标 `<carrier>.dll` 不存在 | 正常安装 |
+| 已存在且 marker 是我们写的 | 视为自己的，正常覆盖 |
+| 已存在且无 marker，`--proxy-target auto` | 按 winmm → version → uxtheme 换下一个可用载体 |
+| 已存在且无 marker，显式 `--proxy-target` | 直接报错并提示换载体或手工清理 |
+
+marker 现在记录实际载体名：
+
+```
+cxhook-proxy
+carrier=version
+```
+
+卸载据此删除对应文件，**不会**碰第三方同名 DLL。
+
+实测：
+
+```
+install-proxy: 载体冲突，改用 version
+install-proxy: copied ...\version.dll -> ...\version.dll
+（目标目录保留第三方 winmm.dll 原样）
+uninstall-proxy: removed ...\version.dll
+卸载后：只剩 CXExam.exe + 第三方 winmm.dll
+```
+
+回归：proxy-actions 增至 7 项，全量 864 项通过。
