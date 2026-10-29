@@ -304,3 +304,20 @@ cef_initialize:
 同一轮还额外把 `command_line_args_disabled`（+44）清零作为防御性处理：实测该客户端本来就是 0（日志无 `command_line_args_disabled=N>0`），说明它忽略开关的原因在于应用自行构造命令行而非该字段，端口强制仍然有效。
 
 另：`cdp-pipe` 已用官方 Chrome 取得终局证据——Chrome 启动即报 `Remote debugging pipe file descriptors are not open`（exit 13），即该模式在 Windows 上不使用 stdin/stdout，本项目 `CreateProcessW` + 匿名管道模型无法满足。
+### 偏移逻辑修正与 libcef 同一性（2026-10-30）
+
+三份客户端的 `libcef.dll` **完全同一份**：
+
+```
+超星 4.3.0.4           97297400 bytes  sha256=E65E3A2C8BDD230C...
+电子科大 4.1.4.25512   97297400 bytes  sha256=E65E3A2C8BDD230C...
+河南 4.1.4.25512       97297400 bytes  sha256=E65E3A2C8BDD230C...
+```
+
+因此 IG5 对其中任意一份的布局结论（sizeof=228、`remote_debugging_port`=+184）对三份客户端同时成立。
+
+配套修正：原先"size==216 → 偏移 172"的回退分支是**错误**的。IG5 显示 216 的差异只来自结构体末尾少了 `application_client_id_for_file_scanning`（+0xD8 起 12 字节），`remote_debugging_port` 仍固定在 +184；写 172 会破坏 `locales_dir_path` 的字符串指针。现已改为：**只要 `size >= 188` 就使用 184**，否则记录 size 并跳过。
+
+复测（4.3.0.4 asInvoker 副本）：`port-open-after=1s`、`listener=True`。
+
+补充说明：把代理装到 4.1.4 的 asInvoker 副本后，客户端自身在非管理员下会提前退出（`client-exit-before-endpoint`），因此"4.1.4 + 代理"这条组合仍**未经管理员真机验证**，不作为已支持结论。
