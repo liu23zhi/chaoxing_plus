@@ -124,3 +124,19 @@ powershell -ExecutionPolicy Bypass -File windows\hook-source\build-proxy.ps1
 - `input`（键鼠兜底）未实现；
 - `dll-proxy` 与 `cdp-pipe` 尚未在真实 CEF 75 客户端上人工验收（需要管理员权限 + 登录）；
 - 河南应用技术职业学院客户端目录当前不在本机，未纳入探测表。
+## 8. 本机验证记录（2026-10-29）
+
+不涉及真实客户端的命令均已实际执行：
+
+| 命令 | 结果 |
+| --- | --- |
+| `--probe-all --no-disk-write --quiet` | exit 0，扫描到 2 个候选（电子科大 4.1.4.25512、超星 4.3.0.4），均 `port=yes pipe=yes` |
+| `--pipe-test` | exit 0，输出 `pipe-test: PIPE-TEST-OK` |
+| `--pipe-client .\build-windows\bin\cdp-echo.exe` | exit 0，返回 `{"id":1,"result":{"product":"Chrome/75.0.3770.100",…}}` |
+| `--pipe-call .\build-windows\bin\cdp-echo.exe --pipe-expr "document.title.length"` | exit 0，打印 7 个阶段（open/getVersion/getTargets/attach/evaluate/done） |
+| `--install-proxy --proxy-port 9222 → --probe-client → --uninstall-proxy` | 安装后 3 个文件就位、探测建议 `dll-proxy`、卸载后全部删除 |
+| `--help` | 含 `--console`/`--stage-boot`/`--pipe-call`/`--probe-all`/`--proxy-port` |
+
+真实客户端相关命令（通道 A 的启动、通道 B/C 的实际注入）仍需管理员权限与人工登录，不在上表内。
+
+提示：`--proxy-source` 建议用绝对路径（或确认当前目录是仓库根），避免复制到非预期位置。
