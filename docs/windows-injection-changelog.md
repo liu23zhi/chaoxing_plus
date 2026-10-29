@@ -263,3 +263,16 @@ report: ownershipVerified=True pageSessions=1 bootstraps=6 bundles=6 stopReason=
 | 未加壳 | 保持 `cdp-port`，行为不变 |
 
 实测：4.3.0.4 命中自动切换；4.1.4 不触发。
+### cdp-pipe 终局证据（2026-10-30，官方 Chrome 对照）
+
+用官方 Chrome 直接验证管道模式，Chrome 在启动瞬间就报错退出：
+
+```
+[1030/005628.789:ERROR:chrome\app\chrome_main_delegate.cc:1226] Remote debugging pipe file descriptors are not open.
+```
+
+即便把 stdin/stdout 都接成管道（.NET `RedirectStandardInput/Output`），Chrome 仍然报同一条错误并退出（exit 13）。这说明 Windows 上的 `--remote-debugging-pipe` **不读 stdin/stdout**，而是需要额外的管道描述符，而我们的 `CreateProcessW` + 匿名管道模型无法提供。
+
+结论：`cdp-pipe` 在 Windows 上对本项目的两种宿主都不可行（不是 CEF 客户端裁剪，也不是火绒拦截）。保留实现仅供夹具与排障使用，能力面维持 `cdp-pipe:false`。
+
+附带改进：`--pipe-call` 诊断改为 NUL 帧优先（1.5s 超时）再回退长度前缀，既保留夹具可用性，又避免长时间等待。
