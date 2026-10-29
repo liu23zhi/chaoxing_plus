@@ -474,3 +474,28 @@ end-state: proxy=False
 ```
 
 回归：`windows-native-proxy-actions.test.mjs` 新增「auto 模式对加壳客户端自动选择 dll-proxy 并清理临时代理」，断言报告 `injectMode` 与目录零残留。
+### 控制台中文乱码与调试入口 GUI（2026-10-30）
+
+用户反馈 `start-windows-debug.cmd` 下客户端列表显示为 `娌冲崡搴旂敤...`，并且选择窗口（GUI）不再出现。
+
+**乱码根因**：`h_print` 把宽字符转成 **UTF-8 字节**后直接 `WriteFile` 到控制台；Windows 中文控制台代码页是 936(GBK)，UTF-8 字节被按 GBK 解释 → 典型 `娌冲崡` 乱码。
+
+修复：输出目标是控制台时改用 `WriteConsoleW` 直接写宽字符（编码无关）；输出被重定向到管道/文件时仍走 UTF-8，保证脚本与测试解析不受影响。
+
+验证（重定向输出，仍以 UTF-8 显示正常）：
+
+```
+1  x86  4.1.4.25512  C:\Users\Zelly\Desktop\河南应用技术职业学院 考试客户端_V4.1.4.25512(2023.06.09)\CXExam.exe [recommended]
+2  x86  4.1.4.25512  C:\Users\Zelly\Desktop\电子科技大学中山学院 考试客户端_V4.1.4.25512(2023.06.09)\CXExam.exe
+3  x86  4.3.0.4       C:\Users\Zelly\Desktop\超星考试客户端_V4.3.0.4\CXExam.exe
+```
+
+**GUI 消失根因**：`start-windows-debug.cmd` 以 `--console` 启动宿主，而宿主的 `auto` 判定在"有控制台"时走文本选择。调试入口改成：
+
+```
+"%CXPLUS_EXE%" --console --ui gui %*
+```
+
+显式 `--ui gui` 不受"是否附带控制台"影响，调试窗口与控制台可同时存在；用户自己传 `--ui console` 仍可覆盖。
+
+注意：该 `.cmd` 必须保持 **LF** 换行（`windows-silent-launcher.test.mjs` 断言 `source.includes('\r') === false`），本次写入时已显式转换。
