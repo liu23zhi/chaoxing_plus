@@ -16,7 +16,7 @@ Windows 6.2.0 第一阶段提供 **普通可审计 Windows 宿主**：它用官�
 
 ### 发布与系统兼容边界
 
-Node 宿主当前仍需 Node.js 22+，其客户端选择窗口还使用 PowerShell 5.1 与 WinForms；`start-windows.cmd` 与 `start-windows-silent.cmd` 都会先执行 `node --version` 并拒绝主版本低于 22 的环境（普通入口给出提示并暂停，静默入口以 9009/9040/9041 退出），但不会安装或内嵌这些运行条件。客户端能启动不代表 Node 宿主前提均已具备。原生 EXE 使用独立的 Win32 选择窗口，不依赖 Node、PowerShell 或 WinForms。
+Node 宿主当前仍需 Node.js 22+，其客户端选择窗口还使用 PowerShell 5.1 与 WinForms；`start-windows.cmd`（隐藏控制台常规入口）、`start-windows-debug.cmd`（控制台调试入口）与 `start-windows-silent.cmd`（零落盘内存场景入口）都会先执行 `node --version` 并拒绝主版本低于 22 的环境（普通/调试入口给出提示并暂停，静默入口以 9009/9040/9041 退出），但不会安装或内嵌这些运行条件。客户端能启动不代表 Node 宿主前提均已具备。原生 EXE 使用独立的 Win32 选择窗口，不依赖 Node、PowerShell 或 WinForms。
 
 `windows/native/` 是另一条普通运行的原生宿主原型。构建生成 x86 `chaoxing_plus.exe`，现已将 bootstrap、业务 bundle、新文档探针和 SweetAlert2 CSS 作为 RCDATA 嵌入 EXE；默认直接读取资源，不解包旁置文件。已在本机验证把 EXE 单独复制到含中文与空格的空目录后，四项资源的长度及 SHA256 均与构建输入一致；导入表只包含系统 DLL，没有 Node、.NET 或 VC++ Runtime。显式 `--assets <dir>` 可用于调试覆盖，目录结构须与 `dist-windows` 一致，CSS 位于 `vendor/sweetalert2.min.css`；覆盖文件缺失或无效时明确报错，不回退内嵌版本。
 
@@ -208,7 +208,8 @@ windows/
   host/scan-progress-window.ps1 全盘扫描进度/取消窗口（WinForms，纯 ASCII，状态文件协议）
   host/scan-progress-window.mjs 进度窗口的 Node 控制器、状态/取消文件协议与控件探针
   host/silent-launch.vbs       无控制台启动 Node 宿主（wscript GUI 子系统，纯 ASCII）
-  start-windows-silent.cmd     官方静默入口：只隐藏 Node 控制台，不强制客户端/面板/磁盘策略
+  start-windows-silent.cmd     静默场景入口：零落盘内存模式、自动首选客户、无面板/控制台
+  start-windows-debug.cmd      调试入口：可见控制台 + GUI，用于排查启动/注入问题
   parameter-generator.html     离线单文件启动参数生成器（不联网、不执行命令、不保存输入）
   native/                      普通运行的原生宿主原型，四项资源内嵌
   native/assets.c              内嵌资源读取与显式外部资源覆盖，不解包写盘
@@ -223,7 +224,8 @@ windows/
   native/build.ps1             x86 构建、RCDATA 与导入表审计；-BuildTests 生成 C 测试程序
   data/                        本地配置与日志（gitignore）：config.json / logs/
 build.windows.mjs              Windows 构建（target chrome75 + 语法闸门 + manifest）
-start-windows.cmd              推荐入口（检查 Node 版本后启动宿主）
+start-windows.cmd              常规入口（隐藏控制台，显示 GUI；检查 Node 版本后启动宿主）
+start-windows-debug.cmd        调试入口（可见控制台 + GUI，用于排查问题）
 scripts/package-windows.mjs    发布打包：原生 + Node 双入口、SHA256SUMS 与 zip
 scripts/verify-release.mjs     发布包完整性校验器（按 SHA256SUMS 逐文件校验，无 npm 依赖）
 .github/workflows/ci.yml       Windows CI：类型检查、构建、全量测试与发布包冒烟
@@ -307,8 +309,8 @@ npm run release:windows        # release/chaoxing-plus-6.2.0-windows/ 与 .zip
 
 - 打包脚本 `scripts/package-windows.mjs` 只读取构建产物、不修改工作区；输出目录 `release/` 已 gitignore。发布包会校验 `dist-windows/package-manifest.json` 的 `features.injectionLog`（且清单 `version` 必须存在并与发布版本完全一致，防止旧构建被打成新版本），若为 `true`（本机 `windows/local-features.json` 开启的调试构建）则失败关闭并提示先运行 `npm run build:windows -- --release`；CI 的构建步骤固定使用 `--release`。
 - 原生 EXE 默认取 `windows/native/.tmp-native-host/bin/chaoxing_plus.exe`，可用 `--exe <path>` 指定；未构建原生时用 `--skip-native` 生成仅 Node 宿主包。
-- 包内提供两个 Node 入口：`start-windows.cmd`（可见控制台）与 `start-windows-silent.cmd`（隐藏控制台，仅传 `--hide-console`）。Node 宿主只带 `main.mjs` 运行闭包与 `launch-client.ps1` / `scan-progress-window.ps1` / `selection-window.ps1` / `system-probe.ps1` / `silent-launch.vbs`，并携带 `windows/config.example.json` 供首次运行 `ensureConfigFile` 生成完整示例配置（缺失时宿主会退化为空模板，首跑配置与仓库不一致）；`self-destruct.mjs`、`wipe.mjs`、`owned-files.mjs` 等第一阶段内部原型和 `chrome75-syntax.mjs` 等构建期模块不会进入发布包。打包脚本发现运行闭包包含内部原型或外部 npm 依赖时直接失败，避免把未发布能力或无法独立运行的文件带出。
-- 包内提供 `release-info.json`（版本、入口 `native`/`node`/`nodeSilent`、`verifier`、payload 文件数、Node 版本）、`SHA256SUMS.txt` 与 `verify-release.mjs`；zip 由 Windows `Compress-Archive` 生成。解压后可运行 `node verify-release.mjs` 按校验清单逐文件校验 SHA-256（缺失/摘要不匹配返回 1，清单缺失/格式错误返回 2），CI 与本机发布验证都会先运行该自校验。
+- 包内提供三个 Node 入口：`start-windows.cmd`（隐藏控制台常规入口，GUI 正常显示）、`start-windows-debug.cmd`（可见控制台 + GUI，供调试）与 `start-windows-silent.cmd`（零落盘内存场景入口，固定参数见其脚本）。`release-info.json` 的 `entrypoints` 记录 `node`/`nodeDebug`/`nodeSilent`。Node 宿主只带 `main.mjs` 运行闭包与 `launch-client.ps1` / `scan-progress-window.ps1` / `selection-window.ps1` / `system-probe.ps1` / `silent-launch.vbs`，并携带 `windows/config.example.json` 供首次运行 `ensureConfigFile` 生成完整示例配置（缺失时宿主会退化为空模板，首跑配置与仓库不一致）；`self-destruct.mjs`、`wipe.mjs`、`owned-files.mjs` 等第一阶段内部原型和 `chrome75-syntax.mjs` 等构建期模块不会进入发布包。打包脚本发现运行闭包包含内部原型或外部 npm 依赖时直接失败，避免把未发布能力或无法独立运行的文件带出。
+- 包内提供 `release-info.json`（版本、入口 `native`/`node`/`nodeDebug`/`nodeSilent`、`verifier`、payload 文件数、Node 版本）、`SHA256SUMS.txt` 与 `verify-release.mjs`；zip 由 Windows `Compress-Archive` 生成。解压后可运行 `node verify-release.mjs` 按校验清单逐文件校验 SHA-256（缺失/摘要不匹配返回 1，清单缺失/格式错误返回 2），CI 与本机发布验证都会先运行该自校验。
 - 冒烟：解压后 `node windows/host/main.mjs --self-check --no-disk-write --quiet` 验证 Node 宿主闭包完整（不带 `--no-disk-write` 时自检会向包内 `windows/data/logs` 写入日志、污染发布包），`chaoxing_plus.exe --self-check --no-disk-write` 验证原生入口；`scripts/windows-release-package.test.mjs` 覆盖双入口包结构、校验和、zip 条目、内部原型/外部依赖拒绝及 CI 工作流契约。
 - CI：`.github/workflows/ci.yml` 在 `windows-latest` 执行 `npm ci` → 类型检查 → 扩展/Windows/原生构建 → 通过 `$GITHUB_ENV` 导出全部 `CX_NATIVE_*` 编译测试路径 → 全量单元测试 → 10 个浏览器回归（原生 browser 用例继承同一批变量，不再被跳过）→ 发布包冒烟 → 解压检查必需文件并运行发布包内 Node/原生 `--self-check` → 上传 artifact。`release-ci/` 已 gitignore。CI 不覆盖真实 UAC 审批、真实 CEF75 登录后页面、旧 Windows 干净环境或真实考试客户端验收，这些仍需人工完成。
 
@@ -490,7 +492,7 @@ Node 模式需要 Node.js 22+，默认根据 HTML 所在位置定位 `windows\ho
 
 PowerShell 输出兼容 Windows PowerShell 5.1 和 PowerShell 7：通过 `ProcessStartInfo` 直接启动 `node.exe` 或原生 EXE，显式关闭 shell 执行，按 Win32 参数规则保留 JSON 双引号、中文、空格、单引号、尾反斜杠与 shell 字符，等待结束后设置 `$LASTEXITCODE`。不要把内联 JSON 改回 `start-windows.cmd` 的 `%*` 转交链路，普通 PowerShell 单引号引用不能保证该链路保留 JSON。cmd 输出为单行直接宿主命令；遇到内联 JSON、命令解释符、百分号、感叹号、双引号、换行、尾反斜杠参数或 UNC 工作目录时停止导出 cmd，使用 PowerShell 输出或配置文件。
 
-页面按客户端扫描 / 配置和数据 / 执行模式 / 面板 / 答题 / 日志与诊断 / 启动清理 / 自毁分组，提供 8 个预设。执行模式可选普通运行或内存执行（宿主侧零落盘）；选择内存执行时生成器会同时输出 `--execution-mode memory` 与 `--no-disk-write`，并拒绝日志/诊断/报告等落盘请求。绝对静默型只生成下方第一阶段普通启动子集，并为 Node 宿主附加 `--hide-console`（原生 EXE 无控制台，不附加该参数；原生宿主选择该开关会被校验阻止），配合发布包 `start-windows-silent.cmd` 可无黑框启动；友好交互型、懒人型、手动答题型、仅扫描型、直接路径型和全盘扫描型均为普通运行。**启动清理型（`startupClean`）是不可执行的设计预设**：选中后说明缺失能力并清空命令与 JSON 输出，不能生成去掉清理开关的普通命令冒充清理启动。
+页面按客户端扫描 / 配置和数据 / 执行模式 / 面板 / 答题 / 日志与诊断 / 启动清理 / 自毁分组，提供 8 个预设；顶部“加载已有配置”可选择本地 `chaoxing-plus.json`，读取顶层字段与 `settings` 共享设置并回填表单（不上传、不保存），未知字段会提示忽略。执行模式可选普通运行或内存执行（宿主侧零落盘）；选择内存执行时生成器会同时输出 `--execution-mode memory` 与 `--no-disk-write`，并拒绝日志/诊断/报告等落盘请求。绝对静默型只生成下方第一阶段普通启动子集，并为 Node 宿主附加 `--hide-console`（原生 EXE 无控制台，不附加该参数；原生宿主选择该开关会被校验阻止），配合发布包 `start-windows-silent.cmd` 可无黑框启动；友好交互型、懒人型、手动答题型、仅扫描型、直接路径型和全盘扫描型均为普通运行。**启动清理型（`startupClean`）是不可执行的设计预设**：选中后说明缺失能力并清空命令与 JSON 输出，不能生成去掉清理开关的普通命令冒充清理启动。
 
 实时校验包括客户端选择互斥、`--no-disk-write` 冲突、答题线程/面板宽度/清理重试范围、内联 JSON 的范围/枚举/类型、`--delete-config` 与 `--config` 关联、归一化后的答题/自毁快捷键冲突、非法序号和以 `--` 开头的参数值。只导出已支持的普通启动、内存执行、扫描、面板、答题、日志、诊断和普通数据生命周期参数；面板主题只导出 `pink`/`blue`/`green`（留空使用 `pink`，其他名称阻止导出）。支持 `--dpi-aware`（两种宿主，原生宿主与 `--no-disk-write` 互斥）和 Node 专属 `--hide-console` 静默控制台开关；原生宿主选择静默控制台会被实时校验阻止。删除挂起、启动清理和自毁控件显示“当前宿主不可执行”，即使从内联 JSON 或程序化方式请求也必须阻止导出；内存执行会生成零落盘命令与 JSON。生成结果由宿主解析器回归校验。
 
@@ -839,6 +841,8 @@ try {
 2026-11-01 发布打包与 CI 验证记录：新增 `scripts/package-windows.mjs`（`npm run release:windows`）生成原生 EXE + Node 宿主双入口发布包，包含 `release-info.json`、`SHA256SUMS.txt` 与 Windows `Compress-Archive` zip；Node 宿主只带 `main.mjs` 递归运行闭包与 `launch-client.ps1` / `selection-window.ps1` / `system-probe.ps1`，`self-destruct.mjs`、`wipe.mjs`、`owned-files.mjs`、`chrome75-syntax.mjs` 等内部原型/构建期模块不进入发布包，检测到运行闭包包含内部原型或外部 npm 依赖时失败关闭（`--skip-native` 可生成仅 Node 包，`--skip-zip` 仅生成暂存目录）。新增 `.github/workflows/ci.yml`：`windows-latest` 上执行 `npm ci` → 类型检查 → 扩展/Windows/原生构建 → 全量单元测试（全部原生测试变量指向本轮编译产物）→ 10 个浏览器回归 → 发布包冒烟并上传 artifact。新增 `scripts/windows-release-package.test.mjs` 5/5：双入口包结构、`SHA256SUMS` 逐文件校验、zip 条目、仅 Node 模式、缺失资源/内部原型/外部依赖失败关闭、CI 工作流与发布脚本入口契约、原生构建脚本纯 ASCII 且不依赖模块 cmdlet。构建脚本 `windows/native/build.ps1` 的 SHA256 输出由 `Get-FileHash` 改为系统 `certutil.exe -hashfile`，修复本机曾出现 `Get-FileHash CommandNotFound` 导致 `npm run build:native` 误报失败；同时保持 `.ps1` 纯 ASCII（中文字面量曾直接导致 PowerShell 5.1 解析失败）。实际打包产物 27 个文件、原生 EXE 548864 字节，解压后 Node 宿主 `--self-check` 与原生 `--self-check` 均退出 `0`。全量：显式展开 76 个 `scripts/*.test.mjs`，777 项中 770 通过、0 失败、7 项可选 GUI 显示测试跳过；10 个浏览器回归文件 79/79 通过；类型检查、`npm run build`、Chrome75 构建、`npm run build:native`、Node 自检、原生自检及 `git diff --check` 均退出 `0`。本记录仍是本地/CI 模拟验证；CI 通过不代表真实 UAC 审批、真实 CEF75 登录后页面、旧 Windows 干净环境或真实考试客户端验收已完成。
 
 2026-11-02 全盘扫描进度/取消验证记录：Node 选择窗口点击全盘扫描后，宿主在执行递归扫描期间显示独立的 WinForms 进度窗口（`windows/host/scan-progress-window.ps1` / `.mjs`），实时展示“已检查目录数/发现候选数”；用户点击取消或关闭窗口时写入 `cancel.marker`，宿主通过 `AbortSignal` 中止 discovery（`AbortError`），保留原候选并重新打开选择窗口。发现器新增 `onProgress` 与 `signal`（目录数/候选数/elapsedMs，200ms 节流），进度窗口不可用时降级为无界面扫描并每 2 秒输出进度日志。新增 `windows-scan-progress-window.test.mjs` 6 项（5 通过 + 1 项 `CX_TEST_NATIVE_WINDOW` 真实窗口冒烟默认跳过）：脚本纯 ASCII、payload/状态校验、控制器状态/取消文件/临时目录清理协议、真实 PowerShell 控件探针与可选真实可见性；`windows-client-discovery.test.mjs` 新增进度回调与取消回归，`windows-client-selection.test.mjs` 新增进度窗口完成/取消集成（共 21 项）。全量：显式展开 77 个 `scripts/*.test.mjs`，787 项中 779 通过、0 失败、8 项可选 GUI 显示测试跳过；10 个浏览器回归 79/79；类型检查、扩展构建、Chrome75 构建、Node 自检、原生自检、发布包重打并解压自检及 `git diff --check` 均退出 `0`。原生 EXE 选择流程仍无进度/取消窗口，属已记录的 Node/原生差异；该验证使用测试驱动的取消与控件探针，真实窗口可见性仅在 `CX_TEST_NATIVE_WINDOW=1` 时验证，真实 CEF75 客户端登录后验收仍未执行。
+
+2026-12-05 启动入口拆分、静默场景与配置加载验证记录：按需求把 Node 入口拆为三类——`start-windows.cmd` 常规入口（wscript 隐藏控制台但 GUI 正常显示，无参数时沿用“常规扫描 + GUI 选择”）、`start-windows-debug.cmd` 调试入口（可见控制台 + GUI）、`start-windows-silent.cmd` 静默场景入口（固定 `--scan-mode fallback-all --client-first --execution-mode memory --no-disk-write --no-log --quiet --no-panel --answer-mode manual --answer-key Ctrl+Alt+Shift+S --answer-threads 1 --hide-answer-dialog`，先常规扫描，无候选才回退全盘，x86 优先/首个 x64 保底由已有 discovery 回归覆盖）。发布包与 `release-info.entrypoints` 增加 `nodeDebug`。参数生成器新增“加载已有配置”按钮，可读取本地 config 的顶层字段与 settings 并回填表单，未知字段提示忽略。验证：新增/更新的 silent-launcher、release-package、generator 用例通过；`start-windows-debug.cmd --help` 真实退出 0；配置加载测试覆盖正常配置与非法 JSON。自毁、删除挂起、启动清理、程序文件自删除仍不实现（用户要求的自删除/自毁属破坏性且未在仓库定义），静默入口不会偷偷启用。全量回归（78 个单元文件，受限并发 4）：810 项中 801 通过、0 失败、9 项可选 GUI 跳过；10 个浏览器回归 79/79；`tsc --noEmit`、扩展构建、Chrome75 release 构建、发布包重打、包内 `verify-release.mjs`、包内 Node/原生自检、仓库 Node/原生自检与 `git diff --check` 全部退出 0；发布包无 `windows/data/` 与 `.log`，`release-info.json` 的 `entrypoints` 为 `node`/`nodeDebug`/`nodeSilent`。未在真实 CEF75/UAC/旧 Windows 环境重复验收。
 
 2026-12-04 内存执行（executionMode=memory）验证记录：按用户确认的语义实现内存执行——宿主侧零落盘（不创建/更新配置与数据目录，不写日志、诊断、报告、扫描缓存），客户端仍用正常官方调试参数启动并显示在进程列表中，不隐藏进程、不删除 CXExam 文件。Node：`--execution-mode memory` / `--memory-exec` / JSON `executionMode:"memory"` / `memoryExec:true` 均可用，强制 `noDiskWrite`；`--capabilities` 输出 `executionModes:["normal","memory"]` 与 `memoryExecution:true`；普通/attach/列表报告含 `executionMode`。原生：options CLI/JSON 同一语义，finalize 强制 noDiskWrite，帮助与 capabilities 同步，报告含 `executionMode`；编译 options-tests 覆盖 memory/zero-disk 与 delete-suspend 拒绝。生成器执行模式支持 memory，并生成 `--execution-mode memory --no-disk-write`、拒绝日志/诊断/报告冲突。删除挂起/启动清理/自毁仍显式拒绝。测试：`windows-host.test.mjs` 实跑 memory 列表不写报告/数据目录；`windows-native-options.test.mjs` 实跑四种 memory 入口与 capabilities；`windows-parameter-generator.test.mjs` 断言 memory 命令/JSON；编译 options-tests 通过。全量回归：单元 809 项中 800 通过、0 失败、9 项可选 GUI 跳过（78 文件），10 个浏览器回归 79/79；`tsc --noEmit`、扩展构建、Chrome75 release 构建、原生构建、发布包重打、包内 `verify-release.mjs`、包内 Node/原生自检、仓库 Node/原生自检与 `git diff --check` 全部退出 0，发布包无 `windows/data/` 与 `.log`。未在真实 CEF75/UAC/旧 Windows 环境重复验收。
 
