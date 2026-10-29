@@ -499,3 +499,41 @@ end-state: proxy=False
 显式 `--ui gui` 不受"是否附带控制台"影响，调试窗口与控制台可同时存在；用户自己传 `--ui console` 仍可覆盖。
 
 注意：该 `.cmd` 必须保持 **LF** 换行（`windows-silent-launcher.test.mjs` 断言 `source.includes('\r') === false`），本次写入时已显式转换。
+## 九、settings-only 模式：更稳定的注入路径（2026-10-30，无 UAC 实测）
+
+### 背景
+
+此前 4.1.4 客户端装代理会在 `libcef.dll` 里 `0xC0000005` 崩溃。IG5 定位到崩溃在 `context.cc:Initialize` 之后，而当时的代理同时做了三件事：强制 settings 端口、改写 PEB 命令行、补 21 处 `GetCommandLineW` IAT 项，还有一次 vtable append。
+
+### 改动
+
+1. **settings-only 优先**：`cef_initialize` 6 字节 `push/ret` 补丁安装成功后，代理**立即返回**，完全不碰命令行与 IAT；
+2. **强制开关**：宿主在 `dll-proxy` 模式启动客户端时设置 `CX_PROXY_SETTINGS_ONLY=1`，代理读到后即使补丁失败也不做任何命令行/IAT 改写（宁可失败也不制造重复注入）；
+3. **解除限制**：既然 settings-only 稳定，允许 `--inject-mode dll-proxy` 用于任意客户端（原先对非加壳客户端直接拒绝）。
+
+### 无 UAC 实测（asInvoker 副本）
+
+```
+# 4.3.0.4
+winmm proxy: settings-only mode
+winmm proxy: cef_settings size=228
+winmm proxy: cef settings port applied
+port-open-after=1s   listener=True   alive=True
+
+# 4.1.4（此前必崩，现在稳定）
+winmm proxy: settings-only mode
+winmm proxy: cef_settings size=228
+winmm proxy: cef settings port applied
+alive-after-12s=True  listener=True
+
+# 4.1.4 走宿主完整链路
+report: injectMode=dll-proxy ownershipVerified=True stopReason=duration
+（pageSessions=0 是登录前没有 page target，与 4.3.0.4 同因）
+```
+
+### 结论
+
+`dll-proxy`（settings-only）现在是三份客户端**通用且更稳定**的注入方式：
+- 不再依赖命令行是否被尊重（加壳客户端本来就忽略）；
+- 不再改动 PEB/IAT，抹掉了此前 4.1.4 崩溃的那部分动作；
+- 两份 4.1.4 仍推荐 `cdp-port`（零文件、零安装），但需要统一通道时可直接用 `dll-proxy`。
