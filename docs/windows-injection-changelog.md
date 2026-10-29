@@ -167,3 +167,25 @@ cdp-pipe: Target.getTargets attempt 4 status 0
 4. 若排除后管道仍无回包，才能确认"该 CEF 构建不支持 pipe 调试"这一结论。
 
 注意：`cdp-port`（端口）通道在同样装着火绒的机器上是**实测可用**的（两份 4.1.4 客户端均出面板），因此端口通道不受此干扰影响。
+### 火绒排查结论（2026-10-30）
+
+| 检查项 | 结果 |
+| --- | --- |
+| 产物是否被隔离/删除 | 否：`chaoxing_plus.exe`(606720)、`winmm.dll`(19456)、`cdp-echo.exe`、`cdp-server.exe`、`winmm-proxy.dll` 全部在位 |
+| 我们的 EXE 能否反复执行 | 能：`--self-check` 连续 3 次 exit=0 |
+| 我们的 DLL 能否加载并生效 | 能：`proxy-test` 全通过（含 `PASS command line injected`） |
+| 火绒隔离区/日志 | `C:\ProgramData\Huorong\Sysdiag\Quarantine` 最后写入 2026-10-28（早于本次测试）；`hips.db`/`behav.db` 存在但未解析 |
+| 系统事件 | 2026-10-30 00:13:52/59 有 SecurityCenter 注册事件（火绒重新注册/更新），无拦截记录 |
+
+因此**没有证据表明火绒拦截了我们的程序**。
+
+反证（关键）：用 `--pipe-call` 连接**官方 Chrome**（`--remote-debugging-pipe` + 独立 user-data-dir）同样只走到 `stage: getVersion` 就失败、零回包。Chrome 一定支持该开关，说明问题在我们的管道实现（帧格式/句柄语义），而不是被安全软件拦截。
+
+进一步推断：Chromium 的 DevTools 管道在 Windows 上并不使用 stdin/stdout，而是使用子进程的 **fd 3/4（CRT 句柄编号）**——Puppeteer 的 `pipe:true` 就是按 fds 3/4 传的。我们当前实现走的是 stdin/stdout，所以两端都收不到回包。
+
+若要继续推进该通道，需要：
+1. 用 `PROC_THREAD_ATTRIBUTE_HANDLE_LIST` / `STARTUPINFOEX` 让子进程拿到两根专用管道；
+2. 按 Chromium 的 NUL 结尾 JSON 帧收发；
+3. 先用官方 Chrome 做对照（成功即实现正确），再回到 CEF 客户端。
+
+在完成上述改造前，`cdp-pipe` 维持 `false`（不可用），`cdp-port` 仍是唯一验证可用的注入通道。
