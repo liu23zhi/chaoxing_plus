@@ -1,6 +1,6 @@
 # Windows 端（超星考试客户端 / CEF 75）使用与设计
 
-Windows 6.2.0 第一阶段提供 **普通可审计 Windows 宿主**：它用官方 CEF 远程调试参数启动超星考试客户端，并通过 CDP（Chrome DevTools Protocol）把扩展的业务 bundle 注入到客户端网页主世界。扫描、配置和离线参数生成器属于本阶段；内存执行（`--execution-mode memory` / `--memory-exec`：宿主侧零落盘、客户端仍正常可见启动）已支持；删除挂起、启动清理与自毁只保留参数设计和禁用状态。
+Windows 6.2.0 第一阶段提供 **普通可审计 Windows 宿主**：它用官方 CEF 远程调试参数启动超星考试客户端，并通过 CDP（Chrome DevTools Protocol）把扩展的业务 bundle 注入到客户端网页主世界。扫描、配置和离线参数生成器属于本阶段；内存执行（`--execution-mode memory` / `--memory-exec`：宿主侧零落盘、客户端仍正常可见启动）已支持；**状态（2026-10-29）**：**Node 宿主已弃用**——`windows/host/*` 只保留文件作兼容/对照与排障，不再开发新能力；新功能、静默场景、自毁与程序痕迹清理一律只做原生 EXE。原生宿主已支持 `--silent-scenario`（无面板/无日志/无控制台、`Ctrl+Alt+Shift+S` 每题手动放行、`Ctrl+Alt+Shift+E`/`F8` 与全屏退出/进程结束触发自毁、删除程序痕迹且永不触碰 CXExam）。发布构建主入口是 `build-windows.sh`；`build-windows-node.sh` 只构建备用 Node 包（`--skip-native`），不再演进。
 
 ## 状态与适用对象
 
@@ -16,7 +16,7 @@ Windows 6.2.0 第一阶段提供 **普通可审计 Windows 宿主**：它用官�
 
 ### 发布与系统兼容边界
 
-Node 宿主当前仍需 Node.js 22+，其客户端选择窗口还使用 PowerShell 5.1 与 WinForms；`start-windows.cmd`（隐藏控制台常规入口）、`start-windows-debug.cmd`（控制台调试入口）与 `start-windows-silent.cmd`（零落盘内存场景入口）都会先执行 `node --version` 并拒绝主版本低于 22 的环境（普通/调试入口给出提示并暂停，静默入口以 9009/9040/9041 退出），但不会安装或内嵌这些运行条件。客户端能启动不代表 Node 宿主前提均已具备。原生 EXE 使用独立的 Win32 选择窗口，不依赖 Node、PowerShell 或 WinForms。
+Node 宿主当前仍需 Node.js 22+，其客户端选择窗口还使用 PowerShell 5.1 与 WinForms；`start-windows.cmd`（隐藏控制台常规入口）、`start-windows-debug.cmd`（控制台调试入口）与 `start-windows-silent.cmd`（零落盘内存场景入口）都会先执行 `node --version` 并拒绝主版本低于 22 的环境（普通/调试入口给出提示并暂停，静默入口以 9009/9040/9041 退出），仓库内直接运行时这些前提必须自备；发布包则会把当前 Node 运行时复制为 `runtime/node.exe`（`package-windows.mjs` 的 `--runtime-exe`/`--no-runtime`），五个 `start-*.cmd` 在 Node 版本检查前把 `%~dp0runtime` 放到 PATH 首位，因此解压后的包不再依赖目标机器上的 Node.js 安装。`runtime/node.exe` 正在执行且不属于程序痕迹，程序清理始终跳过它。客户端能启动不代表 Node 宿主前提均已具备。原生 EXE 使用独立的 Win32 选择窗口，不依赖 Node、PowerShell 或 WinForms。
 
 `windows/native/` 是另一条普通运行的原生宿主原型。构建生成 x86 `chaoxing_plus.exe`，现已将 bootstrap、业务 bundle、新文档探针和 SweetAlert2 CSS 作为 RCDATA 嵌入 EXE；默认直接读取资源，不解包旁置文件。已在本机验证把 EXE 单独复制到含中文与空格的空目录后，四项资源的长度及 SHA256 均与构建输入一致；导入表只包含系统 DLL，没有 Node、.NET 或 VC++ Runtime。显式 `--assets <dir>` 可用于调试覆盖，目录结构须与 `dist-windows` 一致，CSS 位于 `vendor/sweetalert2.min.css`；覆盖文件缺失或无效时明确报错，不回退内嵌版本。
 
@@ -307,9 +307,20 @@ npm run build:native           # 原生 EXE 与编译测试（需要本机 MSVC 
 npm run release:windows        # release/chaoxing-plus-6.2.0-windows/ 与 .zip
 ```
 
+Windows 的 Git Bash / MSYS2 / Cygwin 环境中可一键构建 x86 发布包：
+
+```bash
+bash build-windows.sh
+# 只做构建与打包校验，不跑发布回归：
+bash build-windows.sh --skip-tests
+```
+
+**Windows 打包决策（2026-12-06）**：发布包使用单份 **x86、无 CRT、无第三方/外部 DLL 依赖（仅链接 Windows 系统 DLL）** 的原生 EXE；原生构建把 bootstrap/bundle/trampoline/CSS 以 RCDATA 内嵌，不伴随 DLL 或运行库。当前注入链路是 CXExam 官方 remote debugging + CDP 页面注入；x86 宿主可以正常启动并注入 x64 CXExam，因此**不内置 x64 可执行注入器**，也不从 x86 进程内存执行 x64 PE、不引入进程空洞/远程线程注入。若未来要做原生 DLL/远程线程注入，必须单独设计 x64 载荷、测试与安全边界。
+
 - 打包脚本 `scripts/package-windows.mjs` 只读取构建产物、不修改工作区；输出目录 `release/` 已 gitignore。发布包会校验 `dist-windows/package-manifest.json` 的 `features.injectionLog`（且清单 `version` 必须存在并与发布版本完全一致，防止旧构建被打成新版本），若为 `true`（本机 `windows/local-features.json` 开启的调试构建）则失败关闭并提示先运行 `npm run build:windows -- --release`；CI 的构建步骤固定使用 `--release`。
-- 原生 EXE 默认取 `windows/native/.tmp-native-host/bin/chaoxing_plus.exe`，可用 `--exe <path>` 指定；未构建原生时用 `--skip-native` 生成仅 Node 宿主包。
-- 包内提供三个 Node 入口：`start-windows.cmd`（隐藏控制台常规入口，GUI 正常显示）、`start-windows-debug.cmd`（可见控制台 + GUI，供调试）与 `start-windows-silent.cmd`（零落盘内存场景入口，固定参数见其脚本）。`release-info.json` 的 `entrypoints` 记录 `node`/`nodeDebug`/`nodeSilent`。Node 宿主只带 `main.mjs` 运行闭包与 `launch-client.ps1` / `scan-progress-window.ps1` / `selection-window.ps1` / `system-probe.ps1` / `silent-launch.vbs`，并携带 `windows/config.example.json` 供首次运行 `ensureConfigFile` 生成完整示例配置（缺失时宿主会退化为空模板，首跑配置与仓库不一致）；`self-destruct.mjs`、`wipe.mjs`、`owned-files.mjs` 等第一阶段内部原型和 `chrome75-syntax.mjs` 等构建期模块不会进入发布包。打包脚本发现运行闭包包含内部原型或外部 npm 依赖时直接失败，避免把未发布能力或无法独立运行的文件带出。
+- 发布包默认**只含原生 EXE**：`chaoxing_plus.exe`、`README.md`、`docs/windows.md`、`windows/config.example.json`、`verify-release.mjs`、`release-info.json`、`SHA256SUMS.txt`。需要 Node 备用包时用 `--with-node`（原生 + Node）或 `--skip-native`（纯 Node），`build-windows-node.sh` 即后者。
+- 原生 EXE 默认取 `build-windows/bin/chaoxing_plus.exe`，可用 `--exe <path>` 指定；未构建原生时用 `--skip-native` 生成仅 Node 宿主包。
+- 包内提供三个 Node 入口：`start-windows.cmd`（隐藏控制台常规入口，GUI 正常显示）、`start-windows-debug.cmd`（可见控制台 + GUI，供调试）与 `start-windows-silent.cmd`（零落盘内存场景入口，固定参数见其脚本）。`release-info.json` 的 `entrypoints` 记录 `node`/`nodeDebug`/`nodeSilent`。Node 宿主只带 `main.mjs` 运行闭包与 `launch-client.ps1` / `scan-progress-window.ps1` / `selection-window.ps1` / `system-probe.ps1` / `silent-launch.vbs`，并携带 `windows/config.example.json` 供首次运行 `ensureConfigFile` 生成完整示例配置（缺失时宿主会退化为空模板，首跑配置与仓库不一致）；`wipe.mjs`/`owned-files.mjs` 已升级为 Node 宿主启动清理运行时依赖，可以进入闭包；`chrome75-syntax.mjs`、`trampoline.js` 等构建期模块和未接入运行时的自毁原型不会进入发布包。打包脚本发现运行闭包包含构建期模块或外部 npm 依赖时直接失败，避免把无法独立运行的文件带出。
 - 包内提供 `release-info.json`（版本、入口 `native`/`node`/`nodeDebug`/`nodeSilent`、`verifier`、payload 文件数、Node 版本）、`SHA256SUMS.txt` 与 `verify-release.mjs`；zip 由 Windows `Compress-Archive` 生成。解压后可运行 `node verify-release.mjs` 按校验清单逐文件校验 SHA-256（缺失/摘要不匹配返回 1，清单缺失/格式错误返回 2），CI 与本机发布验证都会先运行该自校验。
 - 冒烟：解压后 `node windows/host/main.mjs --self-check --no-disk-write --quiet` 验证 Node 宿主闭包完整（不带 `--no-disk-write` 时自检会向包内 `windows/data/logs` 写入日志、污染发布包），`chaoxing_plus.exe --self-check --no-disk-write` 验证原生入口；`scripts/windows-release-package.test.mjs` 覆盖双入口包结构、校验和、zip 条目、内部原型/外部依赖拒绝及 CI 工作流契约。
 - CI：`.github/workflows/ci.yml` 在 `windows-latest` 执行 `npm ci` → 类型检查 → 扩展/Windows/原生构建 → 通过 `$GITHUB_ENV` 导出全部 `CX_NATIVE_*` 编译测试路径 → 全量单元测试 → 10 个浏览器回归（原生 browser 用例继承同一批变量，不再被跳过）→ 发布包冒烟 → 解压检查必需文件并运行发布包内 Node/原生 `--self-check` → 上传 artifact。`release-ci/` 已 gitignore。CI 不覆盖真实 UAC 审批、真实 CEF75 登录后页面、旧 Windows 干净环境或真实考试客户端验收，这些仍需人工完成。
@@ -459,7 +470,7 @@ CDP 断开时关闭旧页面会话；target 仍存在则在下一轮枚举重新
 
 #### 禁用能力的参数设计
 
-以下是删除挂起/启动清理/自毁的 schema 和设计默认值，**不是本阶段可执行功能**。Node 与原生入口都必须拒绝这些请求；内存执行已支持并按零落盘方式运行。内部清理器或状态机的单元测试不代表发布入口已支持；本阶段也不自动把自毁请求转换为另一种执行模式。
+以下能力已在 Node 宿主实现；原生宿主仅作引导并明确拒绝。破坏性操作只允许在发布包布局中执行，调试入口只模拟删除。内部清理器或状态机的单元测试不代表发布入口已支持；本阶段也不自动把自毁请求转换为另一种执行模式。
 
 | 能力或参数 | 设计值 | 当前行为 |
 | --- | --- | --- |
@@ -765,27 +776,27 @@ git diff --check
 npm run build:windows
 powershell -NoProfile -ExecutionPolicy Bypass -File .\windows\native\build.ps1 -BuildTests
 
-$env:CX_NATIVE_HOST_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\chaoxing_plus.exe').Path
-$env:CX_NATIVE_INJECTION_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\injection-tests.exe').Path
-$env:CX_NATIVE_ASSETS_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\assets-tests.exe').Path
-$env:CX_NATIVE_OPTIONS_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\options-tests.exe').Path
-$env:CX_NATIVE_CACHE_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\discovery-cache-driver.exe').Path
-$env:CX_NATIVE_CACHE_HOST_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\discovery-cache-host-tests.exe').Path
+$env:CX_NATIVE_HOST_EXE = (Resolve-Path '.\build-windows\bin\chaoxing_plus.exe').Path
+$env:CX_NATIVE_INJECTION_EXE = (Resolve-Path '.\build-windows\bin\injection-tests.exe').Path
+$env:CX_NATIVE_ASSETS_EXE = (Resolve-Path '.\build-windows\bin\assets-tests.exe').Path
+$env:CX_NATIVE_OPTIONS_EXE = (Resolve-Path '.\build-windows\bin\options-tests.exe').Path
+$env:CX_NATIVE_CACHE_EXE = (Resolve-Path '.\build-windows\bin\discovery-cache-driver.exe').Path
+$env:CX_NATIVE_CACHE_HOST_EXE = (Resolve-Path '.\build-windows\bin\discovery-cache-host-tests.exe').Path
 $env:CX_DISCOVERY_TEST_DRIVER = $env:CX_NATIVE_CACHE_EXE
-$env:CX_NATIVE_SESSION_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\session-tests.exe').Path
-$env:CX_NATIVE_SELECTION_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\selection-tests.exe').Path
-$env:CX_NATIVE_CLI_SELECTION_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\cli-selection-tests.exe').Path
-$env:CX_NATIVE_TRANSPORT_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\transport-tests.exe').Path
-$env:CX_NATIVE_AUDIT_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\audit-tests.exe').Path
-$env:CX_NATIVE_CONFIG_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\config-store-tests.exe').Path
-$env:CX_NATIVE_DIAGNOSTICS_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\diagnostics-tests.exe').Path
-$env:CX_NATIVE_ELEVATION_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\elevation-tests.exe').Path
-$env:CX_NATIVE_ELEVATION_HOST_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\elevation-host-tests.exe').Path
-$env:CX_NATIVE_DPI_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\dpi-tests.exe').Path
-$env:CX_NATIVE_DPI_PROCESS_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\dpi-process-tests.exe').Path
-$env:CX_NATIVE_DPI_CHILD_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\dpi-child.exe').Path
-$env:CX_NATIVE_PROCESS_CHECK_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\process-check-tests.exe').Path
-$env:CX_NATIVE_PROCESS_FIXTURE_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\process-fixture.exe').Path
+$env:CX_NATIVE_SESSION_EXE = (Resolve-Path '.\build-windows\bin\session-tests.exe').Path
+$env:CX_NATIVE_SELECTION_EXE = (Resolve-Path '.\build-windows\bin\selection-tests.exe').Path
+$env:CX_NATIVE_CLI_SELECTION_EXE = (Resolve-Path '.\build-windows\bin\cli-selection-tests.exe').Path
+$env:CX_NATIVE_TRANSPORT_EXE = (Resolve-Path '.\build-windows\bin\transport-tests.exe').Path
+$env:CX_NATIVE_AUDIT_EXE = (Resolve-Path '.\build-windows\bin\audit-tests.exe').Path
+$env:CX_NATIVE_CONFIG_EXE = (Resolve-Path '.\build-windows\bin\config-store-tests.exe').Path
+$env:CX_NATIVE_DIAGNOSTICS_EXE = (Resolve-Path '.\build-windows\bin\diagnostics-tests.exe').Path
+$env:CX_NATIVE_ELEVATION_EXE = (Resolve-Path '.\build-windows\bin\elevation-tests.exe').Path
+$env:CX_NATIVE_ELEVATION_HOST_EXE = (Resolve-Path '.\build-windows\bin\elevation-host-tests.exe').Path
+$env:CX_NATIVE_DPI_EXE = (Resolve-Path '.\build-windows\bin\dpi-tests.exe').Path
+$env:CX_NATIVE_DPI_PROCESS_EXE = (Resolve-Path '.\build-windows\bin\dpi-process-tests.exe').Path
+$env:CX_NATIVE_DPI_CHILD_EXE = (Resolve-Path '.\build-windows\bin\dpi-child.exe').Path
+$env:CX_NATIVE_PROCESS_CHECK_EXE = (Resolve-Path '.\build-windows\bin\process-check-tests.exe').Path
+$env:CX_NATIVE_PROCESS_FIXTURE_EXE = (Resolve-Path '.\build-windows\bin\process-fixture.exe').Path
 try {
   node --test scripts/windows-native-cache.test.mjs scripts/windows-native-discovery.test.mjs
   node --test scripts/windows-native-host.test.mjs scripts/windows-native-self-check.test.mjs scripts/windows-native-assets.test.mjs scripts/windows-native-options.test.mjs scripts/windows-native-session.test.mjs scripts/windows-native-selection.test.mjs scripts/windows-native-cli-selection.test.mjs scripts/windows-native-transport.test.mjs scripts/windows-native-audit.test.mjs scripts/windows-native-config.test.mjs scripts/windows-native-diagnostics.test.mjs scripts/windows-native-elevation.test.mjs scripts/windows-native-dpi.test.mjs scripts/windows-native-process-check.test.mjs
@@ -881,7 +892,7 @@ try {
 原生 Win32 选择窗口的实际显示与自动选择冒烟需单独启用，整个过程中不会启动考试客户端：
 
 ```powershell
-$env:CX_NATIVE_SELECTION_EXE = (Resolve-Path '.\windows\native\.tmp-native-host\bin\selection-tests.exe').Path
+$env:CX_NATIVE_SELECTION_EXE = (Resolve-Path '.\build-windows\bin\selection-tests.exe').Path
 $env:CX_TEST_NATIVE_WINDOW = '1'
 try {
   node --test scripts/windows-native-selection.test.mjs
@@ -1079,3 +1090,8 @@ render-diagnostics-host.json # 宿主级诊断摘要：launchMode/clientPid/窗�
 - 已有 `CXExam.exe` 时拒绝启动，避免连接真实考试会话。
 - 日志/报告不记录 URL 查询参数、Cookie、答案或账号数据；客户端目录的 `debug.log` 仍可能含页面信息，不要外发。
 - 本项目仅用于本机技术研究与自有账号环境；请勿在正式考试中使用。
+
+
+
+
+
