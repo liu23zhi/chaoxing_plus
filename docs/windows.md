@@ -1,6 +1,6 @@
 # Windows 端（超星考试客户端 / CEF 75）使用与设计
 
-Windows 6.2.0 第一阶段提供 **普通可审计 Windows 宿主**：它用官方 CEF 远程调试参数启动超星考试客户端，并通过 CDP（Chrome DevTools Protocol）把扩展的业务 bundle 注入到客户端网页主世界。扫描、配置和离线参数生成器属于本阶段；内存执行、删除挂起、启动清理与自毁只保留参数设计和禁用状态。
+Windows 6.2.0 第一阶段提供 **普通可审计 Windows 宿主**：它用官方 CEF 远程调试参数启动超星考试客户端，并通过 CDP（Chrome DevTools Protocol）把扩展的业务 bundle 注入到客户端网页主世界。扫描、配置和离线参数生成器属于本阶段；内存执行（`--execution-mode memory` / `--memory-exec`：宿主侧零落盘、客户端仍正常可见启动）已支持；删除挂起、启动清理与自毁只保留参数设计和禁用状态。
 
 ## 状态与适用对象
 
@@ -16,7 +16,7 @@ Windows 6.2.0 第一阶段提供 **普通可审计 Windows 宿主**：它用官�
 
 ### 发布与系统兼容边界
 
-Node 宿主当前仍需 Node.js 22+，其客户端选择窗口还使用 PowerShell 5.1 与 WinForms；`start-windows.cmd` 不会安装或内嵌这些运行条件。客户端能启动不代表 Node 宿主前提均已具备。原生 EXE 使用独立的 Win32 选择窗口，不依赖 Node、PowerShell 或 WinForms。
+Node 宿主当前仍需 Node.js 22+，其客户端选择窗口还使用 PowerShell 5.1 与 WinForms；`start-windows.cmd` 与 `start-windows-silent.cmd` 都会先执行 `node --version` 并拒绝主版本低于 22 的环境（普通入口给出提示并暂停，静默入口以 9009/9040/9041 退出），但不会安装或内嵌这些运行条件。客户端能启动不代表 Node 宿主前提均已具备。原生 EXE 使用独立的 Win32 选择窗口，不依赖 Node、PowerShell 或 WinForms。
 
 `windows/native/` 是另一条普通运行的原生宿主原型。构建生成 x86 `chaoxing_plus.exe`，现已将 bootstrap、业务 bundle、新文档探针和 SweetAlert2 CSS 作为 RCDATA 嵌入 EXE；默认直接读取资源，不解包旁置文件。已在本机验证把 EXE 单独复制到含中文与空格的空目录后，四项资源的长度及 SHA256 均与构建输入一致；导入表只包含系统 DLL，没有 Node、.NET 或 VC++ Runtime。显式 `--assets <dir>` 可用于调试覆盖，目录结构须与 `dist-windows` 一致，CSS 位于 `vendor/sweetalert2.min.css`；覆盖文件缺失或无效时明确报错，不回退内嵌版本。
 
@@ -26,11 +26,11 @@ Node 宿主当前仍需 Node.js 22+，其客户端选择窗口还使用 PowerShe
 
 原生客户端选择使用 Win32 控件和 `GetOpenFileNameW`：显示序号、架构、文件版本、完整路径与推荐项，支持双击、确认和手动浏览；扫描无候选时仍可浏览，取消不会启动客户端。所选路径会再次检查有效 PE 和系统架构兼容性。
 
-原生宿主现已接入共享配置同步、持久化、文件热更新、文件日志与运行报告，`--capabilities` 中 `configReload:true`、`configPersistence:true`、`fileLogging:true`、`runReport:true`。渲染诊断能力需区分：`renderDiagnostics:false` 表示不支持完整宿主渲染诊断，`pageRenderDiagnostics:true` 表示支持有限的页面布局采样。接受部分参数或将设置传入页面不等于实现对应宿主行为，原生宿主仍不与 Node 宿主完整等价。原生版本仍为原型，其构建依赖本机 MSVC x86 工具链和 Windows SDK；x86/x64 客户端适配及旧版 Windows 兼容性仍需在目标干净环境验收。
+原生宿主现已接入共享配置同步、持久化、文件热更新、文件日志与运行报告，`--capabilities` 中 `configReload:true`、`configPersistence:true`、`fileLogging:true`、`runReport:true`、`pageScreenshots:true`、`windowDiagnostics:true`、`diagnosticsSummary:true`、`highDpiUi:true`、`retainData:true`、`deleteConfig:true`。渲染诊断能力需区分：`renderDiagnostics:false` 表示不支持完整宿主渲染诊断（无 Node 同构的合并 JSON/系统进程命令行/窗口 PNG），`pageRenderDiagnostics:true` 表示支持有限的页面布局采样，`pageScreenshots:true` 表示通过 CDP `Page.captureScreenshot` 生成并校验 `render-diagnostics-page.png`。接受部分参数或将设置传入页面不等于实现对应宿主行为，原生宿主仍不与 Node 宿主完整等价。原生版本仍为原型，其构建依赖本机 MSVC x86 工具链和 Windows SDK；x86/x64 客户端适配及旧版 Windows 兼容性仍需在目标干净环境验收。
 
-下文完整参数和 `start-windows.cmd` 示例以 Node 宿主为准；原生原型的具体参数以它自己的 `--help`、`--capabilities` 和已执行测试为准，不默认宣称与 Node 全部等价。两条宿主都不提供启动清理、内存执行、删除挂起或自毁能力；这些请求必须明确拒绝，不能静默降级为普通运行。
+下文完整参数和 `start-windows.cmd` 示例以 Node 宿主为准；原生原型的具体参数以它自己的 `--help`、`--capabilities` 和已执行测试为准，不默认宣称与 Node 全部等价。两条宿主都支持内存执行（`memory`：宿主侧零落盘、客户端正常可见启动）；不提供启动清理、删除挂起或自毁能力，这些请求必须明确拒绝，不能静默降级为普通运行。
 
-普通退出的数据生命周期仍未在两条入口间对齐：Node 支持 `--no-retain-data`、`--delete-config`；原生原型明确拒绝这两个参数及 JSON 中的 `retainData:false`、`deleteConfig:true`，避免接受参数却忽略请求。两条入口均支持 `--self-check`，但检查范围和输出行为以各自说明为准。
+普通退出的数据生命周期两条入口均已对齐：Node 与原生都支持 `--no-retain-data`、`--delete-config` 及对应 JSON 字段（`retainData:false`、`deleteConfig:true`）。原生宿主在 UAC 交接时由提升后的子实例完成最终删除；`--delete-config` 要求显式 `--config`，且不能与 `--no-disk-write` 同用。两条入口均支持 `--self-check`，但检查范围和输出行为以各自说明为准。
 
 三份本地样本的静态审计结果：V4.1.4.25512 的两个学校版本 EXE 相同，V4.3.0.4 的 EXE 不同，三者均为 x86，所带 CEF 均为 `75.1.4+g4210896 / Chromium 75.0.3770.100`。该结论仅代表文件架构与版本，未完成这些客户端在各 Windows 版本上的启动、登录及答题验证。
 
@@ -80,6 +80,7 @@ chaoxing_plus.exe --self-check --assets "D:\Debug Assets" --port 38123
 | `--elevate-on-start` | 关闭 | 启动时先申请管理员权限，再扫描、显示 GUI 和启动客户端；JSON 对应 `elevateOnStart` 布尔值。 |
 | `--no-elevate` | 关闭 | 禁止自动申请 UAC；仍可启动不要求管理员权限的客户端。遇到 `740` 时报告权限错误，可移除此参数重试或手动以管理员身份运行宿主。 |
 | `--elevated` | 内部标记 | 表示本轮已通过 UAC 重启，禁止再次自动重启；标记不能替代真实 token 提升状态检查，不应由用户手动添加。 |
+| `--hide-console` | 关闭 | 静默启动：宿主启动后主动调用 Win32 `ShowWindow(SW_HIDE)` 隐藏自身控制台窗口，且 UAC 提权重启使用 `-WindowStyle Hidden`，避免出现持续可见的 Node 黑框。初始 Node 进程的无窗口启动由官方入口 `start-windows-silent.cmd` 负责：它通过 GUI 子系统的 `wscript.exe` + 纯 ASCII 的 `windows/host/silent-launch.vbs` 以窗口样式 0 启动 `node.exe`，并只向宿主传递 `--hide-console`；不强制客户端序号、不关闭面板、不改变扫描/UAC/注入/日志策略，客户端选择窗口等宿主 UI 仍正常显示。打包后的发布包同时包含 `start-windows-silent.cmd` 与 `windows/host/silent-launch.vbs`，`release-info.json` 的 `entrypoints.nodeSilent` 指向静默入口。启动脚本以 `"%~dp0."`（而非以反斜杠结尾的 `"%~dp0"`）传工作目录、并传 `"%~dp0windows\host\main.mjs"` 绝对脚本路径，避免 `\"` 被命令行解析为转义引号；VBS 会去掉工作目录尾分隔符，并在拼接命令时把参数尾反斜杠按 Win32 规则加倍。WSH 的 `WScript.Arguments` 不保留内嵌双引号，故该入口只传固定开关与 `%~dp0` 派生路径（可含空格）。 |
 | `--elevated-client <path>` | 内部参数，仅原生 | 携带提权前已选中的绝对客户端路径；仅与内部重启标记及真实已提升 token 配套使用，重新校验客户端后直接启动，避免重复扫描或选择。Node 使用内部生成的显式 `--client` 交接实际选择。 |
 
 父宿主先关闭配置、资源和审计句柄，再请求 UAC；重启保留原始参数、工作目录和已选客户端，含中文、空格、引号和内联 JSON 的参数也须保持原值。配置文件会按原有优先级重新读取，相对路径仍以保留的工作目录解析。提升后的宿主继续使用既有 `CreateProcessW` 和本次启动进程的监听归属检查，不通过 `ShellExecute` 单独启动客户端。
@@ -90,7 +91,7 @@ chaoxing_plus.exe --self-check --assets "D:\Debug Assets" --port 38123
 
 Node 开发宿主的 UAC 重启先对每一项参数执行 Win32 引用，再将完整命令行作为单个 `Start-Process -ArgumentList` 值传入，保留内联 JSON、空参数、中文、引号及尾反斜杠。对应 PowerShell 5.1/7 自动化只启动参数探针并移除提权请求，不会弹出 UAC 或启动考试客户端；它验证参数保真，不能代替真实权限交接验收。
 
-自动化使用受控 Win32 调用替身验证提权分支、参数传递和退出码，不批准真实 UAC，也不启动真实考试客户端。这不代表已完成 UAC 人工确认、真实 CEF75 登录后页面或旧 Windows 干净环境验收；内存执行、启动清理和自毁能力仍不可用。
+自动化使用受控 Win32 调用替身验证提权分支、参数传递和退出码，不批准真实 UAC，也不启动真实考试客户端。这不代表已完成 UAC 人工确认、真实 CEF75 登录后页面或旧 Windows 干净环境验收；内存执行已可用（零落盘、可见进程），启动清理和自毁能力仍不可用。
 
 ### 原生已有客户端检查
 
@@ -104,7 +105,7 @@ Node 开发宿主的 UAC 重启先对每一项参数执行 Win32 引用，再将
 
 真实子进程回归使用 `dpi-process-tests.exe`（`CX_NATIVE_DPI_PROCESS_EXE`）调用 `proc_launch` 启动 `dpi-child.exe`（`CX_NATIVE_DPI_CHILD_EXE`）的测试自有副本。该无窗口、无文件输出、`asInvoker` 程序用退出码报告 `IsProcessDPIAware()` 状态：普通启动应为 unaware，临时覆盖并在进程创建后立即恢复时应为 aware，再次普通启动应回到 unaware；同时检查测试 EXE 路径的兼容层值已不存在。它只临时操作测试自有 EXE 的对应值，不启动考试客户端，不申请 UAC；测试副本及目录由 Node 清理。
 
-原生宿主支持 `--dpi-aware`，能力标记为 `temporaryDpiOverride:true`。它只为本次普通启动的客户端临时设置系统 DPI 兼容层；这不表示已经支持完整窗口 DPI 诊断或截图，`renderDiagnostics:false` 的边界仍然有效。
+原生宿主支持 `--dpi-aware`，能力标记为 `temporaryDpiOverride:true`。它只为本次普通启动的客户端临时设置系统 DPI 兼容层；开启 `--diagnose` 时会采集页面截图（`pageScreenshots:true`），自有启动还会采集窗口 DPI/矩形与 best-effort BMP（`windowDiagnostics:true`），但 `--attach` 不采集窗口诊断，且仍不生成 Node 同构的完整渲染诊断（`renderDiagnostics:false` 边界保留）。
 
 | 原生参数或 JSON 字段 | 默认 | 行为 |
 | --- | --- | --- |
@@ -167,7 +168,7 @@ start-windows.cmd
      3. 选端口：优先配置端口，否则按候选表用 bind() 实测（Windows 保留端口会 bind 失败）
      4. 检查是否已有 CXExam.exe 进程：有则拒绝启动，避免连接真实考试会话
      5. CreateProcess(clientPath, --remote-debugging-port=N --remote-debugging-address=127.0.0.1)；仅 Win32 740 才请求 UAC 并携带所选客户端重启
-     6. 等待 /json/version，校验 Browser 前缀；用 Get-NetTCPConnection 校验监听 PID == 本次启动的 PID
+     6. 等待 /json/version，校验 Browser 前缀；用系统 netstat 校验监听 PID 为本次启动的客户端 PID 或其子进程（父链 + 创建时间）
      7. 轮询 /json/list，为每个 page target 建立 WebSocket：
           Page.enable -> Page.getFrameTree -> Runtime.enable
           Page.addScriptToEvaluateOnNewDocument(trampoline)
@@ -204,6 +205,10 @@ windows/
   host/trampoline.js           新文档探针
   host/selection-window.ps1    Windows 原生客户端选择窗口（PowerShell + WinForms，纯 ASCII）
   host/selection-window.mjs    原生选择窗口的 Node 封装、结果校验与 self-check 探针
+  host/scan-progress-window.ps1 全盘扫描进度/取消窗口（WinForms，纯 ASCII，状态文件协议）
+  host/scan-progress-window.mjs 进度窗口的 Node 控制器、状态/取消文件协议与控件探针
+  host/silent-launch.vbs       无控制台启动 Node 宿主（wscript GUI 子系统，纯 ASCII）
+  start-windows-silent.cmd     官方静默入口：只隐藏 Node 控制台，不强制客户端/面板/磁盘策略
   parameter-generator.html     离线单文件启动参数生成器（不联网、不执行命令、不保存输入）
   native/                      普通运行的原生宿主原型，四项资源内嵌
   native/assets.c              内嵌资源读取与显式外部资源覆盖，不解包写盘
@@ -219,6 +224,9 @@ windows/
   data/                        本地配置与日志（gitignore）：config.json / logs/
 build.windows.mjs              Windows 构建（target chrome75 + 语法闸门 + manifest）
 start-windows.cmd              推荐入口（检查 Node 版本后启动宿主）
+scripts/package-windows.mjs    发布打包：原生 + Node 双入口、SHA256SUMS 与 zip
+scripts/verify-release.mjs     发布包完整性校验器（按 SHA256SUMS 逐文件校验，无 npm 依赖）
+.github/workflows/ci.yml       Windows CI：类型检查、构建、全量测试与发布包冒烟
 ```
 
 `dist-windows/` 为构建产物（已 gitignore），包含：
@@ -230,7 +238,7 @@ vendor/sweetalert2.min.css  config.example.json  package-manifest.json
 
 ## 快速开始
 
-1. 安装 Node.js 22+。Windows 宿主当前以 Node 脚本运行，不是独立打包的 exe。
+1. 安装 Node.js 22+。Node 宿主以脚本运行；原生单文件 EXE 为可选入口，见“发布构建、打包与 CI”。
 2. 构建（本机开发时）：
 
    ```powershell
@@ -285,6 +293,25 @@ vendor/sweetalert2.min.css  config.example.json  package-manifest.json
    node windows/host/main.mjs --report windows\data\last-report.json
    ```
 
+## 发布构建、打包与 CI
+
+正式分发使用“原生单文件 EXE + Node 宿主”双入口包：
+
+```powershell
+npm ci
+npm run build                  # 扩展注入脚本
+npm run build:windows          # dist-windows 注入资源
+npm run build:native           # 原生 EXE 与编译测试（需要本机 MSVC x86 工具链）
+npm run release:windows        # release/chaoxing-plus-6.2.0-windows/ 与 .zip
+```
+
+- 打包脚本 `scripts/package-windows.mjs` 只读取构建产物、不修改工作区；输出目录 `release/` 已 gitignore。发布包会校验 `dist-windows/package-manifest.json` 的 `features.injectionLog`（且清单 `version` 必须存在并与发布版本完全一致，防止旧构建被打成新版本），若为 `true`（本机 `windows/local-features.json` 开启的调试构建）则失败关闭并提示先运行 `npm run build:windows -- --release`；CI 的构建步骤固定使用 `--release`。
+- 原生 EXE 默认取 `windows/native/.tmp-native-host/bin/chaoxing_plus.exe`，可用 `--exe <path>` 指定；未构建原生时用 `--skip-native` 生成仅 Node 宿主包。
+- 包内提供两个 Node 入口：`start-windows.cmd`（可见控制台）与 `start-windows-silent.cmd`（隐藏控制台，仅传 `--hide-console`）。Node 宿主只带 `main.mjs` 运行闭包与 `launch-client.ps1` / `scan-progress-window.ps1` / `selection-window.ps1` / `system-probe.ps1` / `silent-launch.vbs`，并携带 `windows/config.example.json` 供首次运行 `ensureConfigFile` 生成完整示例配置（缺失时宿主会退化为空模板，首跑配置与仓库不一致）；`self-destruct.mjs`、`wipe.mjs`、`owned-files.mjs` 等第一阶段内部原型和 `chrome75-syntax.mjs` 等构建期模块不会进入发布包。打包脚本发现运行闭包包含内部原型或外部 npm 依赖时直接失败，避免把未发布能力或无法独立运行的文件带出。
+- 包内提供 `release-info.json`（版本、入口 `native`/`node`/`nodeSilent`、`verifier`、payload 文件数、Node 版本）、`SHA256SUMS.txt` 与 `verify-release.mjs`；zip 由 Windows `Compress-Archive` 生成。解压后可运行 `node verify-release.mjs` 按校验清单逐文件校验 SHA-256（缺失/摘要不匹配返回 1，清单缺失/格式错误返回 2），CI 与本机发布验证都会先运行该自校验。
+- 冒烟：解压后 `node windows/host/main.mjs --self-check --no-disk-write --quiet` 验证 Node 宿主闭包完整（不带 `--no-disk-write` 时自检会向包内 `windows/data/logs` 写入日志、污染发布包），`chaoxing_plus.exe --self-check --no-disk-write` 验证原生入口；`scripts/windows-release-package.test.mjs` 覆盖双入口包结构、校验和、zip 条目、内部原型/外部依赖拒绝及 CI 工作流契约。
+- CI：`.github/workflows/ci.yml` 在 `windows-latest` 执行 `npm ci` → 类型检查 → 扩展/Windows/原生构建 → 通过 `$GITHUB_ENV` 导出全部 `CX_NATIVE_*` 编译测试路径 → 全量单元测试 → 10 个浏览器回归（原生 browser 用例继承同一批变量，不再被跳过）→ 发布包冒烟 → 解压检查必需文件并运行发布包内 Node/原生 `--self-check` → 上传 artifact。`release-ci/` 已 gitignore。CI 不覆盖真实 UAC 审批、真实 CEF75 登录后页面、旧 Windows 干净环境或真实考试客户端验收，这些仍需人工完成。
+
 ## 配置项
 
 | 键 | 说明 |
@@ -314,7 +341,7 @@ vendor/sweetalert2.min.css  config.example.json  package-manifest.json
 | `--client <path>` | 未指定 | 直接启动指定的 `CXExam.exe`，跳过扫描；仍会检查 PE 架构。 |
 | `--client-index <n>` | 未指定，`n >= 1` | 启动扫描结果第 n 个；常规候选按完整路径排序，全盘候选按遍历顺序。为确保序号可用，全盘扫描会完整枚举候选，不在首个 x86 提前停止。 |
 | `--client-first` | 关闭 | 选择推荐候选；常规扫描结果中 x86 优先，同架构按路径排序。 |
-| `--list-clients` | 关闭 | 列出候选和架构后退出，不启动客户端。 |
+| `--list-clients` | 关闭 | 列出候选和架构后退出，不启动客户端。Node 宿主显式 `--report <path>` 时额外写入 `mode: "list-clients"` 报告（含 `version:"6.2.0"`、`host:"node"`、`stopReason:"list-clients"`、`scanMode`、`startedAt/finishedAt`、`durationMs`、`success`、`total` 及候选 `path/name/machine`，字段与原生列表报告对齐），`--no-disk-write` 抑制报告写入；原生宿主遵循同样的“仅显式报告才写入”规则。 |
 | `--select-client` | 关闭 | 扫描后显示 **Windows 原生选择窗口**，可选择候选、手动浏览或点击“全盘扫描”刷新列表；全盘扫描后仍须确认选择，不自动启动。窗口不可用时回退终端逐项选择，非交互终端回退推荐候选；用户取消时以退出码 3 结束，不启动客户端。 |
 | `--scan-mode common\|fallback-all\|all` | `fallback-all` | `common` 只扫常规根目录及一级直接子目录；`fallback-all` 仅在常规扫描为零结果时递归固定磁盘；`all` 直接递归固定磁盘。 |
 | `--scan-all` / `--no-scan-all` | 默认 fallback-all | `--scan-all` 启用常规无结果后的递归回退；`--no-scan-all` 将扫描限制为常规路径。 |
@@ -322,15 +349,15 @@ vendor/sweetalert2.min.css  config.example.json  package-manifest.json
 | `--no-scan-cache` | 关闭 | 不读取或写入扫描缓存；实时扫描仍照常执行。 |
 | `--ui auto\|gui\|cli` | `auto`；Windows 真正无参数入口使用 `gui` | `gui` 使用 Windows 原生选择窗口；`cli` 使用终端交互；显式 `auto` 优先使用已配置客户端路径，否则交互终端提示选择，Windows 非交互环境默认显示原生选择窗口，其他非交互环境使用推荐候选。显式 `--client` 在三种界面模式下均跳过扫描和选择窗口。Windows `auto` 窗口不可用时回退推荐候选；需要窗口时，`gui` 在非 Windows 平台或窗口不可用时直接报错。`--quiet` 或 `--client-first` 会关闭 `auto` 原生选择窗口并使用推荐候选。 |
 
-此处参数表描述 Node 宿主。它的选择窗口使用 Windows 自带的 PowerShell（5.1+）与 WinForms，不新增 npm 依赖：窗口列出扫描到的 `CXExam.exe`（架构、完整路径），支持双击/按钮确认与“手动浏览”选择任意 `CXExam.exe`，取消返回 `cancelled`。`windows/host/selection-window.ps1` **必须保持纯 ASCII**（Windows PowerShell 5.1 对无 BOM 的 `.ps1` 按 ANSI/OEM 解析，中文文案会破坏语法），所有界面文案经 UTF-8 JSON 传入；`--self-check` 会构建一次窗口控件做冒烟（不显示窗口），`--capabilities` 的 `supported.nativeClientSelection` 在 Windows 上为 true。自动化验证可用环境变量 `CXPLUS_SELECTION_AUTO_CLOSE_MS=<ms>` 让窗口自动关闭（仅测试/调试，避免无人值守阻塞）。
+此处参数表描述 Node 宿主。它的宿主支持 `--version`（输出 `6.2.0` 后以 0 退出，只读无副作用）与 `--print-effective-config` 等只读诊断入口。选择窗口使用 Windows 自带的 PowerShell（5.1+）与 WinForms，不新增 npm 依赖：窗口列出扫描到的 `CXExam.exe`（架构、完整路径），支持双击/按钮确认与“手动浏览”选择任意 `CXExam.exe`，取消返回 `cancelled`。`windows/host/selection-window.ps1` **必须保持纯 ASCII**（Windows PowerShell 5.1 对无 BOM 的 `.ps1` 按 ANSI/OEM 解析，中文文案会破坏语法），所有界面文案经 UTF-8 JSON 传入；`--self-check` 会构建一次窗口控件做冒烟（不显示窗口），`--capabilities` 的 `supported.nativeClientSelection` 在 Windows 上为 true。自动化验证可用环境变量 `CXPLUS_SELECTION_AUTO_CLOSE_MS=<ms>` 让窗口自动关闭（仅测试/调试，避免无人值守阻塞）。
 
 Windows 上直接双击 `start-windows.cmd`、无参数运行 Node 宿主或直接双击原生 EXE，都会只做常规扫描（根目录及一级直接子目录），然后显示客户端选择 GUI，即使配置已保存客户端路径或全盘扫描模式。常规无结果也不自动递归全盘，仍显示窗口供手动浏览或点击“全盘扫描”；Node 全盘扫描失败时保留现有候选，原生宿主失败时明确退出。取消选择不启动客户端；默认到启动客户端时才按需请求 UAC，提权后继续使用本次选择，不再弹出选择窗口。仅传 `--elevate-on-start` 时保留此常规扫描和 GUI 行为，但先申请管理员权限。带有 `--config`、`--options-json` 等其他参数时，仍按参数和配置优先级运行；需要沿用已保存路径时可显式传 `--ui auto`。这里的 GUI 是客户端选择窗口，完整参数表单仍使用离线 `windows/parameter-generator.html`。
 
 WinForms 窗口在 `Shown` 时显式调用 `ShowWindow` 并请求前台显示：隐藏 PowerShell 控制台的启动设置可能使首个窗口仍不可见，不能仅凭控件探针或 `ShowDialog` 运行判定窗口已显示。回归包含操作系统 `IsWindowVisible` 检查及全盘扫描按钮的真实点击。
 
-点击全盘扫描后选择窗口会关闭，扫描完成后重新打开；当前扫描期间没有进度或取消窗口，大容量磁盘可能需要较长等待。
+点击全盘扫描后，选择窗口关闭并由宿主执行全盘扫描；扫描期间显示独立的进度窗口，实时显示“已检查目录数/发现候选数”，可点击“取消扫描”中止并保留原候选。扫描完成后重新打开选择窗口，仍须人工确认选择，不自动启动客户端；进度窗口不可用时继续无界面全盘扫描。Node 使用 `windows/host/scan-progress-window.ps1`（WinForms）；原生 EXE 使用 `windows/native/selection.c` 的独立线程 Win32 进度窗口（类名 `CXPlusNativeScanProgress`），取消通过 discovery 的进度/取消钩子中止并回到原候选。两端真实窗口可见性都由 `CX_TEST_NATIVE_WINDOW=1` 的显式冒烟验证，真实客户端全盘扫描均未在自动化中执行，汇报时须区分两端测试证据。
 
-原生 EXE 的 `--ui gui` / `--select-client` 则调用 `windows/native/selection.c`，没有 PowerShell 子进程。其隐藏控件探针由 `selection-tests.exe` 执行；实际显示、取消和选择 Unicode 路径的交互冒烟需显式设置 `CX_TEST_NATIVE_WINDOW=1`，测试通过 `CXPLUS_NATIVE_SELECTION_AUTO_CLOSE_MS` 自动取消，避免等待人工操作。该测试不会执行所选客户端。
+原生 EXE 的 `--ui gui` / `--select-client` 则调用 `windows/native/selection.c`，没有 PowerShell 子进程。其隐藏控件探针由 `selection-tests.exe` 执行；实际显示、取消和选择 Unicode 路径的交互冒烟需显式设置 `CX_TEST_NATIVE_WINDOW=1`，测试通过 `CXPLUS_NATIVE_SELECTION_AUTO_CLOSE_MS` 自动取消，避免等待人工操作。全盘扫描进度窗口另有 `selection-tests.exe --scan-progress` 冒烟（同样需 `CX_TEST_NATIVE_WINDOW=1`），检查 `IsWindowVisible` 并模拟点击取消；隐藏生命周期与 discovery 进度/取消回调在默认探针中覆盖。取消全盘扫描后宿主重新打开选择窗口时会显示“已取消全盘扫描，保留原候选；可重试或手动浏览。”提示，隐藏探针覆盖通知标题切换。原生 EXE 内嵌 `dpiAware=true`/`asInvoker` manifest，选择与扫描进度窗口按系统 DPI 缩放固定像素布局和字体；测试可用 `CXPLUS_NATIVE_UI_DPI=144` 覆盖 DPI 验证缩放，能力标记为 `highDpiUi:true`。该测试不会执行所选客户端，也不会执行真实全盘扫描。
 
 原生 EXE 的 `--ui cli` 列出候选序号、架构、版本、完整路径和推荐项；`--list-clients` 同样输出这些元信息。终端交互接受完整数字序号、Enter 选择推荐项、`q`/`Q` 取消（退出码 `3`），也接受有效 `CXExam.exe` 路径或安装目录，支持中文、空格及外层双引号。没有扫描候选时仍可手动输入路径；非法输入或输入流结束会明确失败，不会擅自启动推荐客户端。
 
@@ -374,7 +401,7 @@ WinForms 窗口在 `Shown` 时显式调用 `ShowWindow` 并请求前台显示：
 
 参考项目中的 `cef-hook` 是当前进程内的 CEF/Detours hook，不能安全地作为通用外部注入器复用；本宿主因此采用“启动客户端时注入受控远程调试参数 + 校验 Browser/PID/端口归属 + CDP 多路径页面注入”。宿主不会自动连接任意已有端口；`--attach` 仅用于测试/调试。
 
-Node 宿主在每轮 target 刷新和 WebSocket 建连前仍实时查询监听归属，但直接调用 Windows 系统目录的 `netstat.exe -ano -p tcp`，避免每次启动 PowerShell 查询带来的数秒开销。只接受精确 `127.0.0.1:port` 的唯一 `TCP LISTENING` 记录及有效 PID，不缓存上次结果；查询失败、输出不完整、重复监听或无法识别的状态均拒绝连接。`scripts/windows-listener-owner.test.mjs` 包含真实临时回环监听的归属、非监听连接和关闭后失效回归；本机耗时测量不代表其他 Windows 环境或真实考试客户端的端到端启动耗时。
+Node 宿主在每轮 target 刷新和 WebSocket 建连前仍实时查询监听归属，但直接调用 Windows 系统目录的 `netstat.exe -ano -p tcp`，避免每次启动 PowerShell 查询带来的数秒开销。只接受精确 `127.0.0.1:port` 的唯一 `TCP LISTENING` 记录及有效 PID，不缓存上次监听 PID；查询失败、输出不完整、重复监听或无法识别的状态均拒绝连接。监听 PID 等于本次启动的客户端 PID 时直接通过，不再启动任何进程查询；不同时才用一次 Windows PowerShell `Get-CimInstance Win32_Process` 读取有界父链（最多 8 层），校验每级父子关系与创建时间顺序，成功结果按监听 PID 缓存，失败结果保留 30 秒短 TTL 后重试，避免慢 WMI 响应永久拒绝合法监听。`scripts/windows-listener-owner.test.mjs` 包含真实临时回环监听的归属、非监听连接、关闭后失效、真实祖孙进程监听及父链查询回归；本机耗时测量不代表其他 Windows 环境或真实考试客户端的端到端启动耗时。
 
 原生宿主的 HTTP 请求和 WebSocket Upgrade 均按一次总截止时间执行，连接、发送、分块接收不会重新开始计时，并受本次 `--duration` 的剩余时间限制。调试版本尚未就绪时，报告分别记录 `client-exit-before-endpoint`（客户端已结束）、`duration-before-endpoint`（运行时长已到）或 `endpoint-unavailable`（调试等待截止），避免把不同停止原因统一写成等待超时。
 
@@ -382,7 +409,7 @@ Node 宿主在每轮 target 刷新和 WebSocket 建连前仍实时查询监听�
 
 CDP 断开时关闭旧页面会话；target 仍存在则在下一轮枚举重新连接。初次连接、重连和顶层导航后都会延迟检查 bootstrap/bundle，避免已有 bootstrap 不再发送 `ready` 时漏注入。同一执行上下文的并发 `ready` 合并为一次业务注入；上下文销毁或会话关闭后，迟到结果作废，停止后续策略切换及重试。DOM script 注入使用执行完成标记识别 CSP 阻止或脚本异常，失败后按所选策略回退，不把无异常的 CDP 响应当作脚本已成功执行。配置广播使用 `{kind:"config", values:...}` 包装；原生宿主的完整快照另带 `replace:true` 以删除已移除的旧共享键，不带该标记时保留增量合并语义。同实例重连复用已有配置桥水合最新完整快照，不重复安装监听或面板。
 
-运行报告累计保留历次 target 会话的统计；断线重连或页面关闭不会抹去此前成功注入的计数，也不会因此误报“没有完成任何业务注入”。
+运行报告累计保留历次 target 会话的统计；断线重连或页面关闭不会抹去此前成功注入的计数，也不会因此误报“没有完成任何业务注入”。Node 普通运行/attach 报告与列表报告同样包含 `version:"6.2.0"` 与 `host:"node"`，与原生报告的 `version`/`host:"native"` 对应，便于工具按统一字段区分宿主类型与版本。
 
 #### 面板和答题
 
@@ -392,7 +419,7 @@ CDP 断开时关闭旧页面会话；target 仍存在则在下一轮枚举重新
 | `--panel-collapsed` / `--panel-expanded` | 默认折叠 | 设置首次出现时的展开状态。 |
 | `--panel-top <px>` / `--panel-right <px>` | `16`，`0-10000` | 设置面板距视口上边和右边的距离。 |
 | `--panel-width <px>` | `460`，`320-800` | 设置面板宽度。 |
-| `--panel-theme <name>` | `pink` | 预留主题名；当前页面仍使用内置主题样式。 |
+| `--panel-theme <name>` | `pink` | 内置浅色主题：`pink`（默认）/`blue`/`green`。业务面板与 bootstrap 折叠壳使用同一色板并在共享设置热更新后重绘；未知名称回退 `pink`，自定义 CSS 不生效。 |
 | `--answer-mode auto\|manual` | `auto` | 自动模式按页面设置流程运行；manual 由快捷键为题目处理发放许可。 |
 | `--answer-key <shortcut>` | `F8` | 手动模式快捷键；示例 `Ctrl+Alt+Shift+S`。仅支持一个基础按键，可组合 Ctrl/Alt/Shift/Win。方向键推荐使用 `ArrowUp` / `ArrowDown` / `ArrowLeft` / `ArrowRight`，同时兼容 `Up` / `Down` / `Left` / `Right`。 |
 | `--answer-threads <n>` | `4`，`1-4` | 每次手动许可放行/并行处理的题目数量；超出范围或非整数直接报错。同一分页任务保留未用许可，新建重答任务不继承旧批次余量。 |
@@ -412,25 +439,29 @@ CDP 断开时关闭旧页面会话；target 仍存在则在下一轮枚举重新
 | `--diagnose` / `--no-diagnose` | 正式启动默认开启 | 开启或关闭渲染诊断。命令行开关覆盖 JSON 值。 |
 | `--diagnostics-dir <path>` | `windows/data/diagnostics/<timestamp>` | 指定诊断图片和 JSON 的输出目录。 |
 | `--report <path>` | 不生成 | 将运行报告写入指定路径。 |
-| `--execution-mode normal` | `normal` | 当前唯一支持的执行模式。`memory`、`delete-suspend`、`--memory-exec` 和 `--delete-suspend` 会明确报错，不会静默降级。 |
+| `--execution-mode normal\|memory` | `normal` | `normal` 为普通可审计运行；`memory`（等价 `--memory-exec`）表示宿主侧零落盘：不创建/更新配置与数据目录，不写日志、诊断、报告或扫描缓存，客户端仍按正常方式启动并显示在进程列表中。`delete-suspend` / `--delete-suspend` 仍明确报错。 |
 | `--stop-client-on-exit` | 关闭 | 宿主退出时结束本次启动的客户端进程树。 |
 | `--dpi-aware` | 关闭 | 本次启动临时添加 HIGHDPIAWARE 兼容层，进程创建后立即恢复原注册表值。 |
 | `--port <n>` | `0` | `0` 使用自动端口；CEF 75 普通启动指定端口范围为 `1024-65534`。CLI、JSON 与生成器均校验；仅测试用的 `--attach` 保持 `1-65535`。 |
 | `--assets <dir>` | `dist-windows` | 指定注入资源目录。 |
 | `--duration <ms>` | `0`，不限时 | 测试模式运行指定时长后退出；仅接受 `0-2147483647` 整数毫秒，两条宿主一致。 |
 | `--attach <port>` | 不启用 | 仅测试/调试连接已存在端点；不会启动客户端或校验进程归属。 |
-| `--self-check` / `--help` | 关闭 | 只做环境检查或输出参数帮助。 |
-| `--capabilities` | 关闭 | 输出机器可读的能力标记。Node 宿主列出普通运行、扫描、参数生成器与（Windows）原生选择窗口；启动清理、内存执行、删除挂起和自毁均标记为不支持，并保留设计 schema。原生宿主单独输出自身能力，不得把两者的已支持项合并推断。 |
+| `--self-check` / `--help` | 关闭 | 只做环境检查或输出参数帮助。Node 自检默认保持只读：不创建数据目录、日志、诊断或配置（与原生自检对齐）；显式 `--report` 仍写运行报告（自检报告含 `version:"6.2.0"`/`host:"node"`），显式 `--log` 才写文件日志，`--no-disk-write` 继续禁止所有落盘。 |
+| `--print-effective-config` | 关闭 | 只输出合并后的共享设置 JSON（单行）后以 0 退出；不扫描、不启动客户端、不申请 UAC、不写日志/配置/报告，`--quiet` 不抑制该输出。两种宿主语义一致。原生宿主把页面共享设置中由类型化字段托管的键（extension-enabled、windows-panel-*、windows-answer-* 等）从原始快照中过滤后再统一输出，避免同一 JSON 出现重复键；未托管键（如题库服务地址/密钥、未知共享键）原样保留。输出可能包含敏感共享设置，请勿外发。 |
+| `--version` / `-v` | 关闭 | 只输出版本号 `6.2.0`（单行）后退出，不扫描、不启动客户端、不写日志/配置/诊断；原生宿主同样支持。 |
+| `--capabilities` | 关闭 | 输出机器可读的能力标记。Node 宿主列出 `executionModes:["normal","memory"]`、扫描、参数生成器、原生选择窗口，以及 `configReload`/`configPersistence`/`fileLogging`/`runReport`/`pageRenderDiagnostics`/`pageScreenshots`/`windowDiagnostics`/`renderDiagnostics`/`retainData`/`deleteConfig` 等已支持能力；删除挂起、启动清理和自毁均标记为不支持，并保留设计 schema。原生 capabilities 同样输出 `executionModes`、`memory` 与 `deleteSuspend:false`。原生宿主单独输出自身能力，不得把两者的已支持项合并推断。新增/移除能力时必须同步该输出与 `windows-host.test.mjs` 的内容断言。 |
 | `--elevate-on-start` | 关闭 | 两种宿主均在扫描和 GUI 前请求管理员权限；JSON 字段为 `elevateOnStart`。已提升时不重复请求，只读模式不请求；与 `--no-elevate` 冲突。 |
 | `--no-elevate` | 关闭 | 禁止自动申请 UAC；普通权限可启动的客户端照常运行，实际启动返回 Win32 `740` 时失败。 |
+| `--retain-data` / `--no-retain-data` | 默认保留 | 两种宿主均支持：`--no-retain-data` / JSON `retainData:false` 在普通退出时只删除本轮创建的日志、运行报告和诊断运行目录，不删除历史数据、整个数据目录、扫描缓存或 CXExam 文件。原生宿主递归删除本次诊断运行目录内的页面 JSON/PNG、窗口 JSON/BMP/PNG 与宿主摘要，只登记本轮真实创建的文件；UAC 交接时父实例清理自身产物，提升后的子实例负责最终收尾。 |
+| `--delete-config` | 关闭 | 两种宿主均支持：退出时删除显式 `--config` 指定的外部配置文件；必须同时给出 `--config`，且不能与 `--no-disk-write` 同用；默认配置路径不会被隐式删除。原生宿主在 UAC 交接时跳过父实例删除，由提升后的子实例执行。 |
 
 #### 禁用能力的参数设计
 
-以下是后续阶段的 schema 和设计默认值，**不是本阶段可执行功能**。Node 与原生入口都必须拒绝启动清理、内存执行、删除挂起和自毁请求。内部清理器或状态机的单元测试不代表发布入口已支持；本阶段也不自动把自毁请求转换为另一种执行模式。
+以下是删除挂起/启动清理/自毁的 schema 和设计默认值，**不是本阶段可执行功能**。Node 与原生入口都必须拒绝这些请求；内存执行已支持并按零落盘方式运行。内部清理器或状态机的单元测试不代表发布入口已支持；本阶段也不自动把自毁请求转换为另一种执行模式。
 
 | 能力或参数 | 设计值 | 当前行为 |
 | --- | --- | --- |
-| `--execution-mode memory`、`--memory-exec` | 内存执行 | 启动前报错。 |
+| `--execution-mode memory`、`--memory-exec` | 内存执行 | **已支持**：宿主零落盘，客户端正常可见启动；不创建配置/数据目录，不写日志/诊断/报告/扫描缓存。 |
 | `--execution-mode delete-suspend`、`--delete-suspend` | 删除挂起 | 启动前报错。 |
 | `--wipe-owned-files-on-start` | 关闭 | 设计为启动清理宿主登记的自有文件；当前拒绝，不执行删除。 |
 | `--wipe-failure-policy retry\|background\|ignore\|abort` | `retry` | 设计为删除失败处理策略；当前拒绝。 |
@@ -459,21 +490,21 @@ Node 模式需要 Node.js 22+，默认根据 HTML 所在位置定位 `windows\ho
 
 PowerShell 输出兼容 Windows PowerShell 5.1 和 PowerShell 7：通过 `ProcessStartInfo` 直接启动 `node.exe` 或原生 EXE，显式关闭 shell 执行，按 Win32 参数规则保留 JSON 双引号、中文、空格、单引号、尾反斜杠与 shell 字符，等待结束后设置 `$LASTEXITCODE`。不要把内联 JSON 改回 `start-windows.cmd` 的 `%*` 转交链路，普通 PowerShell 单引号引用不能保证该链路保留 JSON。cmd 输出为单行直接宿主命令；遇到内联 JSON、命令解释符、百分号、感叹号、双引号、换行、尾反斜杠参数或 UNC 工作目录时停止导出 cmd，使用 PowerShell 输出或配置文件。
 
-页面按客户端扫描 / 配置和数据 / 执行模式 / 面板 / 答题 / 日志与诊断 / 启动清理 / 自毁分组，提供 8 个预设。绝对静默型只生成下方第一阶段普通启动子集；友好交互型、懒人型、手动答题型、仅扫描型、直接路径型和全盘扫描型均为普通运行。**启动清理型（`startupClean`）是不可执行的设计预设**：选中后说明缺失能力并清空命令与 JSON 输出，不能生成去掉清理开关的普通命令冒充清理启动。
+页面按客户端扫描 / 配置和数据 / 执行模式 / 面板 / 答题 / 日志与诊断 / 启动清理 / 自毁分组，提供 8 个预设。执行模式可选普通运行或内存执行（宿主侧零落盘）；选择内存执行时生成器会同时输出 `--execution-mode memory` 与 `--no-disk-write`，并拒绝日志/诊断/报告等落盘请求。绝对静默型只生成下方第一阶段普通启动子集，并为 Node 宿主附加 `--hide-console`（原生 EXE 无控制台，不附加该参数；原生宿主选择该开关会被校验阻止），配合发布包 `start-windows-silent.cmd` 可无黑框启动；友好交互型、懒人型、手动答题型、仅扫描型、直接路径型和全盘扫描型均为普通运行。**启动清理型（`startupClean`）是不可执行的设计预设**：选中后说明缺失能力并清空命令与 JSON 输出，不能生成去掉清理开关的普通命令冒充清理启动。
 
-实时校验包括客户端选择互斥、`--no-disk-write` 冲突、答题线程/面板宽度/清理重试范围、内联 JSON 的范围/枚举/类型、`--delete-config` 与 `--config` 关联、归一化后的答题/自毁快捷键冲突、非法序号和以 `--` 开头的参数值。只导出已支持的普通启动、扫描、面板、答题、日志、诊断和普通数据生命周期参数；面板主题仍为预留接口。启动清理、内存执行、删除挂起和自毁控件显示“当前宿主不可执行”，即使从内联 JSON 或程序化方式请求也必须阻止导出。生成结果由宿主解析器回归校验。
+实时校验包括客户端选择互斥、`--no-disk-write` 冲突、答题线程/面板宽度/清理重试范围、内联 JSON 的范围/枚举/类型、`--delete-config` 与 `--config` 关联、归一化后的答题/自毁快捷键冲突、非法序号和以 `--` 开头的参数值。只导出已支持的普通启动、内存执行、扫描、面板、答题、日志、诊断和普通数据生命周期参数；面板主题只导出 `pink`/`blue`/`green`（留空使用 `pink`，其他名称阻止导出）。支持 `--dpi-aware`（两种宿主，原生宿主与 `--no-disk-write` 互斥）和 Node 专属 `--hide-console` 静默控制台开关；原生宿主选择静默控制台会被实时校验阻止。删除挂起、启动清理和自毁控件显示“当前宿主不可执行”，即使从内联 JSON 或程序化方式请求也必须阻止导出；内存执行会生成零落盘命令与 JSON。生成结果由宿主解析器回归校验。
 
-原生模式另行校验自身入口的边界：面板坐标/宽度必须是整数，序号最大 `2147483647`，快捷键使用原生支持的 `Ctrl` / `Alt` / `Shift` / `Win` 与一个基础按键，不能重复修饰键。原生内联 JSON 不接受未知顶层键，也会校验被 CLI 覆盖前的 JSON 类型。路径参数最多为 1023 个 UTF-16 字符，Browser 文本、主题和快捷键最多为 127 个；表单与 JSON 使用相同限制。导出 JSON 会按原生 CLI 的覆盖规则规范化客户端选择参数族及诊断反向别名，避免命令可运行而 JSON 冲突。原生 `--no-retain-data` / `--delete-config` 仍未接入，表单中禁用这些控件；既有 Node 清理请求或内联 JSON 含这些请求时阻止导出，不能悄悄去掉参数。可切回 Node 取消选项或重置。原生诊断仅为页面布局采样，不含窗口 DPI 和截图；选择“友好交互型”也不会改变这个能力边界。
+原生模式另行校验自身入口的边界：面板坐标/宽度必须是整数，序号最大 `2147483647`，快捷键使用原生支持的 `Ctrl` / `Alt` / `Shift` / `Win` 与一个基础按键，不能重复修饰键。原生内联 JSON 不接受未知顶层键，也会校验被 CLI 覆盖前的 JSON 类型。路径参数最多为 1023 个 UTF-16 字符，Browser 文本、主题和快捷键最多为 127 个；表单与 JSON 使用相同限制。导出 JSON 会按原生 CLI 的覆盖规则规范化客户端选择参数族及诊断反向别名，避免命令可运行而 JSON 冲突。原生宿主同样支持 `--no-retain-data` / `--delete-config`（后者要求显式 `--config` 且不能与 `--no-disk-write` 同用），表单在两种宿主下都可用，切换宿主不会静默丢弃清理请求。原生诊断现包含页面布局采样、页面 PNG 截图与自有启动窗口 DPI/BMP（`pageScreenshots:true`、`windowDiagnostics:true`），仍不采集正文/URL/窗口标题；选择“友好交互型”也不会改变这个能力边界。生成器中的 `--dpi-aware` 表示客户端 DPI 兼容层，与原生宿主界面自身的高 DPI 感知（`highDpiUi:true`）不是同一概念。
 
 常规路径扫描会检查桌面、OneDrive Desktop、Program Files、Program Files (x86)、AppData/ProgramData，以及所有可识别固定磁盘根目录；每个根目录只检查根目录自身和一级直接子目录。若常规扫描找到候选，默认不递归全盘。常规无候选时 `fallback-all` 才递归固定磁盘；`all` 直接全盘扫描。扫描结果会按模式写入数据目录的 `scan-cache.json`，缓存默认 5 分钟有效；命中前逐个检查文件仍存在且 PE 架构未变化，任何候选失效、缓存过期或解析失败都会自动实时重扫。缓存还会核对当前常规根目录、固定磁盘及目录排除策略；这些范围变化或旧版缓存会实时重扫。默认 `fallback-all` 可复用已完整完成根目录和一级子目录扫描的常规命中结果；提前停止的递归结果不缓存，不能冒充完整候选列表。`--no-scan-cache` 和 `--no-disk-write` 都完全禁止缓存读写。`--ui cli`、`--ui gui` 或 `--select-client` 会显示完整候选列表；`--select-client`/`--ui gui` 使用 Windows 原生选择窗口（支持手动浏览），即使扫描没有候选也可以手动浏览。终端提示则支持输入列表序号或带引号的手动 `CXExam.exe` 路径。`--ui auto` 优先使用配置中的客户端路径；没有配置路径时，交互终端提示选择，Windows 非交互环境显示原生选择窗口，quiet/client-first 模式则直接使用推荐候选。
 
 #### 启动示例
 
-以下保留完整目标设计，并提供多种本阶段可执行的普通启动示例。目标设计中的启动清理、内存执行和自毁参数当前均会明确报错；生成器不会为这些请求导出可运行命令。
+以下保留完整目标设计，并提供多种本阶段可执行的普通启动/内存执行示例。目标设计中的启动清理和自毁参数当前均会明确报错；内存执行（不含启动清理/自毁）可执行。生成器不会为启动清理/自毁请求导出可运行命令。
 
 **1. 绝对静默型**
 
-最终目标设计（不可执行示例）：虽然原生原型现已内嵌资源，以下内存执行、启动清理和自毁仍未实现；Node 与原生入口都会明确拒绝，不会静默降级。
+最终目标设计（不可执行示例）：以下组合包含启动清理和自毁，当前仍未实现；Node 与原生入口都会明确拒绝，不会静默降级。其中 `--execution-mode memory` 本身已支持，可单独使用。
 
 ```powershell
 & "C:\Tools\chaoxing_plus.exe" `
@@ -521,7 +552,17 @@ PowerShell 输出兼容 Windows PowerShell 5.1 和 PowerShell 7：通过 `Proces
 
 第一阶段行为：先扫描当前用户实际桌面（支持重定向）、OneDrive Desktop、Program Files、Program Files (x86)、AppData/ProgramData 和所有固定磁盘根目录的一级子目录；常规扫描有候选时不进行全盘递归，常规无候选时才进入全盘递归；全盘遇到第一个 x86 立即使用，只有 x64 时使用第一个 x64。此示例使用 `--quiet --client-first`，无候选时静默放弃启动并以退出码 0 结束；普通交互模式则提示手动选择或报告启动错误。`--list-clients` 始终列出扫描结果后退出。不写宿主日志、诊断、报告，不显示面板；`Ctrl+Alt+Shift+S` 每次授权 1 道题；自毁相关参数当前会被拒绝。**永远不删除 CXExam 文件。**
 
-**2. 友好交互型**
+内存执行示例（可执行）：宿主侧零落盘、客户端仍按正常方式启动并显示在进程列表中；不创建/更新配置与数据目录，不写日志、诊断、报告或扫描缓存：
+
+```powershell
+& ".\start-windows.cmd" `
+  --execution-mode memory `
+  --scan-mode common `
+  --client-first `
+  --quiet
+```
+
+内存执行不改变 UAC、客户端注入和页面行为；它不是反检测模式，不隐藏进程，也不删除 CXExam 文件。**2. 友好交互型**
 
 ```powershell
 & ".\start-windows.cmd" `
@@ -662,7 +703,7 @@ $hostProcess.Dispose()
 
 Node 与原生宿主均在 target 刷新和 WebSocket 连接前重新检查监听进程归属；查询失败或归属变化时关闭已有会话，等待后续轮询重新验证，不能沿用启动时的结果。Node 定时轮询不会重叠；target 的 WebSocket 只接受指定端口的 `ws://127.0.0.1` 或 `ws://localhost`，后者固定连接已校验的 IPv4 回环地址。`--attach` 仍是显式调试例外，不检查进程归属，但保留本机同端口限制。发送命令时发现 WebSocket 已进入关闭状态，会立即取消等待请求并通知重连，不再等待默认命令超时。
 
-Node 的普通启动归属检查目前要求监听 PID 等于本次直接启动的 PID；如果客户端把调试监听交给子进程，Node 会拒绝连接。原生宿主另以保留句柄、创建时间和父子链验证本次启动的后代进程。自有父子进程测试已确认这一差异，但尚无证据表明客户端 2 使用了该交接方式；不能用当前父 PID 相同或关闭归属校验来推断安全接管。
+Node 与原生宿主均接受本次启动 PID 及其后代进程作为调试监听所有者。Node 先精确比较直接 PID；不同时再用有界父链查询（最多 8 层）验证父子关系与创建时间顺序，确认成功后按监听 PID 缓存，失败结果只在短 TTL 内缓存后重试；父链查询依赖 Windows PowerShell/WMI，单次可能需要数秒且只在监听 PID 不同于启动 PID 时发生，查询失败、链不连续、创建时间倒置或深度超限一律拒绝连接。原生宿主另以保留句柄、创建时间及进程树枚举验证本次启动的后代进程。自有祖孙进程测试已确认 Node 后代链校验，但尚无证据表明客户端 2 使用了该交接方式；不能用父 PID 相同或关闭归属校验来推断安全接管。
 
 数据生命周期示例（普通退出时清理本轮登记的宿主产物，并删除显式指定的外部配置）：
 
@@ -673,7 +714,7 @@ Node 的普通启动归属检查目前要求监听 PID 等于本次直接启动�
   --delete-config
 ```
 
-以上标明可执行的示例全部使用普通运行，不启用启动清理、内存执行、删除挂起或自毁。手动答题使用快捷键，自动模式按默认业务流程处理题目。`--no-disk-write` 关闭宿主日志、配置持久化、诊断、报告以及本项目业务 store 的本地持久化；CXExam 自身或其它页面脚本仍可能写盘。`--no-retain-data` 仅在普通退出时清理本轮登记产物，`--delete-config` 只删除显式 `--config` 指定的文件，两者都不等于启动清理或自毁。参数错误、环境检查或权限提示仍可能输出。
+以上标明可执行的示例使用普通运行或内存执行（零落盘、可见进程），不启用启动清理、删除挂起或自毁。手动答题使用快捷键，自动模式按默认业务流程处理题目。`--no-disk-write` 关闭宿主日志、配置持久化、诊断、报告以及本项目业务 store 的本地持久化；CXExam 自身或其它页面脚本仍可能写盘。`--no-retain-data` 仅在普通退出时清理本轮登记产物，`--delete-config` 只删除显式 `--config` 指定的文件，两者都不等于启动清理或自毁。参数错误、环境检查或权限提示仍可能输出。
 
 Windows 端与 Chrome 扩展的差异：
 
@@ -682,6 +723,7 @@ Windows 端与 Chrome 扩展的差异：
   - 把「超星学习助手」面板初始化为折叠状态（只显示标题条，点击标题条展开/折叠）；
   - 裁剪掉学习相关功能：媒体控制、学习流程、任务能力、完成后动作、日志窗口、题库缓存列表区块；
   - 保留：答题结果与题目详情、重答本题、暂停/继续答题、自动答题、AI 兜底搜题及失败行为、考试自动交卷、本地题库缓存开关、题库配置（baseurl/令牌）、AI 搜题设置组。
+- **面板主题**：`--panel-theme` 支持 `pink`（默认）/`blue`/`green`，由 `src/projects/common.ts` 的 `panelThemes` 色板统一提供表面、边框、文字与阴影；bootstrap 折叠壳用同名主题先行着色，业务包加载后复用同一节点并跟随共享设置热更新重绘。未知名称回退 `pink`，不加载外部 CSS。修改配色必须同时更新 bootstrap 与业务色板，并运行 `scripts/windows-panel-theme.browser.mjs`（真实构建包）与 `scripts/windows-bootstrap.test.mjs`。
 - **提前挂载折叠壳**：bootstrap 在新文档开始阶段就挂载折叠标题条（id 与业务面板一致），业务 bundle 加载后复用同一 DOM 节点填充内容，跨页面切换时面板不再长时间空白/消失。
 - Chrome 扩展没有 `__CX_WIN_HOST__`，保持原有的完整面板与默认展开行为。
 - 面板生命周期加固（两端共用，属于修复）：只有顶层 frame 能占用面板所有权；顶层面板被页面 SPA 替换 body 移除后会自动重挂载；顶层 READY 丢失时宿主会兜底注入 bootstrap/bundle。
@@ -752,7 +794,7 @@ try {
 }
 ```
 
-`diagnostics-tests.exe` 通过 `CX_NATIVE_DIAGNOSTICS_EXE` 纳入测试，检查实际文件写入、诊断 schema、CSS URL 拒绝、禁用开关和失败降级；其测试目录由 Node 驱动创建并清理。原生测试是 GUI 子系统程序，应使用 Node `spawnSync` 或 `Start-Process -Wait` 等待结束并读取真实退出码，不要将 PowerShell 直接调用后留下的旧 `$LASTEXITCODE` 当作测试结果。`windows-native-diagnostics.test.mjs` 还通过 `CX_NATIVE_HOST_EXE` 执行现代 Chromium 采样回归，覆盖顶层 bundle 确认、分数缩放、CSS URL 脱敏、诊断关闭和路径失败；未设置这些变量时会明确跳过。
+`diagnostics-tests.exe` 通过 `CX_NATIVE_DIAGNOSTICS_EXE` 纳入测试，检查实际文件写入、诊断 schema、CSS URL 拒绝、禁用开关、窗口 DPI/BMP 头、窗口 PNG 签名/IHDR/CRC/IEND 与 Node `zlib.inflateSync` 行解码、页面截图 base64/PNG 校验与失败降级；其测试目录由 Node 驱动创建并清理。原生测试是 GUI 子系统程序，应使用 Node `spawnSync` 或 `Start-Process -Wait` 等待结束并读取真实退出码，不要将 PowerShell 直接调用后留下的旧 `$LASTEXITCODE` 当作测试结果。`windows-native-diagnostics.test.mjs` 还通过 `CX_NATIVE_HOST_EXE` 执行现代 Chromium 采样回归，覆盖顶层 bundle 确认、分数缩放、CSS URL 脱敏、诊断关闭、路径失败以及 CDP `Page.captureScreenshot` 生成的 `render-diagnostics-page.png`（PNG 签名/IHDR/尺寸边界）；未设置这些变量时会明确跳过。
 
 `elevation-tests.exe`（`CX_NATIVE_ELEVATION_EXE`）通过系统调用替身测试 token、`runas`、等待和取消，真实读取中文临时工作目录并验证参数逐项往返；`elevation-host-tests.exe`（`CX_NATIVE_ELEVATION_HOST_EXE`）编译实际宿主代码，验证 740 交接、父资源关闭、保留已选客户端、不重复选择、父报告不覆盖以及 `WinMain` 退出码。两者均不触发真实 UAC，不启动考试客户端；`CX_NATIVE_HOST_EXE` 还验证能力标记及内部参数在只读动作中的拒绝。
 
@@ -786,6 +828,52 @@ try {
 
 全量浏览器首轮曾发现旧重连夹具把主动中断在途注入也误要求为零失败；新增可控断线确认失败发生于断开与恢复之间，普通到期取消仍要求零失败，原生生产统计没有修改。当前本地验证 EXE 为 542208 字节，SHA256 为 `5C9DABAB37F5E7F3D02F81FEFA93428912513F2D3A8576DB9C59F181996C5576`，导入表仍只含系统 DLL。本地构建配置及产物没有纳入 Git；本阶段新增日志尚未在真实 CEF75 登录后验证，等待人工配合。
 
+2026-10-29 原生数据生命周期验证记录：`--no-retain-data` / `--delete-config` 已在原生宿主接通（此前显式拒绝）。编译 `windows/native/build.ps1 -BuildTests` 退出 `0`；`options-tests.exe` 新增断言覆盖 no-retain-data 生效、delete-config 需显式 `--config`、与 `--no-disk-write` 冲突、JSON `retainData:false` / `deleteConfig:true`，执行退出 `0`；新增 `windows-native-lifecycle.test.mjs` 5/5 通过：只删除本轮创建的日志与报告、保留运行前已有文件、JSON 与 CLI 行为一致、只删除显式 `--config`、拒绝缺失 `--config` 或与 `--no-disk-write` 同用。`--capabilities` 新增 `retainData:true`、`deleteConfig:true`；生成器原生模式解除对应禁用并阻止无 `--config` 的 `deleteConfig`（生成器 36/36 通过）。全量：显式展开 74 个 `scripts/*.test.mjs`，763 项中 756 通过、0 失败、7 项可选 GUI 显示测试跳过；9 个浏览器回归文件 77/77 通过。类型检查、扩展构建、Chrome75 构建、Node 自检、原生自检及 `git diff --check` 均退出 `0`。本轮验证 EXE 为 545280 字节，SHA256 为 `433C42097891D716F16A3DD954F07847B8631D5EC2A0714342E0831711E3B472`，导入表仅含系统 DLL。默认配置“仅清理本轮新建文件”的路径与 UAC 交接时由提升子实例执行最终删除的行为目前只有代码审查与命令行生命周期回归，未在真实页面同步/UAC 人工审批场景自动化覆盖；真实 CEF75 登录后验收仍未执行。
+
+2026-10-29 Node `--print-effective-config` 验证记录：Node 宿主补齐与原生一致的只读配置输出（此前仅原生支持），把 `--print-effective-config` 加进 Node 参数、帮助与文档，并确保它在完整配置合并之后、日志/扫描/UAC/客户端启动之前返回。输出为单行合并后共享设置 JSON：`--options-json` 覆盖 `--config`，独立 CLI 覆盖内联 JSON；`--quiet` 不抑制输出且不产生额外日志行；不扫描、不启动客户端、不申请 UAC、不写日志/配置/报告/诊断，`--data-dir` 不被创建、`--config` 文件不被改写；与 `--list-clients` 同时使用时仍优先输出并退出（约 377ms）。新增 `windows-print-effective-config.test.mjs` 3/3 通过。全量：显式展开 75 个 `scripts/*.test.mjs`，766 项中 759 通过、0 失败、7 项可选 GUI 显示测试跳过；9 个浏览器回归文件 77/77 通过。类型检查、Node 自检、原生自检及 `git diff --check` 均退出 `0`。真实 CEF75 登录后验收仍未执行。
+
+2026-10-30 Node 监听归属后代链验证记录：Node 普通启动现在接受本次启动 PID 及其后代进程作为调试监听所有者（此前仅精确 PID）。监听 PID 等于启动 PID 时不启动任何进程查询；不同时用有界父链（≤8 层）与创建时间顺序验证，Windows PowerShell `Get-CimInstance Win32_Process` 查询按监听 PID 缓存，失败结果保留 30 秒短 TTL 后重试；查询失败、父子链断裂、深度超限或创建时间倒置均拒绝并关闭旧会话。新增 `windows-listener-owner.test.mjs` 四项回归（父链解析、PowerShell 查询直接调用与失败关闭、验证器缓存与降级语义、真实祖孙进程监听端到端），并更新注入生命周期夹具、AGENTS 规则与本文档。全量：显式展开 75 个 `scripts/*.test.mjs`，770 项中 763 通过、0 失败、7 项可选 GUI 显示测试跳过；9 个浏览器回归文件 77/77 通过；类型检查、`npm run build`、Chrome75 构建、Node 自检、原生自检及 `git diff --check` 均退出 `0`。本机 Windows PowerShell `Get-CimInstance` 单次父链查询实测约 5.6-5.9 秒，只在监听 PID 不同于启动 PID 时发生一次，不代表其他机器或真实客户端启动耗时。该验证使用测试自有祖孙进程；尚无证据表明真实客户端 2 使用子进程监听，真实 CEF75 登录后验收仍未执行。
+
+2026-10-31 面板主题（`--panel-theme`）验证记录：该参数从“预留主题名”改为实际生效，支持 `pink`（默认）/`blue`/`green` 三个内置浅色主题。业务色板集中在 `src/projects/common.ts` 的 `panelThemes`，面板重绘时按共享设置解析并写入 `data-chaoxing-plus-theme`，面板内阴影改用 `shadowRgb` 派生的 `panelShadowColor`，换主题不再残留粉色阴影；bootstrap 折叠壳用同名色板先行着色，并在 config 热更新时同步刷新。未知/空主题名回退 `pink`，不加载外部 CSS；生成器新增主题下拉建议与三值校验（非法名称阻止导出），Node/原生帮助列出主题名。新增 `scripts/windows-panel-theme.browser.mjs`（真实构建包 + 真实 Chromium）2/2：blue/green 面板边框与主题属性生效、未知值回退 pink、运行中热更新重绘；`windows-bootstrap.test.mjs` 新增折叠壳主题/回退/热更新测试；`pink-panel-ui.test.mjs` 新增色板驱动断言。全量：显式展开 75 个 `scripts/*.test.mjs`，772 项中 765 通过、0 失败、7 项可选 GUI 显示测试跳过；10 个浏览器回归文件 79/79 通过；类型检查、`npm run build`、Chrome75 构建、原生 `-BuildTests`（内嵌新 bootstrap，EXE 548864 字节）、Node 自检、原生自检及 `git diff --check` 均退出 `0`。该验证使用本地 Chromium 构建页，不是真实 CEF75 客户端登录后验收；真实考试页面上的主题观感与可读性仍需人工确认，未支持暗色主题或自定义 CSS。
+
+2026-11-01 发布打包与 CI 验证记录：新增 `scripts/package-windows.mjs`（`npm run release:windows`）生成原生 EXE + Node 宿主双入口发布包，包含 `release-info.json`、`SHA256SUMS.txt` 与 Windows `Compress-Archive` zip；Node 宿主只带 `main.mjs` 递归运行闭包与 `launch-client.ps1` / `selection-window.ps1` / `system-probe.ps1`，`self-destruct.mjs`、`wipe.mjs`、`owned-files.mjs`、`chrome75-syntax.mjs` 等内部原型/构建期模块不进入发布包，检测到运行闭包包含内部原型或外部 npm 依赖时失败关闭（`--skip-native` 可生成仅 Node 包，`--skip-zip` 仅生成暂存目录）。新增 `.github/workflows/ci.yml`：`windows-latest` 上执行 `npm ci` → 类型检查 → 扩展/Windows/原生构建 → 全量单元测试（全部原生测试变量指向本轮编译产物）→ 10 个浏览器回归 → 发布包冒烟并上传 artifact。新增 `scripts/windows-release-package.test.mjs` 5/5：双入口包结构、`SHA256SUMS` 逐文件校验、zip 条目、仅 Node 模式、缺失资源/内部原型/外部依赖失败关闭、CI 工作流与发布脚本入口契约、原生构建脚本纯 ASCII 且不依赖模块 cmdlet。构建脚本 `windows/native/build.ps1` 的 SHA256 输出由 `Get-FileHash` 改为系统 `certutil.exe -hashfile`，修复本机曾出现 `Get-FileHash CommandNotFound` 导致 `npm run build:native` 误报失败；同时保持 `.ps1` 纯 ASCII（中文字面量曾直接导致 PowerShell 5.1 解析失败）。实际打包产物 27 个文件、原生 EXE 548864 字节，解压后 Node 宿主 `--self-check` 与原生 `--self-check` 均退出 `0`。全量：显式展开 76 个 `scripts/*.test.mjs`，777 项中 770 通过、0 失败、7 项可选 GUI 显示测试跳过；10 个浏览器回归文件 79/79 通过；类型检查、`npm run build`、Chrome75 构建、`npm run build:native`、Node 自检、原生自检及 `git diff --check` 均退出 `0`。本记录仍是本地/CI 模拟验证；CI 通过不代表真实 UAC 审批、真实 CEF75 登录后页面、旧 Windows 干净环境或真实考试客户端验收已完成。
+
+2026-11-02 全盘扫描进度/取消验证记录：Node 选择窗口点击全盘扫描后，宿主在执行递归扫描期间显示独立的 WinForms 进度窗口（`windows/host/scan-progress-window.ps1` / `.mjs`），实时展示“已检查目录数/发现候选数”；用户点击取消或关闭窗口时写入 `cancel.marker`，宿主通过 `AbortSignal` 中止 discovery（`AbortError`），保留原候选并重新打开选择窗口。发现器新增 `onProgress` 与 `signal`（目录数/候选数/elapsedMs，200ms 节流），进度窗口不可用时降级为无界面扫描并每 2 秒输出进度日志。新增 `windows-scan-progress-window.test.mjs` 6 项（5 通过 + 1 项 `CX_TEST_NATIVE_WINDOW` 真实窗口冒烟默认跳过）：脚本纯 ASCII、payload/状态校验、控制器状态/取消文件/临时目录清理协议、真实 PowerShell 控件探针与可选真实可见性；`windows-client-discovery.test.mjs` 新增进度回调与取消回归，`windows-client-selection.test.mjs` 新增进度窗口完成/取消集成（共 21 项）。全量：显式展开 77 个 `scripts/*.test.mjs`，787 项中 779 通过、0 失败、8 项可选 GUI 显示测试跳过；10 个浏览器回归 79/79；类型检查、扩展构建、Chrome75 构建、Node 自检、原生自检、发布包重打并解压自检及 `git diff --check` 均退出 `0`。原生 EXE 选择流程仍无进度/取消窗口，属已记录的 Node/原生差异；该验证使用测试驱动的取消与控件探针，真实窗口可见性仅在 `CX_TEST_NATIVE_WINDOW=1` 时验证，真实 CEF75 客户端登录后验收仍未执行。
+
+2026-12-04 内存执行（executionMode=memory）验证记录：按用户确认的语义实现内存执行——宿主侧零落盘（不创建/更新配置与数据目录，不写日志、诊断、报告、扫描缓存），客户端仍用正常官方调试参数启动并显示在进程列表中，不隐藏进程、不删除 CXExam 文件。Node：`--execution-mode memory` / `--memory-exec` / JSON `executionMode:"memory"` / `memoryExec:true` 均可用，强制 `noDiskWrite`；`--capabilities` 输出 `executionModes:["normal","memory"]` 与 `memoryExecution:true`；普通/attach/列表报告含 `executionMode`。原生：options CLI/JSON 同一语义，finalize 强制 noDiskWrite，帮助与 capabilities 同步，报告含 `executionMode`；编译 options-tests 覆盖 memory/zero-disk 与 delete-suspend 拒绝。生成器执行模式支持 memory，并生成 `--execution-mode memory --no-disk-write`、拒绝日志/诊断/报告冲突。删除挂起/启动清理/自毁仍显式拒绝。测试：`windows-host.test.mjs` 实跑 memory 列表不写报告/数据目录；`windows-native-options.test.mjs` 实跑四种 memory 入口与 capabilities；`windows-parameter-generator.test.mjs` 断言 memory 命令/JSON；编译 options-tests 通过。全量回归：单元 809 项中 800 通过、0 失败、9 项可选 GUI 跳过（78 文件），10 个浏览器回归 79/79；`tsc --noEmit`、扩展构建、Chrome75 release 构建、原生构建、发布包重打、包内 `verify-release.mjs`、包内 Node/原生自检、仓库 Node/原生自检与 `git diff --check` 全部退出 0，发布包无 `windows/data/` 与 `.log`。未在真实 CEF75/UAC/旧 Windows 环境重复验收。
+
+2026-12-03 第一阶段最终验收审计记录：对 docs/README/AGENTS 的“未实现/不支持”声明逐项复核，剩余项仅为第一阶段按 AGENTS 必须显式拒绝的内存执行、删除挂起、启动清理、自毁（CLI/JSON/配置/capability/生成器均拒绝且不静默降级）；运行时代码（`windows/host/*.mjs`、`windows/native/*.c|h`、打包/校验脚本）无 TODO/FIXME/XXX。最终验收完整流水线（受限并发 4）：`tsc --noEmit`、扩展构建、Chrome75 release 构建、原生构建、全量单元 807 项中 798 通过/0 失败/9 项可选 GUI 跳过、10 个浏览器回归 79/79、发布包重打、包内 `verify-release.mjs`、包内 Node/原生 `--self-check`、包内 `--version`、仓库 Node/原生自检、`git diff --check` 全部退出 0；发布包发布信息为 `version=6.2.0`、payload 32 文件、SHA256SUMS 33 条、含 verifier/nodeSilent 入口、zip 约 469KB，包内无 `windows/data/` 与 `.log`。边界：真实考试客户端登录后页面、真实 UAC、旧 Windows/高分屏、真实 GitHub Actions 仍未由本机自动化验收，不能据此宣称已通过真实验收；内存执行/删除挂起/启动清理/自毁仍按第一阶段要求保持显式拒绝。
+2026-12-02 Node 自检报告版本/宿主字段验证记录：Node `--self-check --report` 报告此前只有 `mode:"self-check"`，缺少统一的 `version`/`host`，无法与普通/attach/列表报告一致区分宿主。现自检报告在 `mode` 后补 `version:"6.2.0"`、`host:"node"`；`windows-host.test.mjs` 自检用例断言两字段，实跑该文件 36/36 通过。全量 `scripts/*.test.mjs`（78 文件）单元 807 项中 798 通过、0 失败、9 项可选 GUI 显示测试跳过，10 个浏览器回归 79/79，类型检查、扩展构建、Chrome75 release 构建、原生构建、发布包重打与解压自检、发布包校验器、Node/原生自检及 `git diff --check` 全部退出 0。同一轮完整流水线另出现一次原生传输截止测试偶发（“native run deadline includes a slow HTTP target-list response”）：并行负载下从请求到进程退出的观测耗时超过原先 1500ms 断言上限（服务端仍延迟 2500ms，说明截止仍生效）。已将 `windows-native-transport.test.mjs` 四个截止松弛断言统一放宽到 2000ms（仍显著小于 2500ms 延迟响应，可区分截止生效与未生效），单独连跑两次 7/7 通过 + 1 项编译自检跳过。随后全量默认并发又出现一次 Chromium 诊断用例偶发（`windows-native-diagnostics.test.mjs` 的 no-disk-write 用例，单独连跑两次 7/7 通过），确认为本机默认并发下多个 Chromium/原生宿主用例同时启动导致的负载型时序问题。现将完整本地/CI 全量测试并发限制为 4（`node --test --test-concurrency=4`）：CI 单元与浏览器步骤、`windows-release-package.test.mjs` 契约断言同步；受限并发下全量单元 807/798/9、10 个浏览器 79/79 均稳定通过，类型检查、构建、发布包、自检与 `git diff --check` 全部退出 0。该验证覆盖自检报告 schema、截止测试与全量并发稳定性；未在真实客户端环境重复验收。
+2026-12-01 浏览器回归偶发（interrupted in-flight injection）稳定性修复记录：`windows-native-audit.browser.mjs` 的“compiled native reports an interrupted in-flight injection and recovers its live document”在完整并行流水线偶发失败（单独重跑与全部重跑均通过），根因是测试在代理断开 WebSocket 后等待原生宿主重连并补注入的 3 秒上限在并行负载下不足，且 `--duration 4000` 过于贴近测试尾部。现将该用例的 `--duration` 提升到 10000、重连后补注入等待上限提升到 8000，并注明并行负载原因；断言/事件计数逻辑不变。单独运行 `windows-native-audit.browser.mjs` 连续两次 13/13 通过；完整流水线 10 个浏览器套件 79/79 通过、0 失败。全量 `scripts/*.test.mjs`（78 文件）单元 807 项中 798 通过、0 失败、9 项可选 GUI 显示测试跳过，类型检查、扩展构建、Chrome75 release 构建、原生构建、发布包重打与解压自检、发布包校验器、Node/原生自检及 `git diff --check` 全部退出 0。该验证修复的是测试时序稳定性，不改变宿主行为；未在真实 CI runner 或真实客户端环境重复验收。
+2026-11-30 Node 运行报告版本/宿主字段对齐验证记录：Node 普通运行与 attach 运行报告此前没有 `version`/`host` 字段，工具无法像原生报告（`version:"6.2.0"`、`host:"native"`）那样直接区分宿主类型与版本；上轮新增的列表报告还使用 `hostVersion` 命名。现统一为 `version:"6.2.0"` + `host:"node"`：普通/attach 报告对象在 `mode` 后补齐两字段，列表报告由 `hostVersion` 改为 `version`（保留 `host`），文档同步。`windows-host.test.mjs` 的 attach 报告与列表报告用例分别断言 `host/version`；实跑该文件 36/36 通过。全量 `scripts/*.test.mjs`（78 文件）单元 807 项中 798 通过、0 失败、9 项可选 GUI 显示测试跳过；10 个浏览器回归在完整流水线首轮出现已知偶发（`windows-native-lifecycle.browser.mjs` 的“interrupted in-flight injection”在并行负载下 78/79），单独重跑 `windows-native-lifecycle.browser.mjs` 12/12、10 个浏览器套件全部重跑 79/79 通过，类型检查、扩展构建、Chrome75 release 构建、原生构建、发布包重打与解压自检、发布包校验器、Node/原生自检及 `git diff --check` 全部退出 0。该验证覆盖 Node 报告字段与原生 schema 对齐；未在真实客户端环境重复验收。
+2026-11-29 列表报告字段对齐验证记录：Node 列表报告此前只有 mode/scanMode/时间/success/total/candidates，缺少原生报告已有的 `host`、`version/hostVersion`、`stopReason`、`durationMs`，工具无法统一解析两端报告。现补上 `host:"node"`、`hostVersion:"6.2.0"`、`stopReason:"list-clients"`、`durationMs`，与原生 `mode/stopReason/host/version` 语义对应；`windows-host.test.mjs` 断言这些字段与 `durationMs >= 0`。实跑该文件 36/36 通过。全量 `scripts/*.test.mjs`（78 文件）单元 807 项中 798 通过、0 失败、9 项可选 GUI 显示测试跳过，10 个浏览器回归 79/79，类型检查、扩展构建、Chrome75 release 构建、原生构建、发布包重打与解压自检、发布包校验器、Node/原生自检及 `git diff --check` 全部退出 0。该验证覆盖列表报告字段一致性；未在真实客户端环境重复验收。
+2026-11-28 Node `--list-clients --report` 验证记录：原生宿主支持列表操作显式写报告，但 Node 的 `--list-clients` 分支在打印候选后直接返回，即使显式传 `--report` 也不生成报告（静默丢失用户请求）。现 `client-selection.mjs` 增加 `onListCandidates` 回调，列表模式打印后把候选的 path/name/machine 描述交给宿主；`main.mjs` 在 `--list-clients` 分支按显式 `--report` 写入 `mode: "list-clients"` 报告（scanMode、startedAt/finishedAt、success、total、candidates），`--no-disk-write` 仍优先抑制写入，未传 `--report` 行为不变。`windows-host.test.mjs` 新增真实列表运行回归：断言报告字段、total 与 candidates 一致、文件存在；并断言 `--no-disk-write` 下报告不创建；实跑该文件 36/36 通过。全量 `scripts/*.test.mjs`（78 文件）单元 807 项中 798 通过、0 失败、9 项可选 GUI 显示测试跳过，10 个浏览器回归 79/79，类型检查、扩展构建、Chrome75 release 构建、原生构建、发布包重打与解压自检、发布包校验器、Node/原生自检及 `git diff --check` 全部退出 0。该验证覆盖 Node 列表报告与 no-disk-write 抑制；未在真实客户端环境重复验收。
+2026-11-27 发布包版本一致性守卫验证记录：打包脚本此前只校验 `dist-windows/package-manifest.json` 的 `features.injectionLog`，不校验清单 `version` 与发布版本，本地残留旧 `dist-windows` 时可能把旧构建打成新版本号。现 `package-windows.mjs` 在清单解析后强制要求 `version` 存在且与 `package.json`/`--version` 完全一致，不一致或无版本时退出 2 并提示重新执行 `npm run build:windows -- --release`。`windows-release-package.test.mjs` 新增“拒绝与发布版本不一致的 dist 构建”用例（夹具清单 9.9.8、发布版本 9.9.9，断言退出 2 及错误信息包含两个版本与 build:windows 提示）；同时给 node-only 与失败关闭用例显式传入匹配的 `--version 9.9.9`。实跑该文件 7/7 通过，真实 `npm run release:windows`（清单 6.2.0）正常通过。全量 `scripts/*.test.mjs`（78 文件）单元 806 项中 797 通过、0 失败、9 项可选 GUI 显示测试跳过，10 个浏览器回归 79/79，类型检查、扩展构建、Chrome75 release 构建、原生构建、发布包重打与解压自检、发布包校验器、Node/原生自检及 `git diff --check` 全部退出 0。该验证覆盖版本一致性守卫；未在真实 CI runner 或真实客户端环境重复验收。
+2026-11-26 双宿主 `--version` 验证记录：Node 与原生宿主此前均无常见 CLI `--version` 约定，仅 `--help` 内出现版本号。现两端新增 `--version`/`-v`：Node 在参数解析层接受该开关，主入口在 help 之后、其他动作之前输出单行 `6.2.0` 并返回；原生在 options 层解析、宿主 help 之后输出 `6.2.0` 并返回，不进入普通运行/扫描/写盘流程。帮助文本与参数表同步；测试新增 Node 参数默认/开关解析、Node `--version` 实跑（输出 `6.2.0` 且不创建数据目录）、原生 `--version` 实跑（退出 0、stdout 6.2.0）、原生帮助包含 `--version`、原生提权只读清单加入 `--version`，编译 `options-tests.exe` 新增 CLI 层解析与默认关闭断言。实跑受影响套件 83 项中 82 通过、0 失败、1 项可选 GUI 跳过；原生 `--version` 实测 `EXIT=0 OUT=6.2.0`。全量并行首轮曾出现一次测试清理偶发：隐藏启动器探针写完后其 node 子进程仍短暂占用临时目录，`fs.rm` 报 `EBUSY`；已在静默启动器测试的临时目录清理加入 `maxRetries:10, retryDelay:100` 重试，重跑 9/9 通过。全量 `scripts/*.test.mjs`（78 文件）单元 805 项中 796 通过、0 失败、9 项可选 GUI 显示测试跳过，10 个浏览器回归 79/79，类型检查、扩展构建、Chrome75 release 构建、原生构建、发布包重打与解压自检、发布包校验器、Node/原生自检及 `git diff --check` 全部退出 0。该验证覆盖双宿主版本输出与只读行为；未在真实 CI runner 或真实客户端环境重复验收。
+2026-11-25 Node `--capabilities` 字段补齐验证记录：Node 宿主 `--capabilities` 原仅列出 `executionModes`/`scanner`/`parameterGenerator`/`nativeClientSelection` 四项，未暴露已实现的配置热更新、配置持久化、文件日志、运行报告、页面/窗口诊断、完整渲染诊断与数据生命周期能力。现按实际实现补齐 `configReload`、`configPersistence`、`fileLogging`、`runReport`、`pageRenderDiagnostics`、`pageScreenshots`、`windowDiagnostics`、`renderDiagnostics`、`retainData`、`deleteConfig`（不宣称未实现能力，unsupported schema 保持不变）。`windows-host.test.mjs` 新增内容回归：解析 JSON、断言 `hostVersion`/`executionMode`/`executionModes`/全部新增布尔能力与 Windows 原生选择窗口标记、`unsupported.implemented=false` 及 notes 非空；实跑该文件 34/34 通过。全量 `scripts/*.test.mjs`（78 文件）单元 803 项中 794 通过、0 失败、9 项可选 GUI 显示测试跳过，10 个浏览器回归 79/79，类型检查、扩展构建、Chrome75 release 构建、原生构建、发布包重打与解压自检、发布包校验器、Node/原生自检及 `git diff --check` 全部退出 0。该验证覆盖能力声明与实现一致性；未在真实 CI runner 或真实客户端环境重复验收。
+2026-11-24 原生 --print-effective-config 内容回归验证记录：此前 `windows-print-effective-config.test.mjs` 只覆盖 Node；原生该功能仅靠参数解析/提权列表间接覆盖，缺少内容断言。现补充两项原生用例：1) `--config` 设置 + `--options-json` 内联设置合并后输出单行 JSON，托管默认值（panel-theme/answer-threads）补齐、配置层与内联值生效、未托管 tiku/unknown 共享键保留、无重复键、`--quiet` 不抑制；读取配置前后内容一致、不创建 `--data-dir` 或额外文件。2) `--no-disk-write` 时输出 `windows-no-disk-write:true`、`windows-log-enabled:false`、extension-enabled true 且不写盘。实跑该文件 5/5 通过（原生用例在设置 `CX_NATIVE_HOST_EXE` 时执行，CI 会注入该变量）。全量 `scripts/*.test.mjs`（78 文件）单元 802 项中 793 通过、0 失败、9 项可选 GUI 显示测试跳过，10 个浏览器回归 79/79，类型检查、扩展构建、Chrome75 release 构建、原生构建、发布包重打与解压自检、发布包校验器、Node/原生自检及 `git diff --check` 全部退出 0。该验证覆盖只读输出与不写盘；未在真实客户端环境重复验收。
+2026-11-23 Node 自检只读对齐验证记录：Node `--self-check` 原默认会向 `windows/data/logs` 写入隐式日志（自检副作用、与原生“自检不写日志/诊断/配置”不一致）。现自检分支仅在显式 `--log` 时附加日志文件，默认不创建数据目录/日志；显式 `--report` 仍按用户要求写报告，`--no-disk-write` 继续禁止所有落盘。`windows-host.test.mjs` 的自检用例新增 `--data-dir` 隔离断言：默认自检后数据目录不存在；显式 `--log` 时日志文件存在。实跑 `windows-host.test.mjs` 33/33 通过。全量 `scripts/*.test.mjs`（78 文件）单元 800 项中 791 通过、0 失败、9 项可选 GUI 显示测试跳过，10 个浏览器回归 79/79，类型检查、扩展构建、Chrome75 release 构建、原生构建、发布包重打与解压自检、发布包校验器、Node/原生自检及 `git diff --check` 全部退出 0。该验证覆盖 Node 自检只读行为与显式落盘开关；未在真实 CI runner 或真实客户端环境重复验收。
+2026-11-22 发布包完整性自校验工具验证记录：新增无依赖脚本 `scripts/verify-release.mjs`，按同目录 `SHA256SUMS.txt` 逐文件校验 SHA-256；`package-windows.mjs` 新增 `--verifier`（默认 `scripts/verify-release.mjs`），把校验器复制到包根 `verify-release.mjs` 并纳入 payload 与校验清单，`release-info.json` 记录 `verifier`。`windows-release-package.test.mjs` 全链路验证：包内校验器自检退出 0 且输出“发布包完整性校验通过”，篡改已登记文件后退出 1 并报告“摘要不匹配”，released info 断言 `verifier`，zip 条目包含校验器；CI 发布包解压自检新增运行校验器步骤，必需文件列表加入 `verify-release.mjs`，契约测试断言工作流包含该校验器。实跑重建发布包后 `node release/chaoxing-plus-6.2.0-windows/verify-release.mjs` 通过（33 个登记文件）。全量 `scripts/*.test.mjs`（78 文件）单元 800 项中 791 通过、0 失败、9 项可选 GUI 显示测试跳过，10 个浏览器回归 79/79，类型检查、扩展构建、Chrome75 release 构建、原生构建、发布包重打与解压自检、发布包校验器与首跑配置模板验证、Node/原生自检及 `git diff --check` 全部退出 0。该验证覆盖本机发布包完整性工具；未在真实 CI runner 或真实客户端环境重复验收。
+2026-11-21 发布包卫生验证记录：发布包自检命令原先未带 `--no-disk-write`，Node 宿主 `--self-check` 会按默认日志策略向包内 `windows/data/logs/host-<epoch>.log` 写日志；实测构建后的发布目录出现该日志文件（属于自检副作用，不是打包内容）。现 CI 与文档的发布包 Node 自检统一改为 `--self-check --no-disk-write --quiet`，`windows-release-package.test.mjs` 新增断言：包内文件列表不得出现 `windows/data/` 前缀或 `.log` 文件。发布包构建后先做自带 checksum 自检、再做只读冒烟，避免包内出现运行期数据目录。全量 `scripts/*.test.mjs`（78 文件）单元 800 项中 791 通过、0 失败、9 项可选 GUI 显示测试跳过，10 个浏览器回归 79/79，类型检查、扩展构建、Chrome75 release 构建、原生构建、发布包重打与解压自检、发布包首跑配置模板生成验证、Node/原生自检及 `git diff --check` 全部退出 0；本轮发布目录复查无 `windows/data`。该验证覆盖本机发布包卫生；未在真实 CI runner 或真实客户端环境重复验收。
+2026-11-20 发布包首跑配置模板验证记录：发布包此前未携带 `windows/config.example.json`，打包后的 Node 宿主首次运行由 `ensureConfigFile()` 读取 `<包根>/windows/config.example.json` 失败后回退空模板，生成的 `windows/data/config.json` 缺少仓库内的 `settings` 示例块（实测 `hasExampleSettings=false`），与仓库运行行为不一致。现 `scripts/package-windows.mjs` 新增 `--config-example`（默认 `windows/config.example.json`），校验存在并复制到包内 `windows/config.example.json`；`windows-release-package.test.mjs` 夹具新增配置模板、全部打包调用传入该路径、断言包内文件内容逐字节一致，Node-only 包同样校验；CI 发布包必需文件检查加入该模板。全量 `scripts/*.test.mjs`（78 文件）单元 800 项中 791 通过、0 失败、9 项可选 GUI 显示测试跳过，10 个浏览器回归 79/79，类型检查、扩展构建、Chrome75 release 构建、原生构建、发布包重打与解压自检、发布包首跑配置模板生成验证（`ensureConfigFile` 生成配置包含 `settings` 示例块）、Node/原生自检及 `git diff --check` 全部退出 0。该验证覆盖打包与首跑配置生成；未在真实客户端环境用全新发布包首次运行到登录页面人工验收。
+2026-11-19 发布包调试构建守卫验证记录：本机 `windows/local-features.json` 开启 `injectionLog:true` 时，`npm run release:windows` 仍会打包本地调试构建，违反“发布前必须 `npm run build:windows -- --release`”的规则。现 `scripts/package-windows.mjs` 在打包前读取 `dist-windows/package-manifest.json`，若 `features.injectionLog===true` 则退出 2 并提示先执行 release 构建与重新构建原生宿主；CI 的 Windows 注入资源构建步骤改为 `npm run build:windows -- --release`。`windows-release-package.test.mjs` 新增拒绝调试构建用例（夹具 manifest 注入 `features.injectionLog:true`，断言状态 2 与提示文本），并保留正常夹具包打包回归。实跑当前本机调试 dist 的 `npm run release:windows -- --out release-guard-check` 得到退出 2 与守卫提示；随后按发布顺序 `npm run build:windows -- --release` → `npm run build:native` → `npm run release:windows` 验证打包恢复成功。全量 `scripts/*.test.mjs`（78 文件）单元 800 项中 791 通过、0 失败、9 项可选 GUI 显示测试跳过，10 个浏览器回归 79/79，类型检查、扩展构建、Chrome75 release 构建、原生构建、发布包重打与解压自检、Node/原生自检及 `git diff --check` 全部退出 0。该验证覆盖守卫与发布顺序；未在真实 CI runner 或真实客户端环境重新验收。
+2026-11-18 示例配置契约验证记录：`windows/config.example.json` 此前没有任何测试或宿主回归直接校验，可能与受支持字段/宿主默认值漂移。新增 `windows-config-example.test.mjs`：断言示例文件纯 ASCII、顶层键与受支持字段完全一致（无未实现能力/真实密钥）、共享设置键命名与值类型合法；Node 与原生宿主分别用 `--config <临时副本> --print-effective-config --no-disk-write` 实际解析，要求退出 0、仅一行 JSON、输出托管默认值（panel-theme/answer-mode/answer-key/answer-threads/no-disk-write/extension-enabled）且不创建或改写任何文件；另断言示例中的托管设置与宿主默认值逐项一致。实跑该文件 4 项全过（原生用例在设置 `CX_NATIVE_HOST_EXE` 时执行）。全量 `scripts/*.test.mjs`（78 文件）单元 799 项中 790 通过、0 失败、9 项可选 GUI 显示测试跳过，10 个浏览器回归 79/79，类型检查、扩展构建、Chrome75 构建、原生构建、发布包重打与解压自检、Node/原生自检及 `git diff --check` 全部退出 0。该验证覆盖示例配置与两宿主的只读解析；未在真实 CEF75 客户端用示例配置启动并登录验收。
+2026-11-17 原生共享设置重复键修复记录：原生 `--print-effective-config` 与页面配置广播原先先原样输出已捕获的 `settings` 快照，再追加全部类型化托管键，导致同一 JSON 出现重复键（实测 `common.settings.windows-panel-enabled` 出现两次；JSON 解析取最后一次，工具/审计易误判）。修复：`cx_append_shared_settings()` 在捕获共享快照时过滤由类型化字段托管、随后统一输出的 16 个键（`extension-enabled`、`windows-panel-*`、`windows-answer-*`、`windows-show-answer-dialog`、`windows-auto-submit`、`windows-log-enabled`、`windows-no-disk-write`），未托管键（题库地址/密钥、未知共享键、嵌套对象/数组）继续原样保留；输出仍由 `cx_options_effective_settings_json_utf8()` 统一追加托管键，值来自合并后的类型化字段。已编译 `options-tests.exe` 新增重复键计数与未托管键保留回归（`count_occurrences` 断言托管键只出现一次、tiku/unknown 键保留）。实跑原生 `--options-json` + `--print-effective-config --no-disk-write` 验证 `duplicates=0`、`tiku=true`、`unknown=true`；`options-tests.exe` 与 `windows-native-options/config/host` 套件通过（16 项中 15 通过、1 项可选 GUI 跳过）。全量单元 795 项中 786 通过、0 失败、9 项可选 GUI 显示测试跳过，10 个浏览器回归首轮 78/79（`windows-native-lifecycle.browser.mjs` 的 interrupted in-flight injection 用例在并行负载下时序抖动），单独重跑 79/79、0 失败；类型检查、扩展构建、Chrome75 构建、原生构建、发布包重打与解压自检、Node/原生自检及 `git diff --check` 全部退出 0。该验证覆盖编译测试与真实 EXE 输出；页面侧是否收到完全相同设置由现有浏览器回归覆盖，但未在真实 CEF75 客户端登录后人工核对配置广播。
+2026-11-16 Node 启动脚本版本检查验证记录：文档与目录注释此前声称 `start-windows.cmd` 会“检查 Node 版本”，但脚本只检查 `node` 是否存在，老版本 Node 会进入宿主后才失败。现两个入口均先执行 `node --version` 并解析主版本，低于 22 时普通入口给出提示并暂停、静默入口以 9009（缺少 node）/9040（无法解析版本）/9041（版本过旧）退出，不再启动宿主。`windows-silent-launcher.test.mjs` 新增两项回归：两个启动脚本均含 `node --version` 与 `LSS 22` 且保持纯 ASCII；通过 `windowsVerbatimArguments` 实际执行 `start-windows.cmd --help`，验证版本检查后正常进入宿主 usage 并退出 0。全量 `scripts/*.test.mjs`（77 文件）单元 795 项中 786 通过、0 失败、9 项可选 GUI 显示测试跳过，10 个浏览器回归 79/79，类型检查、扩展构建、Chrome75 构建、原生构建、发布包重打与解压自检、Node/原生自检及 `git diff --check` 全部退出 0。该验证覆盖脚本逻辑与本机 Node 24 实际执行，未在低于 22 的机器或真实 Windows 桌面双入口人工验收。
+2026-11-15 静默启动命令行引用修复记录：`start-windows-silent.cmd` 原先以 `"%~dp0"`（尾反斜杠）传工作目录，Windows 解析会把 `\"` 当作转义引号；现改为 `"%~dp0."` 并传 `"%~dp0windows\host\main.mjs"` 绝对脚本路径。`silent-launch.vbs` 的 `QuoteArgument()` 原先只双写内嵌引号，未处理尾反斜杠；现按 Win32 规则把参数尾反斜杠加倍后再加闭引号，并规范化工作目录尾分隔符。新增 `windows-silent-launcher.test.mjs` 回归：静态断言 wscript 行不再使用 `"%~dp0"`；真实启动器探针验证尾反斜杠路径、含空格路径和尾空格参数逐项保真、工作目录尾分隔符被规范化。WSH 的 `WScript.Arguments` 使用自有解析规则、不保留内嵌双引号，因此该入口只传固定 `--hide-console` 与 `%~dp0` 派生路径（可含空格），已在 VBS 注释与文档注明。全量 `scripts/*.test.mjs`（77 文件）中静默启动器 7 项全过；全量单元 793 项中 784 通过、0 失败、9 项可选 GUI 显示测试跳过，10 个浏览器回归 79/79，类型检查、扩展构建、Chrome75 构建、原生构建、发布包重打与解压自检、Node/原生自检及 `git diff --check` 全部退出 0。该验证只覆盖脚本参数保真与静态契约，未在真实 Windows 桌面人工观察静默启动与 UAC 隐藏效果。
+2026-11-14 静默预设与 README 一致性验证记录：参数生成器“绝对静默型”预设现同时设置 `hideConsole`，Node 宿主生成的 CLI 会附加 `--hide-console`；原生宿主在套用预设时自动去掉该开关（原生 EXE 为 GUI 子系统、无控制台），不会触发“原生不支持 --hide-console”校验。宿主 JSON schema 仍不接受 `hideConsole`，因此只出现在 CLI，JSON 与命令的其余行为保持一致。README 补充官方静默入口 `start-windows-silent.cmd`、发布包双 Node 入口与 `entrypoints.nodeSilent`、项目结构条目。已实跑 `windows-parameter-generator.test.mjs`（40 项中 37 通过、0 失败、3 项依赖可选浏览器/原生环境的用例跳过）验证 Node 静默预设 CLI 含 `--hide-console` 且 JSON 不含该键、原生静默预设不生成该参数。全量显式展开 77 个 `scripts/*.test.mjs`（792 项中 783 通过、0 失败、9 项可选 GUI 显示测试跳过）、10 个浏览器回归 79/79、类型检查、扩展构建、Chrome75 构建、原生构建、发布包重打与解压自检、Node/原生自检及 `git diff --check` 全部退出 0。该验证只覆盖生成器输出与宿主解析器回归，未在真实 Windows 桌面观察静默预设的实际无黑框效果；真实 CEF75 客户端验收仍未执行。
+2026-11-13 官方静默启动入口与发布包集成验证记录：此前 `start-windows-silent-test.cmd` 与 `windows/host/silent-launch.vbs` 只是本地测试脚手架，发布包不包含，用户无法真正无黑框启动。现改为官方入口 `start-windows-silent.cmd`：通过 `wscript.exe` + 纯 ASCII `silent-launch.vbs` 以窗口样式 0 启动 `node.exe`，并只传 `--hide-console`；不强制客户端序号、不关闭面板、不改变扫描/UAC/注入/日志策略（客户端选择窗口等 UI 仍显示）。`scripts/package-windows.mjs` 新增 `--silent-launcher` 与 `HOST_RUNTIME_SCRIPTS = [..., 'silent-launch.vbs']`，发布包同时包含 `start-windows-silent.cmd` 与 `windows/host/silent-launch.vbs`，`release-info.json` 的 `entrypoints.nodeSilent` 指向静默入口；`silent-launch.vbs` 从“内部原型/构建期文件”拒绝样例中移除（现为合法运行脚本），改用 `wipe-runtime.mjs` 作为拒绝样例。`windows-silent-launcher.test.mjs` 改为校验官方入口的 `--hide-console` 参数、纯 ASCII、wscript 隐藏启动与参数保真；`windows-release-package.test.mjs` 覆盖新入口文件、`nodeSilent` entrypoint、Node-only 包与拒绝样例。CI 发布包自检新增 `start-windows-silent.cmd` 与 `windows/host/silent-launch.vbs` 必需文件检查。全量显式展开 77 个 `scripts/*.test.mjs`（792 项中 783 通过、0 失败、9 项可选 GUI 显示测试跳过）、10 个浏览器回归 79/79、类型检查、扩展构建、Chrome75 构建、原生构建、发布包重打（新增两个文件）与解压自检、Node/原生自检及 `git diff --check` 全部退出 0。静默启动仅验证脚本与参数/包装契约，未在真实 Windows 桌面上人工观察无黑框效果与 UAC 隐藏窗口；真实 CEF75 客户端登录后验收仍未执行。
+2026-11-12 CI 工作流加固验证记录：`ci.yml` 新增“导出原生编译测试路径”步骤，把全部 20 个 `CX_NATIVE_*` 变量写入 `$GITHUB_ENV` 并校验产物存在，单元测试与浏览器回归步骤改为直接继承（原先浏览器步骤未带这些变量，原生 browser 用例在 CI 会被静默跳过）；发布包冒烟后新增解压入口自检：校验 `release-info.json`/`SHA256SUMS.txt`/`windows\host\main.mjs`/`chaoxing_plus.exe` 存在，执行发布包内 Node `--self-check` 与原生 EXE `--self-check --quiet --no-disk-write` 并检查退出码。`windows-release-package.test.mjs` 的 CI 契约测试扩展为断言 `GITHUB_ENV` 导出、全部原生变量、发布包自检命令与 `release-ci/` gitignore。本机实际执行 `npm run release:windows -- --out release-ci`（29 文件）并按 CI 脚本复核四个必需文件、Node/原生自检均退出 0；`release-ci/` 验证后删除。全量显式展开 77 个 `scripts/*.test.mjs`（792 项中 783 通过、0 失败、9 项可选 GUI 显示测试跳过）、10 个浏览器回归首轮 78/79（`windows-native-lifecycle.browser.mjs` 的“interrupted in-flight injection”用例在并行负载下时序抖动），单独重跑 79/79、0 失败；类型检查、扩展构建、Chrome75 构建、原生构建、发布包重打与解压自检、Node/原生自检及 `git diff --check` 全部退出 0。CI 仍未在真实 GitHub Actions runner 上执行，浏览器回归依赖 runner 的 puppeteer 下载与原生工具链，需首次真实运行确认。
+2026-11-11 原生 --no-retain-data 诊断目录清理修复记录：原实现只删除 `render-diagnostics.json` 后尝试 `RemoveDirectory`，新增的页面 PNG、窗口 JSON/BMP/PNG 与宿主摘要会让目录非空，导致 `--no-retain-data` 残留本次诊断产物。现改为 `h_delete_created_tree()` 枚举并删除本次唯一诊断运行目录内的所有文件后删除该目录（不触碰运行前已存在文件；仅捕获路径），清理缓冲区使用静态存储避免在深宿主栈帧上再分配 192KB 越过 guard page（此前的局部缓冲区版本会导致宿主 0xC0000005 崩溃）。已编译 `elevation-host-tests.exe` 新增递归清理夹具（6 个诊断文件 + 目录外保留文件），`windows-native-lifecycle.test.mjs` 首项改用真实 `--diagnostics-dir` 并断言 `--no-retain-data` 后诊断目录内无任何文件、默认保留时存在 `render-diagnostics-host.json`。全量显式展开 77 个 `scripts/*.test.mjs`（792 项中 783 通过、0 失败、9 项可选 GUI 显示测试跳过）、10 个浏览器回归 79/79、类型检查、扩展构建、Chrome75 构建、原生构建、发布包重打与解压自检、Node/原生自检及 `git diff --check` 全部退出 0。该验证覆盖 attach 无端点运行的摘要与清理；真实客户端运行产生的窗口截图等文件清理同样由同一目录递归逻辑处理，但真实 CEF75 全流程未人工验收。
+2026-11-10 原生宿主级诊断摘要验证记录：原生 `--diagnose` 在每次运行结束时写入 `render-diagnostics-host.json`（`diagnosticsSummary:true`），内容为固定 schema 的宿主级索引：`launchMode`（launch/attach）、`clientPid`、`window`（recorded/screenshot 状态/visible/systemDpi/windowDpi/`dpiStatus`=match|mismatch|unknown/矩形）、`artifacts`（pageDiagnostics/pageScreenshot/windowDiagnostics/windowCaptureBmp/windowCapturePng 布尔）与 `files` 固定文件名；不包含正文、URL、窗口标题或原始配置。页面 JSON/页面 PNG/窗口诊断/窗口 BMP/窗口 PNG 写入成功时分别置位，`--no-diagnose`/`--no-disk-write` 不生成摘要；写失败非致命。已编译 `diagnostics-tests.exe` 新增摘要路径、空摘要、页面产物标记、窗口 DPI mismatch/矩形、文件清单与禁用 no-op 回归；`windows-native-diagnostics.test.mjs` 在真实 Chromium attach 下断言摘要为 `launchMode=attach`、`clientPid=0`、窗口未记录、页面诊断/截图为 true、窗口产物为 false，并断言 `--no-disk-write` 不产生摘要。全量显式展开 77 个 `scripts/*.test.mjs`（792 项中 783 通过、0 失败、9 项可选 GUI 显示测试跳过）、10 个浏览器回归 79/79、类型检查、扩展构建、Chrome75 构建、原生构建、发布包重打与解压自检、Node/原生自检及 `git diff --check` 全部退出 0。摘要仍是原生自定义 schema，不是 Node 同构的合并 `render-diagnostics.json`（`renderDiagnostics:false` 边界保留）；真实 CEF75 客户端上的摘要内容（含真实窗口 DPI/截图状态）未人工验收。
+2026-11-09 原生窗口截图 PNG 验证记录：自有启动窗口诊断在保留 `window-capture.bmp` 的同时新增 `window-capture.png`——从同一 24 位 bottom-up 像素缓冲按 PNG 规范生成 8 位 RGB、filter 0 的行数据，使用无 CRT/zlib 依赖的 stored-deflate 与自实现 CRC32/Adler32 编码（IHDR/IDAT/IEND chunk 均带正确 CRC）；`window-diagnostics.json` 的截图状态对两种格式共用。已编译 `diagnostics-tests.exe` 新增窗口 PNG 签名/IHDR 尺寸/CRC/IEND 与数据量断言；Node 侧在 `windows-native-diagnostics.test.mjs` 用 `zlib.inflateSync` 独立解码 IDAT，校验行大小 `height*(1+width*3)` 与每行 filter 0。全量显式展开 77 个 `scripts/*.test.mjs`（792 项中 783 通过、0 失败、9 项可选 GUI 显示测试跳过）、10 个浏览器回归 79/79、类型检查、扩展构建、Chrome75 构建、原生构建、发布包重打与解压自检、Node/原生自检及 `git diff --check` 全部退出 0。窗口 PNG 验证仍基于测试自建窗口；真实 CEF75 客户端的硬件加速窗口截图像素内容未人工验收。
+2026-11-08 参数生成器补齐后期 CLI 能力验证记录：离线生成器新增 `--dpi-aware` 与 Node 专属 `--hide-console` 控件，分别导出 CLI 参数；`dpiAware` 同时写入 JSON 配置（两种宿主），`hideConsole` 因宿主 JSON schema 不接受而只保留在 CLI。原生宿主选择 `--hide-console` 或同时选择 `--dpi-aware` 与 `--no-disk-write` 会被实时校验阻止；原生诊断提示更新为页面布局采样 + 页面 PNG 截图 + 自有启动窗口 DPI/BMP，并删除“不含窗口 DPI 和截图”的过期描述。新增浏览器回归：默认控件未勾选、两种宿主导出参数与 JSON 一致、`parseHostArgs` 可解析生成的 Node 参数、原生互斥错误与提示文本。全量显式展开 77 个 `scripts/*.test.mjs`（792 项中 783 通过、0 失败、9 项可选 GUI 显示测试跳过；首轮全量曾有一次 `windows-native-diagnostics.test.mjs` 夹具在并行负载下提前退出，单独重跑与全量重跑均通过，属夹具时序抖动）、10 个浏览器回归 79/79、类型检查、扩展构建、Chrome75 构建、原生构建、发布包重打与解压自检、Node/原生自检及 `git diff --check` 全部退出 0。生成器只验证命令与 JSON 文本，未在真实客户端上执行 `--dpi-aware` 或静默启动；真实高分屏/无控制台观感仍需人工验收。
+2026-11-07 原生 UI 高 DPI 感知验证记录：原生 EXE 新增内嵌 `windows/native/host.manifest`（`dpiAware=true`、`asInvoker`），并通过 `/MANIFESTINPUT` 只链接到宿主 EXE（测试 EXE 不再继承该 manifest，避免与 `dpi-child.manifest` 版本冲突）；选择窗口与全盘扫描进度窗口改为 96 DPI 基准、按 `GetDpiForSystem` 缩放控件尺寸/间距/字体，`--capabilities` 新增 `highDpiUi:true`。测试用 `CXPLUS_NATIVE_UI_DPI=144` 覆盖 DPI：隐藏选择探针断言 `layoutScale=144`，隐藏进度窗口断言窗口宽度为 `MulDiv(460,144,96)=690`；另新增 EXE 二进制内嵌 manifest 的 `ChaoxingPlus.NativeHost`/`dpiAware`/`asInvoker` 断言。全量显式展开 77 个 `scripts/*.test.mjs`（792 项中 783 通过、0 失败、9 项可选 GUI 显示测试跳过）、10 个浏览器回归 79/79、类型检查、扩展构建、Chrome75 构建、原生构建、发布包重打与解压自检、Node/原生自检及 `git diff --check` 全部退出 0。本机真实 DPI 为 100%，144/150% 缩放只由测试覆盖验证；真实高分屏与真实 CEF75 客户端上的 UI 观感仍未人工验收。
+2026-11-06 原生选择窗口取消提示与帮助文本验证记录：原生全盘扫描被取消后，宿主重新打开选择窗口时通过新增的 `notice` 参数显示“已取消全盘扫描，保留原候选；可重试或手动浏览。”标题；`cx_selection_probe` 新增 `noticeShown` 字段并在隐藏探针中断言默认标题、取消提示标题与缺失输出拒绝。原生帮助文本补齐了已接受但未列出的 `--scan-clients`、`--scan-all`、`--no-scan-all`、`--answer-retry`，并修正“不采集窗口 DPI/截图”的过期说明（现为页面截图 + 自有启动窗口 DPI/BMP，不采集正文/URL）；Node 帮助补充 `--no-scan-all`，并新增真实 `--help` 输出回归（`--scan-clients`/`--scan-all`/`--no-scan-all`）。全量显式展开 77 个 `scripts/*.test.mjs`（789 项中 780 通过、0 失败、9 项可选 GUI 显示测试跳过）、10 个浏览器回归 79/79、类型检查、扩展构建、Chrome75 构建、原生构建、发布包重打与解压自检、Node/原生自检及 `git diff --check` 全部退出 0。取消提示只覆盖标题切换与取消回调，真实客户端上点击“全盘扫描→取消”的人工交互仍未验收。
+2026-11-05 原生页面截图渲染诊断验证记录：原生宿主新增 `pageScreenshots:true`——首次成功的顶层 bundle 确认后，通过 CDP `Page.captureScreenshot`（`format=png`）采集页面截图；宿主从受限 CDP 回复中提取 base64，经 `cx_diagnostics_write_page_png` 校验 base64 字符/解码尺寸（≤16MB）/PNG 签名/IHDR 块/宽高边界（≤16384）后写入诊断运行目录 `render-diagnostics-page.png`，失败非致命；`--attach` 与自有启动都会采集，`--no-disk-write`/`--no-diagnose` 不创建文件。已编译 `diagnostics-tests.exe` 新增 7 项回归（路径准备、合法 PNG 解码写盘 33 字节、非法 base64 不改写原文件、非 PNG 拒绝、超大尺寸拒绝、禁用 no-op），`windows-native-diagnostics.test.mjs` 真实 Chromium attach 断言 PNG 实际生成、签名/IHDR/尺寸有界、no-disk-write 不产生截图。全量显式展开 77 个 `scripts/*.test.mjs`（789 项中 780 通过、0 失败、9 项可选 GUI 显示测试跳过）、10 个浏览器回归 79/79、类型检查、扩展构建、Chrome75 构建、原生构建、发布包重打与解压自检、Node/原生自检及 `git diff --check` 全部退出 0。该截图来自现代 Chromium 模拟页，真实 CEF75 客户端截图内容与性能仍未人工验收；`renderDiagnostics:false` 仍表示不提供 Node 同构的合并 JSON/系统进程命令行/窗口 PNG。
+2026-11-04 原生全盘扫描进度/取消验证记录：原生 EXE 选择流程点击“全盘扫描”后不再阻塞无反馈：`selection.c` 新增独立线程 Win32 进度窗口（稳定类名 `CXPlusNativeScanProgress`，显示已检查目录数/候选数并可取消），`discovery.c` 新增 `progressContext`/`onProgress`/`cancelRequested` 钩子与 `CX_DISCOVERY_RESULT.cancelled`；取消时宿主丢弃本次部分结果、保留并重新显示原候选，`--attach`/无诊断不受影响。首个 `ShowWindow` 会被 `STARTUPINFO.wShowWindow`（Node `spawn(..., {windowsHide:true})`）覆盖为隐藏，已用二次 `ShowWindow(SW_SHOW)` 修复并由 `IsWindowVisible` 断言。已编译 `selection-tests.exe` 默认探针覆盖 9 项（隐藏线程启动、钩子绑定、正常结束、窗口销毁、自动取消、discovery 进度回调、取消回调等），`--scan-progress` 真实窗口冒烟需 `CX_TEST_NATIVE_WINDOW=1` 且全部通过；全量显式展开 77 个 `scripts/*.test.mjs`（789 项中 780 通过、0 失败、9 项可选 GUI 显示测试跳过）、10 个浏览器回归 79/79、类型检查、扩展构建、Chrome75 构建、原生构建、发布包重打与解压自检、Node/原生自检及 `git diff --check` 全部退出 0。排查中还发现并修复一个真实回归：`cx_discovery_resolve_client` 没有 options 时未清零 discovery 进度钩子，导致显式客户端 self-check 调用到野函数指针而崩溃（0xC0000005）；已由 `d_init_progress` 无条件清零并用 `windows-native-self-check.test.mjs`、`windows-native-cli-selection.test.mjs` 回归。真实客户端全盘扫描与真实窗口截图仍未人工验收；自动化只验证测试自有窗口与夹具目录，不能据此宣称真实考试客户端全盘扫描体验已验收。
+2026-11-03 原生窗口渲染诊断验证记录：原生宿主新增 `windowDiagnostics:true`——自有启动（非 `--attach`）且开启 `--diagnose` 时，在 CDP 端点就绪后采集客户端窗口 DPI/系统 DPI/窗口矩形/可见性，写入 `window-diagnostics.json`，并用 `PrintWindow` → `BitBlt` best-effort 生成 24 位 `window-capture.bmp`（捕获不到像素时保留正确尺寸的空白 BMP，JSON 标记 `failed`）。窗口枚举、`GetDpiForWindow`/`GetDeviceCaps` 回退、BMP 头与行对齐、JSON 字段均在已编译 `diagnostics-tests.exe` 新增的自建窗口回归中通过；`--attach` 跳过窗口诊断，`renderDiagnostics:false` 的“无 Node 同构合并 JSON/页面与窗口 PNG”边界保留，文档与 AGENTS 同步。全量：显式展开 77 个 `scripts/*.test.mjs`，787 项中 779 通过、0 失败、8 项可选 GUI 显示测试跳过；10 个浏览器回归 79/79 通过；类型检查、扩展构建、Chrome75 构建、`npm run build:native`、发布包重打并解压自检、Node/原生自检及 `git diff --check` 均退出 `0`。浏览器回归首轮出现既有 `cx-debug-log-panel` iframe 加载竞态（about:blank 的 `readyState=complete` 早于 fixture 导航完成）与 `swal-iframe` 偶发超时；已把 iframe 等待条件改为同时校验目标 URL 与 readyState，重跑全绿。本机自建窗口截图方法为 `print-window`，尚未在真实 CEF75 客户端验证截图内容；硬件加速窗口可能为空白，JSON 会如实标记 `failed`，不能据此宣称真实考试客户端窗口截图可用。
+
 原生 Win32 选择窗口的实际显示与自动选择冒烟需单独启用，整个过程中不会启动考试客户端：
 
 ```powershell
@@ -809,6 +897,7 @@ try {
 - `windows-host.test.mjs`：配置持久化/共享键过滤、PE 解析、端口选择、CDP 客户端；**mock CDP 服务器**下完整跑通 `bootstrap -> bundle -> 配置回写`。
 - `windows-client-discovery.test.mjs`：常规扫描只到根目录+一级子目录、全盘回退触发条件、首个 x86 立即停止、只有 x64 时选首个 x64、`--scan-mode common` 不回退、跳过系统目录/符号链接。
 - `windows-host-options.test.mjs`：全部启动参数解析与范围/互斥校验、`--no-disk-write` 覆盖、配置合并顺序、未实现能力显式拒绝、数据保留/删除外部配置、文档示例参数可解析。
+- `windows-print-effective-config.test.mjs`：Node 与原生 `--print-effective-config` 均只输出一行合并后共享设置 JSON；Node 断言配置层/内联 JSON/CLI 优先级与不写盘；原生断言托管默认值补齐、配置层与内联设置生效、未托管/未知共享键保留、无重复键、`--no-disk-write` 派生只读设置，且不创建数据目录/额外文件、不改写配置（需设置 `CX_NATIVE_HOST_EXE`，否则原生用例跳过）。- `windows-config-example.test.mjs`：`windows/config.example.json` 保持纯 ASCII、顶层键/共享设置键受支持且不含未实现能力；Node 与原生宿主均能用 `--config` 实际解析示例配置，`--print-effective-config` 输出单行 JSON、托管默认值不回退且不创建/改写任何文件；示例中的托管设置必须与宿主默认值一致。
 - `windows-config-reload.test.mjs`：共享设置逐层保留、配置文件实际监控、CLI/内联覆盖、异步解析失败和关闭后的迟到结果；宿主集成热更新由 `windows-host.test.mjs` 覆盖。
 - `windows-injection-lifecycle.test.mjs`：并发注入合并、上下文销毁、关闭后停止重试、CDP 断线关闭会话、新文档注册被拒绝后继续实际上下文注入、首次漏报上下文的定时补注入，以及注册期间关闭只取消不误报降级。
 - `windows-injection.browser.mjs`：真实 Chromium CDP 下 runtime/script/hybrid、CSP 回退、注入重试、导航、移除 iframe、断线重连恢复及会话资源释放；使用自动化测试页面，不代表真实 CEF 75 考试页面验收。
@@ -824,7 +913,7 @@ try {
 - `windows-native-assets.test.mjs`：仅复制 EXE/driver 到中文空格目录，逐项比对宿主与 driver 内嵌资源的长度/SHA256，并覆盖外部资源缺失、空文件、超限及禁止落盘解包。
 - `windows-native-options.test.mjs`：实际 C 参数测试，覆盖扫描别名和 CLI/JSON 的客户端选择优先级。
 - `windows-native-session.test.mjs`：实际 C 会话状态机，覆盖导航和 frame 子树销毁、就绪通知期间不重入、URL 过滤、顶层兜底及容量边界；不以模型通过代替宿主适配器验证。
-- `windows-native-selection.test.mjs`：实际 C Win32 控件探针、推荐项与 Unicode 标题；`CX_TEST_NATIVE_WINDOW=1` 时显示窗口并测试自动取消、选中有效 Unicode 路径，均不启动客户端。
+- `windows-native-selection.test.mjs`：实际 C Win32 控件探针、推荐项与 Unicode 标题；默认探针还覆盖原生全盘扫描进度窗口的隐藏线程生命周期、自动取消、discovery 进度回调与取消回调；`CX_TEST_NATIVE_WINDOW=1` 时显示窗口并测试自动取消、选中有效 Unicode 路径，以及 `--scan-progress` 的真实进度窗口可见性与点击取消，均不启动客户端或执行真实全盘扫描。
 - `windows-native-transport.test.mjs`：无 CRT 的传输接口及实际 WebSocket 分段读、零超时、连续控制帧总截止时间回归。
 - `windows-native-audit.test.mjs`：`CX_NATIVE_AUDIT_EXE` 驱动实际目录与文件，覆盖中文空格/相对路径、日志防覆盖、UTC UTF-8、quiet/no-log/noDiskWrite、报告 JSON 转义及生成失败保留旧报告、日志真实文件锁写失败后关闭句柄。
 - `windows-native-config.test.mjs`：`CX_NATIVE_CONFIG_EXE` 驱动实际 C 配置模块，覆盖解码键规范化、重复合并不膨胀、共享白名单、未知顶层字段保留、中文/空格/相对路径、原文件无效或替换失败时保留原文，以及仅清理自有临时文件。
@@ -832,7 +921,8 @@ try {
 - `windows-native-lifecycle.browser.mjs`：已编译原生宿主通过真实 WebSocket 连接现代 Chromium，覆盖三种策略、导航后每文档只执行一次、延迟 about:blank iframe、新 page target、CSP 回退、空白 iframe 开关、非超星页面限制、Browser 不匹配拒绝、断线去重及 console 历史清除后的 iframe 恢复；还覆盖 `--duration` 关闭会话但保留 attach 浏览器。不代表真实 CEF75 人工登录验收。
 - `windows-native-audit.browser.mjs`：`CX_NATIVE_HOST_EXE` 驱动现代 Chromium 模拟页面，验证实际日志/报告落盘、quiet/no-log/no-disk-write/no-capture-console、页面异常与 bootstrap 控制事件脱敏、重连累计与停止时存活上下文统计、正常取消不误计错误；不代表真实 CEF75 登录后页面验收。
 - `windows-native-config.browser.mjs`：`CX_NATIVE_HOST_EXE` 驱动现代 Chromium 模拟页面，覆盖 EXE 同级/显式配置文件回写、热更新及删除恢复、新宿主接管旧文档、来源/实例/上下文校验、CLI/内联覆盖、大 UTF-8 配置、无效更新事务拒绝、完整快照删除及重加、跨 origin iframe/新文档/新 target/重连、无写盘锁定；不代表真实 CEF75 登录后页面验收。
-- `windows-selection-window.test.mjs`：原生选择窗口脚本纯 ASCII 约束、结果合约（选中/取消/自动关闭/错误）、PowerShell 进程参数与 UTF-8 JSON 载荷、WinForms 控件构建探针；`CX_TEST_NATIVE_WINDOW=1` 时额外验证真实窗口显示与宿主 `--ui gui`/`--select-client` 接线（自动关闭）。
+- `windows-selection-window.test.mjs`：原生选择窗口脚本纯 ASCII 约束、结果合约（选中/取消/自动关闭/错误）、PowerShell 进程参数与 UTF-8 JSON 载荷、WinForms 控件构建探针；`CX_TEST_NATIVE_WINDOW=1` 时额外验证真实窗口显示、默认及最小尺寸下三候选无遮挡且分别可选、全盘扫描按钮和宿主 `--ui gui`/`--select-client` 接线（自动关闭）。WinForms 按逆 Z 顺序停靠，列表须在顶部提示与底部按钮之前加入控件集合，否则提示可能遮住前几项，让完整候选列表看起来只有一项。
+- `windows-scan-progress-window.test.mjs`：全盘扫描进度/取消窗口脚本纯 ASCII、payload 与状态校验、Node 控制器状态/取消文件协议与临时目录清理、真实 PowerShell 控件探针；`CX_TEST_NATIVE_WINDOW=1` 时验证真实窗口可见性。`windows-client-discovery.test.mjs` 与 `windows-client-selection.test.mjs` 覆盖进度回调、AbortSignal 取消、取消后保留原候选及窗口关闭时序。原生 EXE 选择流程仍无进度窗口，不能据此宣称两端等价。
 - `windows-bootstrap.test.mjs`：共享配置水合、DOMContentLoaded 延迟、`replaceChildren`/`randomUUID` 补丁、总开关、配置同步及来源字段、完整快照删除与重加、延迟属性清理、无写盘删除、同实例重连去重与新实例接管旧发送闭包。
 - `windows-chrome75.test.mjs`：构建产物与内置 handler 字符串必须通过 Chrome75 语法闸门（`?.`/`??`/逻辑赋值/私有成员/静态块均不允许）。
 - `windows-store-safety.test.mjs`：不透明 origin（about:blank）下 `localStorage` 抛 `SecurityError` 时业务 store 不崩溃；无写盘模式的共享删除事件清理内存并屏蔽旧磁盘值，重新水合可恢复且不回流同步。
@@ -883,11 +973,15 @@ node windows\host\main.mjs --attach 9333 --duration 5000 --report windows\data\s
 - 不透明 origin 的 frame（about:blank/srcdoc）中 `localStorage` 访问会抛错，`src/runtime/store.ts` 已做安全兜底（内存值 + 属性镜像）。
 - 内核 UA 是客户端自定义字符串（无 `Chrome/75` 字样），业务代码不得用 UA 判断内核。
 
+## 原生 UI 高 DPI 与渲染诊断
+
+原生 EXE 内嵌 `windows/native/host.manifest`（`dpiAware=true`、`asInvoker`），选择窗口与全盘扫描进度窗口以 96 DPI 为基准、按 `GetDpiForSystem`（回退 `GetDeviceCaps(LOGPIXELSX)`）缩放控件尺寸、间距与字体，避免高清屏下整体位图缩放导致文字发虚。`--capabilities` 标记 `highDpiUi:true`。测试专用覆盖变量 `CXPLUS_NATIVE_UI_DPI`（96–480）只影响原生窗口布局，不改变 `--dpi-aware` 的客户端兼容层语义；修改窗口布局须运行 `windows-native-selection.test.mjs`（默认探针 + 高 DPI 用例）并检查 EXE 内嵌 manifest 的 `dpiAware`/`asInvoker` 断言。
+
 ## 渲染诊断与“悬浮窗附近模糊”排查
 
-本节的系统 DPI、窗口截图和完整诊断产物说明仅适用于 Node 宿主。原生宿主只提供页面布局采样（`pageRenderDiagnostics:true`），记录页面视口与页面内面板布局/样式信息；它不采集 Windows 窗口 DPI、不判断系统位图缩放，也不生成页面或客户端窗口截图（`renderDiagnostics:false`）。原生采样文件写入失败属于非致命诊断故障，不应阻断宿主继续运行或客户端启动；`--no-disk-write` 则完全跳过目录和文件创建。
+本节的系统 DPI、窗口截图和完整诊断产物说明主要适用于 Node 宿主。原生宿主提供页面布局采样（`pageRenderDiagnostics:true`），并在首次顶层 bundle 确认后通过 CDP `Page.captureScreenshot` 生成 `render-diagnostics-page.png`（`pageScreenshots:true`；对 Node 写入的 base64 做长度、base64 字符、PNG 签名/IHDR 与尺寸上限校验后才写盘，失败非致命）；自有启动还会采集客户端窗口 DPI/系统 DPI/窗口矩形/可见性（`windowDiagnostics:true`，`window-diagnostics.json`），并尝试用 `PrintWindow` → `BitBlt` 生成 `window-capture.bmp`（24 位 BMP，best-effort；硬件加速窗口可能为空白，JSON 的 `screenshot.status` 会标记 `captured` 或 `failed`）。`--attach` 调试模式没有本次启动的自有客户端窗口，因此跳过窗口诊断，但仍会采集页面截图。原生仍不生成 Node 同构的合并 JSON、系统进程命令行或窗口 PNG，`renderDiagnostics:false` 的完整宿主诊断边界保留。原生采样文件写入失败属于非致命诊断故障，不应阻断宿主继续运行或客户端启动；`--no-disk-write` 则完全跳过目录和文件创建。
 
-原生采样需使用 `--diagnose` 开启，在首次成功的顶层业务 bundle 确认后执行，每次宿主运行最多尝试一次；子 iframe 的注入不会触发采样。输出位于 `--diagnostics-dir` 下的独立运行子目录，默认基于 `.data/diagnostics`，只生成 `render-diagnostics.json`。坐标与缩放保留三位小数，CSS 中的 URL 或不允许字符会使该样式值被省略；不读取页面 URL、题目、答案或其他正文。`--diagnose` / `--no-diagnose` 以最后一次 CLI 开关为准并覆盖 JSON；`--no-diagnose` 与 `--no-disk-write` 都阻止创建诊断目录。采样不等待后续异步面板挂载，因此首次顶层文档没有面板时 `topPanel` 为 `null`，不代表后续页面也没有面板。
+原生采样需使用 `--diagnose` 开启，在首次成功的顶层业务 bundle 确认后执行，每次宿主运行最多尝试一次；子 iframe 的注入不会触发采样。输出位于 `--diagnostics-dir` 下的独立运行子目录，默认基于 `.data/diagnostics`，生成 `render-diagnostics.json` 与 `render-diagnostics-page.png`；自有启动并开启诊断时还会生成 `window-diagnostics.json` 与 `window-capture.bmp`。坐标与缩放保留三位小数，CSS 中的 URL 或不允许字符会使该样式值被省略；不读取页面 URL、题目、答案或其他正文。`--diagnose` / `--no-diagnose` 以最后一次 CLI 开关为准并覆盖 JSON；`--no-diagnose` 与 `--no-disk-write` 都阻止创建诊断目录。采样不等待后续异步面板挂载，因此首次顶层文档没有面板时 `topPanel` 为 `null`，不代表后续页面也没有面板。
 
 启动模式默认开启渲染诊断（`--no-diagnose` 可关闭）。每次运行会写入：
 
@@ -897,6 +991,18 @@ windows/data/diagnostics/<时间戳>/
   render-diagnostics-page.png    # CDP 页面截图（页面自身渲染，含面板）
   render-diagnostics-window.png  # 客户端窗口的屏幕截图（含 Windows DPI 缩放效果）
 ```
+
+原生宿主开启 `--diagnose` 时，在同一运行子目录写入：
+
+```text
+render-diagnostics-page.png  # CDP Page.captureScreenshot；base64/PNG/尺寸校验后写盘（attach 也采集）
+window-diagnostics.json      # 仅自有启动：systemDpi/windowDpi/窗口矩形/可见性/截图状态与 BMP 尺寸
+window-capture.bmp           # 仅自有启动：24 位 BMP；PrintWindow → BitBlt → 空白兜底，best-effort
+window-capture.png           # 仅自有启动：与同一像素一致的 8 位 RGB PNG（无 CRT/zlib 的最小 stored-zlib 编码）
+render-diagnostics-host.json # 宿主级诊断摘要：launchMode/clientPid/窗口 DPI 诊断/各产物是否生成/固定文件名
+```
+
+`window-diagnostics.json` 的 `screenshot.status` 为 `captured`（`PrintWindow` 或 `BitBlt` 成功）、`failed`（像素未能捕获，BMP/PNG 为空白占位）或 `skipped`（窗口过大）；BMP 与 PNG 来自同一像素缓冲，PNG 使用标准 IHDR/IDAT/IEND 与 stored-zlib 编码，已由 Node `zlib.inflateSync` 独立校验行大小与滤波字节。`--attach` 模式没有自有客户端窗口，不会生成后三个文件。`render-diagnostics-host.json` 在运行结束时写入，汇总 `launchMode`、`clientPid`、窗口 DPI 诊断（match/mismatch/unknown）、窗口矩形/可见性/截图状态，以及页面诊断、页面截图、窗口诊断、窗口 BMP/PNG 是否生成；`--no-diagnose`/`--no-disk-write` 不生成该文件。
 
 诊断内容包括：
 
@@ -965,7 +1071,7 @@ windows/data/diagnostics/<时间戳>/
 
 ## 安全与合规
 
-- 调试端口只绑定 `127.0.0.1`；宿主只连接自己启动的客户端（监听 PID 校验）。
+- 调试端口只绑定 `127.0.0.1`；宿主只连接自己启动的客户端（监听 PID 或其子进程链校验）。
 - 已有 `CXExam.exe` 时拒绝启动，避免连接真实考试会话。
 - 日志/报告不记录 URL 查询参数、Cookie、答案或账号数据；客户端目录的 `debug.log` 仍可能含页面信息，不要外发。
 - 本项目仅用于本机技术研究与自有账号环境；请勿在正式考试中使用。
