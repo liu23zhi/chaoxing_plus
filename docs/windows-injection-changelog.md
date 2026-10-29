@@ -114,7 +114,7 @@ node --test scripts/windows-native-help-sync.test.mjs
 补充结论：
 
 1. 三份客户端**都在本机**（`C:\Users\Zelly\Desktop` 下三个目录），此前"第三份缺失"的判断是搜索方式有误，已更正。
-2. `dll-proxy` 的 PEB 命令行改写**在客户端进程内确实生效**（诊断日志显示真实 `GetCommandLineW` 已含开关），但超星 4.3.0.4 仍不开端口 → 该客户端在应用层过滤/忽略调试开关，代理方案对它无效。
+2. `dll-proxy` 的 PEB 命令行改写**在客户端进程内确实生效**（诊断日志显示真实 `GetCommandLineW` 已含开关），但超星 4.3.0.4 仍不开端口 → 该客户端在应用层过滤/忽略调试开关（**后续已用 `cef_initialize` 强制 `remote_debugging_port` 解决，见第七节**），代理方案对它无效。
 3. 因此三条注入通道的实际适用范围：`cdp-port` 与 `cdp-pipe` 适用于两份 4.1.4 客户端；`dll-proxy` 不适用于任何已测客户端（仅保留作研究记录）。
 ### 4.3.0.4 专项结论（结论：当前无法注入）
 
@@ -448,3 +448,4 @@ undefined4 cef_execute_process(undefined4 *param_1, undefined4 param_2, undefine
 ```
 
 也就是说调试端口只能在浏览器进程的 `cef_initialize` 里设置，子进程无法通过 settings 注入——这与我们"代理只钩 cef_initialize"的实现完全一致，属于设计闭环的最后一环证据。
+
