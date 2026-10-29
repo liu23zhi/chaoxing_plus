@@ -537,3 +537,35 @@ report: injectMode=dll-proxy ownershipVerified=True stopReason=duration
 - 不再依赖命令行是否被尊重（加壳客户端本来就忽略）；
 - 不再改动 PEB/IAT，抹掉了此前 4.1.4 崩溃的那部分动作；
 - 两份 4.1.4 仍推荐 `cdp-port`（零文件、零安装），但需要统一通道时可直接用 `dll-proxy`。
+## 十、多目标代理：version.dll 注入通道（2026-10-30，无 UAC 实测）
+
+### 动机
+
+此前代理固定为 `winmm.dll`。若某个客户端不导入 winmm（或该名字被占用），注入就无法进行。三份客户端都导入 `version.dll`，因此新增第二个代理目标。
+
+### 实现
+
+- 代理源码把目标 DLL 名参数化：`CX_PROXY_TARGET_DLL`（默认 `L"winmm.dll"`），加载系统同名 DLL 时使用该宏；
+- `build-proxy.ps1` 增加 `-Target <name>`：按该名字 dump 系统导出、生成 stubs/def、输出 `build-windows/hook/<name>.dll`；
+- 宿主新增 `--proxy-target winmm|version`，安装/卸载/自动安装都按目标名落到 `<name>.dll`。
+
+### 无 UAC 实测
+
+```
+# 构建
+build-proxy.ps1                → winmm.dll   21504 bytes
+build-proxy.ps1 -Target version → version.dll 11776 bytes
+
+# 用 version.dll 代理注入 4.3.0.4 副本（客户端目录内无 winmm.dll）
+port-open-after=1s   listener=True   alive=True
+winmm proxy: cef_initialize patched (pushret)
+winmm proxy: settings-only mode
+winmm proxy: cef_settings size=228
+winmm proxy: cef settings port applied
+
+# 宿主安装/卸载
+--install-proxy --proxy-target version   → 只生成 version.dll + marker，不碰 winmm.dll
+--uninstall-proxy --proxy-target version → 两者都被清除
+```
+
+回归：`windows-native-proxy-actions.test.mjs` 新增 `--proxy-target version` 用例（断言不写 winmm.dll、卸载后零残留），全量 862 项通过。
