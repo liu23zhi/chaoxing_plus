@@ -140,3 +140,6 @@ powershell -ExecutionPolicy Bypass -File windows\hook-source\build-proxy.ps1
 真实客户端相关命令（通道 A 的启动、通道 B/C 的实际注入）仍需管理员权限与人工登录，不在上表内。
 
 提示：`--proxy-source` 建议用绝对路径（或确认当前目录是仓库根），避免复制到非预期位置。
+
+发布包会随附 `winmm-proxy.dll`（存在构建产物时）。不传 `--proxy-source` 时，`--install-proxy` 依次在宿主目录查找 `winmm-proxy.dll`、`winmm.dll`、`hook\winmm.dll`、`..\hook\winmm.dll`、`build-windows\hook\winmm.dll`，找到第一个即用。
+
