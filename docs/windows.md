@@ -434,7 +434,7 @@ WinForms 窗口在 `Shown` 时显式调用 `ShowWindow` 并请求前台显示：
 | `--install-proxy [--proxy-source <winmm.dll>]` | 关闭 | 把 winmm 代理安装到 `--client` 推导出的客户端目录；源默认取宿主同目录 `winmm.dll`。`auto` 检测到代理后会自动改走"代理追加调试开关"的注入链路。 |
 | `--uninstall-proxy` | 关闭 | 仅当客户端目录存在安装标记 `cxhook-proxy.marker` 时删除 `winmm.dll` 与标记，避免误删第三方同名 DLL。 |
 | `--proxy-port <1024-65534>` | `9222` | `--install-proxy` 时写入 `cxhook-port.txt`；客户端被第三方拉起（没有 `CX_INJECT_PORT`）时，代理读取该文件并固定打开此端口，宿主可用 `--attach` 连接。 |
-| `--probe-client <CXExam.exe>` / `--probe-all` | 关闭 | 离线探测：架构、版本、`libcef.dll` 是否含 `remote-debugging-port`/`-pipe`、代理与标记状态，并给出建议通道；`--probe-all` 扫描常见目录逐条输出。 |
+| `--probe-client <CXExam.exe>` / `--probe-all` | 关闭 | 离线探测：架构、版本、`libcef.dll` 是否含 `remote-debugging-port`/`-pipe`、客户端是否导入 `winmm.dll`（决定代理能否被加载）、代理与标记状态，并给出建议通道；`--probe-all` 扫描常见目录逐条输出。 |
 | `--console` | 关闭 | GUI 子系统宿主附加或分配控制台，便于看到 `[launch]`/`[bootstrap]` 等日志。 |
 | `--stage-boot` | 关闭 | 静默暂存启动：把自身复制到 `%TEMP%` 随机文件名（隐藏+系统属性）后由副本接管，原文件随后清理。 |
 | `--probe-client <CXExam.exe>` | 关闭 | 离线探测客户端：架构、版本、`libcef.dll` 是否含 `remote-debugging-port`/`-pipe`、代理与标记是否存在，并给出建议通道（不启动客户端）。 |
@@ -1124,6 +1124,7 @@ render-diagnostics-host.json # 宿主级诊断摘要：launchMode/clientPid/窗�
 - 已有 `CXExam.exe` 时拒绝启动，避免连接真实考试会话。
 - 日志/报告不记录 URL 查询参数、Cookie、答案或账号数据；客户端目录的 `debug.log` 仍可能含页面信息，不要外发。
 - 本项目仅用于本机技术研究与自有账号环境；请勿在正式考试中使用。
+
 
 
 

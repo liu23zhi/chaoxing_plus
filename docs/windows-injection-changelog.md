@@ -56,6 +56,7 @@
 | 提交 | 内容 |
 | --- | --- |
 | `d0f6a85` | `--probe-client`：离线探测架构/版本/libcef 开关/代理状态并给建议通道 |
+| 本轮 | 探测增加 `client-winmm`（客户端是否导入 winmm.dll，决定代理能否加载） |
 | `87078a7` | `--probe-all`：扫描常见目录输出兼容性表 |
 | `653fdfd` | 代理闭环回归 `windows-native-proxy-actions` |
 | `20d91f5` | `--attach` 回归 `windows-native-attach` |
@@ -102,3 +103,4 @@ node --test scripts/windows-native-help-sync.test.mjs
 1. `dll-proxy` 与 `cdp-pipe` 的真实 CEF 75 客户端验收（需管理员权限 + 登录）；
 2. 第三份客户端（河南应用技术职业学院）目录不在本机，未纳入探测；
 3. `input` 模式未实现（语义待定义）。
+
