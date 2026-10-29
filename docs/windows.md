@@ -348,7 +348,7 @@ bash windows/native-source/build-windows.sh --skip-tests
 
 | 模式 | 启动方式 | 注入内容 |
 | --- | --- | --- |
-| `cdp-port`（默认，`auto` 等同于此） | 命令行传 `--remote-debugging-port=<port>` | bootstrap + bundle + 配置同步 |
+| `cdp-port`（默认，不传 `--inject-mode` 时） | 命令行传 `--remote-debugging-port=<port>` | bootstrap + bundle + 配置同步 |
 | `dll-proxy` | 命令行**不传**端口开关；宿主设置 `CX_INJECT_PORT`，客户端目录内的 `winmm.dll` 代理改写 `GetCommandLineW` 追加开关 | 同 `cdp-port` |
 | `cdp-pipe` | `--remote-debugging-pipe`，匿名管道 + `Target.attachToTarget` 取 sessionId | bootstrap + bundle + 配置同步 |
 
@@ -427,7 +427,7 @@ WinForms 窗口在 `Shown` 时显式调用 `ShowWindow` 并请求前台显示：
 | 参数 | 默认/范围 | 行为 |
 | --- | --- | --- |
 | `--expected-browser <text>` | `Chrome/` | 校验 `/json/version` 的 Browser 字段；不匹配时中止，防止误连其它 Chromium。 |
-| `--inject-mode auto\|cdp-port\|cdp-pipe\|dll-proxy\|input` | `auto` | 选择注入方式。`auto` 等同 `cdp-port`（走调试端口）；`dll-proxy` 需显式指定，由代理在进程内追加命令行开关；`cdp-pipe` 已与端口通道对齐（bootstrap + bundle + 配置同步），`input` 未实现。 |
+| `--inject-mode auto\|cdp-port\|cdp-pipe\|dll-proxy\|input` | `auto` | 选择注入方式。显式 `--inject-mode auto` 时若客户端目录存在我们安装的代理（`cxhook-proxy.marker`），自动改走 `dll-proxy`；不传 `--inject-mode` 等同于 `cdp-port`；`cdp-pipe` 已与端口通道对齐（bootstrap + bundle + 配置同步），`input` 未实现。 |
 | `--inject-proxy-dir <dir>` | 客户端目录 | `dll-proxy` 模式检查 `winmm.dll` 的目录；缺失时提示放置路径，已就位时说明进程内 hook 尚未驱动。 |
 | `--panel-all-pages` | 关闭 | 非考试页也挂载悬浮面板，用于确认注入是否生效；默认仍只在考试路径显示。 |
 | `--pipe-test` | 关闭 | 诊断：用匿名管道启动 `cmd /c echo` 并读回 stdout，验证宿主可继承句柄启动子进程。 |
@@ -1119,6 +1119,7 @@ render-diagnostics-host.json # 宿主级诊断摘要：launchMode/clientPid/窗�
 - 已有 `CXExam.exe` 时拒绝启动，避免连接真实考试会话。
 - 日志/报告不记录 URL 查询参数、Cookie、答案或账号数据；客户端目录的 `debug.log` 仍可能含页面信息，不要外发。
 - 本项目仅用于本机技术研究与自有账号环境；请勿在正式考试中使用。
+
 
 
 
