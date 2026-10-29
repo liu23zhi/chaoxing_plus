@@ -107,7 +107,7 @@ node --test scripts/windows-native-help-sync.test.mjs
 
 | 客户端 | `--remote-debugging-port` | 注入结果 |
 | --- | --- | --- |
-| 电子科技大学中山学院 考试客户端 4.1.4.25512 | ✅ 启动 1 秒内开端口，`/json/version` 返回 `Chrome/75.0.3770.100` | 可注入（宿主链路已验证） |
+| 电子科技大学中山学院 考试客户端 4.1.4.25512 | ✅ 启动 1 秒内开端口 | ✅ `ownershipVerified=true`、`pageSessions=1`、`bootstraps=6`、`bundles=6`；用户确认面板正常 |
 | 河南应用技术职业学院 考试客户端 4.1.4.25512 | ✅ 同上 | ✅ `ownershipVerified=true`、`pageSessions=1`、`bootstraps=7`、`bundles=7`；**用户确认客户端内可见悬浮面板** |
 | 超星考试客户端 4.3.0.4 | ❌ 完全不开端口（等待 30 秒 `no-listener`） | 无法注入（Themida 加壳，命令行开关被忽略） |
 
@@ -127,3 +127,10 @@ node --test scripts/windows-native-help-sync.test.mjs
 | 代理挂 `cef_initialize` / `cef_command_line_get_global` | 该 EXE 只从 libcef 导入 `cef_command_line_get_global`；钩子能装上（日志 `command line getter hooked`），但应用未在关键时刻调用它，开关未追加成功 |
 
 结论：4.3.0.4 为 Themida 加壳版本，未暴露可用的 CDP 入口；建议使用两份 4.1.4 客户端（已实测可注入并可见面板）。
+### cdp-pipe 真机验收状态
+
+- 夹具验证：`--inject-mode cdp-pipe` 对 `cdp-echo` 假对端可完成 bootstrap + bundle（`bootstraps=1 bundles=1`）。
+- 真机：宿主在管道模式启动客户端时若返回 Win32 740，会请求 UAC（`cdp-pipe: client requires administrator rights; requesting UAC`）；本会话的自动化提权未能稳定建立，因此**真机 pipe 注入尚未取得报告证据**。建议在管理员 PowerShell 中直接执行：
+  ```powershell
+  .\build-windows\bin\chaoxing_plus.exe --inject-mode cdp-pipe --client "<4.1.4 客户端>" --panel-all-pages
+  ```
