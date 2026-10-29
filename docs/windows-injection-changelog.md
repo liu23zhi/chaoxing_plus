@@ -127,10 +127,21 @@ node --test scripts/windows-native-help-sync.test.mjs
 | 代理挂 `cef_initialize` / `cef_command_line_get_global` | 该 EXE 只从 libcef 导入 `cef_command_line_get_global`；钩子能装上（日志 `command line getter hooked`），但应用未在关键时刻调用它，开关未追加成功 |
 
 结论：4.3.0.4 为 Themida 加壳版本，未暴露可用的 CDP 入口；建议使用两份 4.1.4 客户端（已实测可注入并可见面板）。
-### cdp-pipe 真机验收状态
+### cdp-pipe 真机验收状态（结论：真机不响应）
 
 - 夹具验证：`--inject-mode cdp-pipe` 对 `cdp-echo` 假对端可完成 bootstrap + bundle（`bootstraps=1 bundles=1`）。
 - 真机：宿主在管道模式启动客户端时若返回 Win32 740，会请求 UAC（`cdp-pipe: client requires administrator rights; requesting UAC`）；本会话的自动化提权未能稳定建立，因此**真机 pipe 注入尚未取得报告证据**。建议在管理员 PowerShell 中直接执行：
   ```powershell
   .\build-windows\bin\chaoxing_plus.exe --inject-mode cdp-pipe --client "<4.1.4 客户端>" --panel-all-pages
   ```
+补测（2026-10-29）：把 4.1.4 客户端复制到临时目录并用 `mt.exe` 改写清单为 `asInvoker`，绕开 UAC 后以管理员无关身份运行：
+
+```
+cdp-pipe: launching client with --remote-debugging-pipe
+cdp-pipe: Target.getTargets attempt 1 status 0   （超时）
+cdp-pipe: Target.getTargets attempt 2 status 0
+cdp-pipe: Target.getTargets attempt 3 status 0
+cdp-pipe: Target.getTargets attempt 4 status 0
+```
+
+客户端正常启动但管道上没有任何响应 → 该客户端（或该 CEF 构建）未启用 `--remote-debugging-pipe`。因此 `injectModeSupport.cdp-pipe` 改回 `false`：管道通道仅对夹具（cdp-echo）可用，不能用于真实客户端。
