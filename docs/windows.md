@@ -433,6 +433,7 @@ WinForms 窗口在 `Shown` 时显式调用 `ShowWindow` 并请求前台显示：
 | `--pipe-test` | 关闭 | 诊断：用匿名管道启动 `cmd /c echo` 并读回 stdout，验证宿主可继承句柄启动子进程。 |
 | `--install-proxy [--proxy-source <winmm.dll>]` | 关闭 | 把 winmm 代理安装到 `--client` 推导出的客户端目录；源默认取宿主同目录 `winmm.dll`。`auto` 检测到代理后会自动改走"代理追加调试开关"的注入链路。 |
 | `--uninstall-proxy` | 关闭 | 仅当客户端目录存在安装标记 `cxhook-proxy.marker` 时删除 `winmm.dll` 与标记，避免误删第三方同名 DLL。 |
+| `--probe-client <CXExam.exe>` | 关闭 | 离线探测客户端：架构、版本、`libcef.dll` 是否含 `remote-debugging-port`/`-pipe`、代理与标记是否存在，并给出建议通道（不启动客户端）。 |
 | `--pipe-client <客户端路径>` | 关闭 | 诊断：以 `--remote-debugging-pipe` 启动客户端并发一帧 `Browser.getVersion`；返回 740 时自动提权重启自身。 || `--inject-strategy hybrid\|runtime\|script` | `hybrid` | `runtime` 直接在目标 execution context 执行；`script` 创建临时 DOM `<script>` 执行并在失败时回退 runtime；`hybrid` 先 runtime、失败后 script。两种方式都只针对已验证的本机 CDP target。 |
 | `--inject-retries <n>` | `2`，`0-5` | 每一轮注入路径失败后重试；每次切换策略都会写诊断日志。 |
 | `--inject-blank-frames` / `--no-inject-blank-frames` | 开启 | 是否向 `about:blank`、`srcdoc` 和其它不透明 frame 注入。 |
@@ -1119,6 +1120,7 @@ render-diagnostics-host.json # 宿主级诊断摘要：launchMode/clientPid/窗�
 - 已有 `CXExam.exe` 时拒绝启动，避免连接真实考试会话。
 - 日志/报告不记录 URL 查询参数、Cookie、答案或账号数据；客户端目录的 `debug.log` 仍可能含页面信息，不要外发。
 - 本项目仅用于本机技术研究与自有账号环境；请勿在正式考试中使用。
+
 
 
 
