@@ -396,3 +396,29 @@ cef_initialize(0x10001181)
 3. 4.1.4 那一次运行同时做了三件事（settings 端口 + PEB 命令行改写 + 21 处 IAT 补丁 + vtable append），而 4.3.0.4 同样的 settings 补丁却稳定；差异在于前者的命令行开关**本来就生效**，属于"重复注入"。
 
 因此维持既有处置：非加壳客户端一律走 `cdp-port`，`dll-proxy` 只用于加壳客户端；vtable append 已停用。IG5 给出的调用链作为该结论的支撑证据记录在此，不再继续深挖崩溃根因（收益低于风险）。
+### dll-proxy 自动安装与自动还原（2026-10-30）
+
+`--inject-mode dll-proxy` 不再要求手工 `--install-proxy`：
+
+| 场景 | 行为 |
+| --- | --- |
+| 客户端目录没有代理 | 自动复制 `winmm.dll` + 写标记，打印「本次运行临时安装代理，结束后自动还原」 |
+| 运行结束（含失败路径） | 自动删除代理与标记；被占用时重试约 5 秒 |
+| 客户端目录已有代理 | 不重复安装，也不会在结束时删除 |
+
+实测（asInvoker 副本，无 UAC）：
+
+```
+install-proxy: copied ...\winmm.dll -> ...\winmm.dll
+dll-proxy: 本次运行临时安装代理，结束后自动还原
+report: injectMode=dll-proxy ownershipVerified=True stopReason=client-exit
+uninstall-proxy: removed ...\winmm.dll
+after: proxy=False marker=False      ← 目录已还原
+```
+
+同时修掉两个输出缺陷：
+
+1. `install-proxy: copied ...` 缺换行，与后续输出粘在一起（已补 `\n`，并把误并入成功分支的失败提示恢复成 `else` 分支）；
+2. 加壳客户端在**已装代理**时仍打印「请用 --install-proxy」，该重复提示块已删除，改为由 auto 分支统一提示。
+
+注意：4.3.0.4 目录当前保留代理（用户日常可用）；即使删掉，下次以 `dll-proxy` 启动也会自动装好并在退出时清理。
