@@ -718,3 +718,17 @@ listener=True   alive=True
 - 回归用例的小载体列表扩为 `msimg32 / sensapi / oledlg / wtsapi32`。
 
 注意：`build-windows/hook/imm32.dll` 仍会被构建脚本产出（`-Target imm32` 手动构建），但宿主已把它列入 KnownDLL 黑名单，不会使用。
+### 自愈触发条件细化（2026-10-30）
+
+自愈不再"只要失败就重试"，改为按端点探测结果判断：
+
+| 探测结果 | 是否重试 | 理由 |
+| --- | --- | --- |
+| 全程无监听（`listenerSeen=false`，无 http/归属原因） | ✅ | 典型"忽略命令行开关"场景，换代理能解决 |
+| 端口上有监听但不属于本次启动（`listener-not-owned`） | ❌ | 换代理也抢不到别人的端口，还可能干扰其它程序 |
+| 有监听但 HTTP 不通（`http-failed`） | ❌ | 说明是别的服务占用，不是开关问题 |
+| 用户显式 `--inject-mode cdp-port` / `--attach` | ❌ | 尊重显式选择 |
+
+回归：既有自愈用例（夹具无监听）仍然通过，proxy-actions 10 项全绿；全量 867 项通过。
+
+另在 `docs/windows.md` 增加「注入通道决策表」，把各客户端特征 → 通道选择、自愈条件、载体顺序整理成一张表，便于交付时对照。

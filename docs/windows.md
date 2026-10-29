@@ -1124,34 +1124,33 @@ render-diagnostics-host.json # 宿主级诊断摘要：launchMode/clientPid/窗�
 - 已有 `CXExam.exe` 时拒绝启动，避免连接真实考试会话。
 - 日志/报告不记录 URL 查询参数、Cookie、答案或账号数据；客户端目录的 `debug.log` 仍可能含页面信息，不要外发。
 - 本项目仅用于本机技术研究与自有账号环境；请勿在正式考试中使用。
+## 注入通道决策表（2026-10-30）
 
+宿主默认 `--inject-mode auto`，按下表自动决策；所有结论均来自无 UAC 实测。
 
+| 客户端特征 | 选择的通道 | 说明 |
+| --- | --- | --- |
+| 不导入任何候选载体、或客户端已自行监听端口 | `cdp-port`（命令行开关） | 零文件、零安装 |
+| 无 `.themida` 节（两份 4.1.4） | `cdp-port` | 实测真机可见面板 |
+| 有 `.themida` 节（4.3.0.4） | `dll-proxy`（settings-only） | 自动安装代理，退出自动还原 |
+| 已装代理 + 加壳 | `dll-proxy` | 不会重复安装、也不会在退出时删除 |
+| `cdp-port` 拿不到端点（且端口未被他人占用） | 自愈：改用 `dll-proxy` 重试一次 | 触发条件见下 |
 
+### 自愈触发条件
 
+仅在**端口没有出现监听**时重试；以下情况不重试：
 
+- `listenerSeen=true`（端口上已有监听）；
+- `listener-not-owned`（监听属于别的进程）；
+- `http-failed`（有监听但 HTTP 不通）；
+- 用户显式指定 `--inject-mode cdp-port` 或使用 `--attach`。
 
+### 载体选择
 
+`auto` 按客户端导入表，从以下顺序挑第一个可用且不在 KnownDLLs 的载体：
 
+```
+winmm → version → uxtheme → msimg32 → sensapi → oledlg → wtsapi32
+```
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+目标位置已有第三方同名 DLL 时自动换下一个；`imm32` 等 KnownDLLs 名字会被拒绝（系统强制从 System32 加载）。
