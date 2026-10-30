@@ -185,6 +185,12 @@ handler 返回 `boolean | undefined`：`true` 跳过、`false` 与 `undefined` �
 
 ### 必须遵守的边界
 
+- **Node 宿主冻结（2026-10-30，用户决定）**：本次用户明确要求的 Node SEA 单 EXE 封装与共享图标接入完成后，`windows/node-source/` 的宿主、启动器、构建与打包能力均停止更新；后续功能、修复和发布演进只做原生宿主。保留现有 Node 源码、备用目录包与回归用于历史兼容、对照和排障，不因原生参数或共享功能变化而同步扩展 Node。下方 Node 专属条款记录冻结实现的行为与验证方式，不构成继续维护 Node 的授权；只有用户再次明确要求时才修改 Node。插件共用构建和工具使用 Node.js 不属于 Node 宿主冻结范围。
+
+- **独立 EXE 与共享图标（2026-10-30）**：原生 `build.ps1` 保留 `windows/native-build/bin/` 中全部调试/测试 EXE，并另产出 `windows/native-build/release/chaoxing_plus.exe`。Node 构建入口保留备用目录包，另用 `package-node-exe.mjs` / `sea-bootstrap.cjs` 生成 `windows/node-build/release/chaoxing_plus_node.exe`；SEA 模块与注入资源从内存加载，不能依赖源码目录，`--version` / `--help` / `--self-check --no-disk-write` 不解包或写入宿主数据。Node 原有 GUI 全盘扫描的系统临时状态文件行为保留。两种 EXE 共用 `windows/share-file/assets/app-icon.ico`，同目录 `app-icon.png` 保留原图；更新图标须重建双方 EXE 并核对 PE 图标资源，不能只改 PNG。封装回归为 `scripts/windows-node-exe.test.mjs`，须覆盖复制单 EXE 到空目录、无 Node PATH、内嵌自检、参数保真及图标字节一致。
+
+- **窗口图标须单独绑定**：EXE 的 ICON 资源不会自动替换所有自有窗口的标题栏图标。原生选择/进度窗口须同时设置窗口类 `hIcon` / `hIconSm` 和窗口 `WM_SETICON`；Node WinForms 须显式设置 `Form.Icon` / `ShowIcon`，进度窗口不能使用会隐藏标题栏图标的 `FixedDialog`。回归须检查已创建 HWND 的实际 `WM_GETICON`，不能只断言 EXE 内有图标资源。
+
 - **Node 宿主已弃用（2026-10-29）**：`windows/node-source/*` 仅保留文件作兼容/对照与排障，不再开发新能力；新功能、静默场景、自毁与程序痕迹清理一律只做原生 EXE。发布构建以 `windows/native-source/build-windows.sh`（原生 + 打包）为主；`windows/node-source/build-windows-node.sh` 只作为备用 Node 包构建入口，不得据此新增 Node 能力或把 Node 行为写进验收标准。`--silent-scenario`/`--silent-delete-simulate` 现由原生宿主实现（`options.c` + `silent.c` + `host.c` 接线），Node 侧同参数仅作历史对照。 发布包默认使用原生宿主（`chaoxing_plus.exe`、五个原生启动器、文档、共享配置模板、校验器与清单）；Node 闭包/启动器/`runtime/node.exe` 必须显式传 `--with-node`（或 `--skip-native` 生成纯 Node 备用包）才会携带，`release-info.json` 同步写入 `nodeHost`/`entrypoints`/`assetsDir`/`runtime`。
 
 - **Chrome 75 语法闸门**：`npm run build:windows` 会拒绝 `?.` / `??` / 逻辑赋值 / 私有类成员 / 静态块等语法。

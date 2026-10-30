@@ -4,6 +4,8 @@
 
 Windows 6.2.0 第一阶段提供 **普通可审计 Windows 宿主**：它用官方 CEF 远程调试参数启动超星考试客户端，并通过 CDP（Chrome DevTools Protocol）把扩展的业务 bundle 注入到客户端网页主世界。扫描、配置和离线参数生成器属于本阶段；内存执行（`--execution-mode memory` / `--memory-exec`：宿主侧零落盘、客户端仍正常可见启动）已支持；**状态（2026-10-29）**：**Node 宿主已弃用**——`windows/node-source/*` 只保留文件作兼容/对照与排障，不再开发新能力；新功能、静默场景、自毁与程序痕迹清理一律只做原生 EXE。原生宿主已支持 `--silent-scenario`（无面板/无日志/无控制台、`Ctrl+Alt+Shift+S` 每题手动放行、`Ctrl+Alt+Shift+E`/`F8` 与全屏退出/进程结束触发自毁、删除程序痕迹且永不触碰 CXExam）。发布构建主入口是 `windows/native-source/build-windows.sh`；`windows/node-source/build-windows-node.sh` 只构建备用 Node 包（`--skip-native`），不再演进。
 
+**2026-10-30 发布目录与冻结规则**：原生单 EXE 为 `windows/native-build/release/chaoxing_plus.exe`，原 `windows/native-build/bin/` 保留全部调试/测试 EXE。Node 单 EXE 为 `windows/node-build/release/chaoxing_plus_node.exe`，使用 Node SEA 内嵌运行时、宿主模块、页面资源、配置模板与 PowerShell 脚本，目标机器无需安装 Node；`npm run build:node:exe` 使用已有 release 资源生成它，Node CMD/SH 构建同时生成单 EXE 和备用目录包。模块与注入资源从内存加载，原有 GUI 全盘扫描仍使用系统临时状态文件。两种 EXE 使用 `windows/share-file/assets/app-icon.ico`，PNG 源图在同目录。此次封装与图标接入完成后，Node 宿主及其构建/启动器停止更新，只保留历史兼容、对照和排障；后续演进仅做原生。
+
 ## 状态与适用对象
 
 | 项 | 状态 |
@@ -224,7 +226,9 @@ src/ / public/                  与插件共用的源码和资源，保留原位
 build.mjs / build-browser.sh    插件构建入口，保留原位
 dist/                          插件构建输出，保留原位
 dist-windows/                  Windows 注入资源，保留原位
-windows/native-build/bin/      原生构建输出，保留原位
+windows/native-build/bin/      原生调试与测试 EXE，保留原位
+windows/native-build/release/  原生独立单 EXE
+windows/node-build/release/    Node SEA 独立单 EXE
 windows/node-build/             Node 备用构建输出，保留原位
 release/                       发布包输出，保留原位
 scripts/                       全量测试入口与共用测试辅助文件
