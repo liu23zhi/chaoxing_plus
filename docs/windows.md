@@ -559,7 +559,7 @@ CDP 断开时关闭旧页面会话；target 仍存在则在下一轮枚举重新
 | --- | --- | --- |
 | `--execution-mode memory`、`--memory-exec` | 内存执行 | **已支持**：宿主零落盘，客户端正常可见启动；不创建配置/数据目录，不写日志/诊断/报告/扫描缓存。 |
 | `--execution-mode delete-suspend`、`--delete-suspend` | 删除挂起 | **已支持**：客户端启动后删除程序痕迹并继续运行；需要发布布局，强制 no-disk-write，禁止 `--attach`/`--list-clients`。 |
-| `--wipe-owned-files-on-start` | 关闭 | **已支持**：启动时清理 `<data-dir>\chaoxing` 登记的扫描缓存、宿主日志、本次诊断产物，以及所选 `CXExam.exe` 同目录的 `debug.log`（不删除客户端本身）。 |
+| `--wipe-owned-files-on-start` | 关闭 | **已支持**：启动时清理 `<data-dir>\chaoxing` 登记的扫描缓存、宿主日志、本次诊断产物，以及所选 `CXExam.exe` 同目录的 `debug.log`（不删除客户端本身）。`debug.log` 在启动清理、`delete-suspend`、静默场景、自毁触发和客户端退出/宿主退出时都会清理；被占用时改为清空内容而不是保留原日志。 |
 | `--wipe-failure-policy retry\|background\|ignore\|abort` | `retry` | **已支持**：abort 失败退出 3；background 转后台；ignore 尝试一次。 |
 | `--wipe-retries <1-20>` | `5` | **已支持**：启动阶段每个文件的尝试次数。 |
 | `--wipe-retry-delay <ms>` | `200`，`50-5000` | **已支持**：重试间隔。 |
