@@ -1,10 +1,10 @@
 # Windows 端（超星考试客户端 / CEF 75）使用与设计
 
-源码按 `windows/node-source/`、`windows/native-source/` 与 `windows/share-file/` 分组，插件共用的源码与插件构建目录保留原位。仓库内原生入口为 `windows/native-scripts/start-windows*.cmd`，Node 备用入口为 `windows/node-scripts/start-windows-node*.cmd`；发布包启动器仍在包根。文末历史验证记录中的旧入口名只代表当时的布局，当前可执行命令以本文目录与快速开始部分为准。
+源码按 `windows/node-source/`、`windows/native-source/` 与 `windows/share-file/` 分组，插件共用的源码与插件构建目录保留原位。仓库内原生入口为 `windows/native-scripts/start-windows*.cmd`，Node 备用入口为 `windows/node-scripts/start-windows-node*.cmd`；原生包启动器位于 `multi-file/`，Node 兼容包启动器仍在包根。文末历史验证记录中的旧入口名只代表当时的布局，当前可执行命令以本文目录与快速开始部分为准。
 
 Windows 6.2.0 第一阶段提供 **普通可审计 Windows 宿主**：它用官方 CEF 远程调试参数启动超星考试客户端，并通过 CDP（Chrome DevTools Protocol）把扩展的业务 bundle 注入到客户端网页主世界。扫描、配置和离线参数生成器属于本阶段；内存执行（`--execution-mode memory` / `--memory-exec`：宿主侧零落盘、客户端仍正常可见启动）已支持；**状态（2026-10-29）**：**Node 宿主已弃用**——`windows/node-source/*` 只保留文件作兼容/对照与排障，不再开发新能力；新功能、静默场景、自毁与程序痕迹清理一律只做原生 EXE。原生宿主已支持 `--silent-scenario`（无面板/无日志/无控制台、`Ctrl+Alt+Shift+S` 每题手动放行、`Ctrl+Alt+Shift+E`/`F8` 与全屏退出/进程结束触发自毁、删除程序痕迹且永不触碰 CXExam）。发布构建主入口是 `windows/native-source/build-windows.sh`；`windows/node-source/build-windows-node.sh` 只构建备用 Node 包（`--skip-native`），不再演进。
 
-**2026-10-30 发布目录与冻结规则**：原生 GUI EXE 为 `windows/native-build/release/chaoxing_plus.exe`，使用 `-BuildConsole` 时同时生成独立 Console EXE `chaoxing_plus_console.exe`；`windows/native-build/bin/` 保留全部调试/测试 EXE。发布包在根目录保留兼容入口，并提供 `single-file/` 与 `multi-file/` 两个变体目录。Node 单 EXE 为 `windows/node-build/release/chaoxing_plus_node.exe`，使用 Node SEA 内嵌运行时、宿主模块、页面资源、配置模板与 PowerShell 脚本，目标机器无需安装 Node；`npm run build:node:exe` 使用已有 release 资源生成它，Node CMD/SH 构建同时生成单 EXE 和备用目录包。模块与注入资源从内存加载，原有 GUI 全盘扫描仍使用系统临时状态文件。原生 GUI/Console EXE 与 Node EXE 使用 `windows/share-file/assets/app-icon.ico`，PNG 源图在同目录。此次封装与图标接入完成后，Node 宿主及其构建/启动器停止更新，只保留历史兼容、对照和排障；后续演进仅做原生。
+**2026-10-30 发布目录与冻结规则**：原生三个构建入口默认生成 GUI/Console EXE，分别位于 `windows/native-build/release/single-file/chaoxing_plus.exe` 与 `windows/native-build/release/multi-file/chaoxing_plus_console.exe`。PowerShell `build-windows.ps1` 只编译；显式 `-BuildConsole:$false` 只编译 GUI，并清理 `bin/` 与 `release/multi-file/` 中旧 Console EXE。CMD/SH 继续完成完整打包与校验，最终目录直接为 `windows/native-build/release/`，不追加版本目录，不在仓库根 `release/` 另建原生包。`single-file/` 只含 GUI EXE；`multi-file/` 带启动器、配置、文档及独立清单/校验器；原生发布根另有清单与校验器，不放兼容 EXE 或启动器。ZIP 位于 `windows/native-build/chaoxing-plus-6.2.0-windows.zip`。旧的 `windows/native-build/release/chaoxing_plus.exe` 根文件由构建脚本清理，`windows/native-build/bin/` 保留宿主与调试/测试 EXE。Node 单 EXE 为 `windows/node-build/release/chaoxing_plus_node.exe`，使用 Node SEA 内嵌运行时、宿主模块、页面资源、配置模板与 PowerShell 脚本，目标机器无需安装 Node；`npm run build:node:exe` 使用已有 release 资源生成它，Node CMD/SH 构建同时生成单 EXE 和备用目录包。模块与注入资源从内存加载，原有 GUI 全盘扫描仍使用系统临时状态文件。原生 GUI/Console EXE 与 Node EXE 使用 `windows/share-file/assets/app-icon.ico`，PNG 源图在同目录。此次封装与图标接入完成后，Node 宿主及其构建/启动器停止更新，只保留历史兼容、对照和排障；后续演进仅做原生。
 
 ## 状态与适用对象
 
@@ -201,7 +201,7 @@ windows/node-scripts/start-windows-node.cmd
 
 ## 目录
 
-以下源码路径相对于仓库根目录；发布包启动器与校验器继续位于包根，不能直接把仓库源码路径当作包内入口。
+以下源码路径相对于仓库根目录；原生包启动器位于 `multi-file/`，校验器位于原生发布根与 `multi-file/`；Node 兼容包启动器与校验器位于历史包根，不能直接把仓库源码路径当作包内入口。
 
 ```text
 windows/
@@ -210,16 +210,19 @@ windows/
     options.mjs / config.mjs    启动参数、共享键与配置持久化
     inject.mjs / cdp.mjs        页面会话、注入生命周期与 CDP
     launch.mjs                  提权、端口、PE、进程与监听归属
-    selection-window.*          Node 客户端选择窗口与封装
-    scan-progress-window.*      Node 全盘扫描进度/取消窗口
-    silent-*.vbs / *.mjs        Node 静默启动与内存引导
+    selection-window.mjs        Node 客户端选择窗口封装
+    scan-progress-window.mjs    Node 全盘扫描进度/取消窗口封装
+    silent-*.mjs                Node 静默启动与内存引导
     build-windows-node.cmd/.sh  备用 Node 构建入口
+  node-scripts/                 Node 启动与运行脚本
     start-windows-node*.cmd     Node 仓库启动器
+    *.ps1 / *.vbs               Node 配套 PowerShell/WSH 脚本
   native-source/                无 CRT 的原生宿主
     *.c / *.h / *.inc           原生实现、配置、注入、审计与诊断
     tests/                      C 测试与驱动程序
-    build.ps1                   MSVC x86 构建、RCDATA 与导入表审计
+    build-windows.ps1           MSVC x86 编译、RCDATA 与导入表审计
     build-windows.cmd/.sh       原生构建与默认发布入口
+  native-scripts/               原生运行入口
     start-windows*.cmd          原生仓库启动器
   share-file/                   两种 Windows 宿主共用文件
     windows-bootstrap.js        页面平台层、配置水合与 Chrome75 补丁
@@ -239,10 +242,13 @@ build.mjs / build-browser.sh    插件构建入口，保留原位
 dist/                          插件构建输出，保留原位
 dist-windows/                  Windows 注入资源，保留原位
 windows/native-build/bin/      原生调试与测试 EXE，保留原位
-windows/native-build/release/  原生 GUI/Console 独立 EXE
+windows/native-build/release/  原生完整发布根（无版本目录嵌套）
+  single-file/                 GUI 独立 EXE
+  multi-file/                  Console EXE、启动器、配置、文档与独立清单
+windows/native-build/*.zip     原生完整发布 ZIP
 windows/node-build/release/    Node SEA 独立单 EXE
 windows/node-build/             Node 备用构建输出，保留原位
-release/                       发布包输出，保留原位
+release/                       Node 历史兼容包默认输出
 scripts/                       全量测试入口与共用测试辅助文件
 .github/workflows/ci.yml        Windows CI 构建、测试与发布包冒烟
 ```
@@ -320,7 +326,7 @@ npm ci
 npm run build                  # 扩展注入脚本
 npm run build:windows -- --release # dist-windows 注入资源
 npm run build:native           # 原生 EXE 与编译测试（需要本机 MSVC x86 工具链）
-npm run release:windows        # release/chaoxing-plus-6.2.0-windows/ 与 .zip
+npm run release:windows        # windows/native-build/release/ 与 windows/native-build/chaoxing-plus-6.2.0-windows.zip
 ```
 
 Windows 的 Git Bash / MSYS2 / Cygwin 环境中可一键构建 x86 发布包：
@@ -333,13 +339,13 @@ bash windows/native-source/build-windows.sh --skip-tests
 
 **Windows 打包决策（2026-12-06）**：发布包提供两种 **x86、无 CRT、无第三方/外部 DLL 依赖（仅链接 Windows 系统 DLL）** 的原生宿主变体；原生构建把 bootstrap/bundle/trampoline/CSS 以 RCDATA 内嵌，不伴随 DLL 或运行库。`single-file/chaoxing_plus.exe` 使用 GUI 子系统，适合双击和静默启动；`multi-file/chaoxing_plus_console.exe` 使用 Console 子系统，适合需要 PowerShell/cmd 严格等待和完整输出顺序的场景。两个 EXE 分别链接生成，不能通过改名互换。当前注入链路是 CXExam 官方 remote debugging + CDP 页面注入；x86 宿主可以正常启动并注入 x64 CXExam，因此**不内置 x64 可执行注入器**，也不从 x86 进程内存执行 x64 PE、不引入进程空洞/远程线程注入。若未来要做原生 DLL/远程线程注入，必须单独设计 x64 载荷、测试与安全边界。
 
-- 打包脚本 `windows/share-file/package-windows.mjs` 只读取构建产物、不修改工作区；输出目录 `release/` 已 gitignore。发布包会校验 `dist-windows/package-manifest.json` 的 `features.injectionLog`（且清单 `version` 必须存在并与发布版本完全一致，防止旧构建被打成新版本），若为 `true`（本机 `windows/local-features.json` 开启的调试构建）则失败关闭并提示先运行 `npm run build:windows -- --release`；CI 的构建步骤固定使用 `--release`。
-- 发布包根目录保留兼容入口，同时新增两个明确变体：`single-file/` 包含 GUI 子系统 `chaoxing_plus.exe`；`multi-file/` 包含 Console 子系统 `chaoxing_plus_console.exe`、五个改写后的原生启动器、配置、文档、独立 `release-info.json`、`SHA256SUMS.txt` 与 `verify-release.mjs`。根 `release-info.json` 的 `variants` 字段记录两个变体的目录、入口和 PE 子系统。五个原生启动器只负责设置启动参数并启动 EXE，正常路径不输出额外说明，启动后保留命令窗口；调用方参数通过 `%*` 透传。`start-windows-silent.cmd` 额外使用 `--stage-boot`，先由临时副本运行再清理本体。Node 备用包使用 `--with-node`（原生 + Node）或 `--skip-native`（纯 Node），`windows/node-source/build-windows-node.sh` 即后者。
-- 原生 GUI EXE 默认取 `windows/native-build/bin/chaoxing_plus.exe`，Console 变体默认取 `windows/native-build/bin/chaoxing_plus_console.exe`，可用 `--exe <path>` 与 `--console-exe <path>` 指定；未构建原生时用 `--skip-native` 生成仅 Node 宿主包。缺少 Console EXE 时仍可生成兼容根目录和 `single-file/`，打包器会明确警告并跳过 `multi-file/`。
-- Node 包的普通入口为 `start-windows-node.cmd`（通过 `silent-launch.vbs` 隐藏 Node 控制台、保留 GUI）及 `start-windows-node-debug.cmd`（可见控制台）；`start-windows-node-silent.cmd` 通过 `silent-memory-launch.vbs` / `silent-memory-bootstrap.mjs` 进入固定静默内存场景，另有 `start-windows-node-silent-debug.cmd` 和 `start-windows-node-silent-no-full-scan-debug.cmd` 调试变体。`release-info.json` 的 `entrypoints` 记录这些入口。宿主运行闭包与配套 PowerShell/VBS 放在 `windows/node-source/`；`windows/share-file/config.example.json` 用于首次生成完整配置。构建期模块与外部 npm 依赖不得进入运行闭包，打包时失败关闭。
+- 打包脚本 `windows/share-file/package-windows.mjs` 读取构建产物，默认直接写入已 gitignore 的 `windows/native-build/release/`，原生模式的 `--out <dir>` 指定最终目录，不追加版本目录。默认 ZIP 位于 `windows/native-build/chaoxing-plus-6.2.0-windows.zip`。发布包会校验 `dist-windows/package-manifest.json` 的 `features.injectionLog`（且清单 `version` 必须存在并与发布版本完全一致，防止旧构建被打成新版本），若为 `true`（本机 `windows/local-features.json` 开启的调试构建）则失败关闭并提示先运行 `npm run build:windows -- --release`；CI 的构建步骤固定使用 `--release`。
+- 原生 `single-file/` 只含 GUI 子系统 `chaoxing_plus.exe`；`multi-file/` 包含 Console 子系统 `chaoxing_plus_console.exe`、五个改写后的原生启动器、配置、文档、独立 `release-info.json`、`SHA256SUMS.txt` 与 `verify-release.mjs`。原生发布根另有清单和校验器，不放兼容 EXE 或启动器；根 `release-info.json` 的 `variants` 字段记录两个变体的目录、入口和 PE 子系统。五个原生启动器只负责设置启动参数并启动同级 Console EXE，正常路径不输出额外说明，启动后保留命令窗口；调用方参数通过 `%*` 透传。`start-windows-silent.cmd` 额外使用 `--stage-boot`，先由临时副本运行再清理本体。显式 `--with-node`（原生 + Node）或 `--skip-native`（纯 Node）保留 Node 历史 `<out>/<name>/` 布局及默认仓库根 `release/` 输出，`windows/node-source/build-windows-node.sh` 即后者。
+- 原生 GUI EXE 默认取 `windows/native-build/bin/chaoxing_plus.exe`，Console 变体默认取 `windows/native-build/bin/chaoxing_plus_console.exe`，可用 `--exe <path>` 与 `--console-exe <path>` 指定。PowerShell 编译入口默认生成两者，显式 `-BuildConsole:$false` 才只编译 GUI 并清理旧 Console EXE；CMD/SH 入口完成双变体编译、完整打包与校验。缺少 Console EXE 时，打包器会明确警告并跳过 `multi-file/`，仍可生成 `single-file/` 与根清单；未构建原生时显式用 `--skip-native` 生成仅 Node 宿主包。
+- Node 包的普通入口为 `start-windows-node.cmd`（通过 `silent-launch.vbs` 隐藏 Node 控制台、保留 GUI）及 `start-windows-node-debug.cmd`（可见控制台）；`start-windows-node-silent.cmd` 通过 `silent-memory-launch.vbs` / `silent-memory-bootstrap.mjs` 进入固定静默内存场景，另有 `start-windows-node-silent-debug.cmd` 和 `start-windows-node-silent-no-full-scan-debug.cmd` 调试变体。`release-info.json` 的 `entrypoints` 记录这些入口。宿主运行闭包放在 `windows/node-source/`，配套 PowerShell/VBS 放在 `windows/node-scripts/`；`windows/share-file/config.example.json` 用于首次生成完整配置。构建期模块与外部 npm 依赖不得进入运行闭包，打包时失败关闭。
 - 包内提供 `release-info.json`（版本、入口 `native`/`node`/`nodeDebug`/`nodeSilent`、`verifier`、payload 文件数、Node 版本）、`SHA256SUMS.txt` 与 `verify-release.mjs`；zip 由 Windows `Compress-Archive` 生成。解压后可运行 `node verify-release.mjs` 按校验清单逐文件校验 SHA-256（缺失/摘要不匹配返回 1，清单缺失/格式错误返回 2），CI 与本机发布验证都会先运行该自校验。
-- 冒烟：包含 Node 时，解压后运行 `node windows/node-source/main.mjs --self-check --no-disk-write --quiet` 验证运行闭包；原生使用 `chaoxing_plus.exe --self-check --no-disk-write`。两种自检默认只读，不扫描、启动或连接客户端；保留 `--no-disk-write` 明确禁止全部宿主落盘。`scripts/windows-release-package.test.mjs` 覆盖包结构、校验和、zip 条目、内部原型/外部依赖拒绝及 CI 工作流契约。
-- CI：`.github/workflows/ci.yml` 在 `windows-latest` 执行 `npm ci` → 类型检查 → 扩展/Windows/原生构建 → 通过 `$GITHUB_ENV` 导出全部 `CX_NATIVE_*` 编译测试路径 → 全量单元测试 → 10 个浏览器回归（原生 browser 用例继承同一批变量，不再被跳过）→ 发布包冒烟 → 解压检查必需文件并运行发布包内 Node/原生 `--self-check` → 上传 artifact。`release-ci/` 已 gitignore。CI 不覆盖真实 UAC 审批、真实 CEF75 登录后页面、旧 Windows 干净环境或真实考试客户端验收，这些仍需人工完成。
+- 冒烟：原生包解压后分别使用 `single-file/chaoxing_plus.exe --self-check --no-disk-write` 与 `multi-file/chaoxing_plus_console.exe --self-check --no-disk-write`；包含 Node 的历史兼容包再运行 `node windows/node-source/main.mjs --self-check --no-disk-write --quiet` 验证运行闭包。两种自检默认只读，不扫描、启动或连接客户端；保留 `--no-disk-write` 明确禁止全部宿主落盘。`scripts/windows-release-package.test.mjs` 覆盖包结构、校验和、zip 条目、内部原型/外部依赖拒绝及 CI 工作流契约。
+- CI：`.github/workflows/ci.yml` 在 `windows-latest` 执行 `npm ci` → 类型检查 → 扩展/Windows/原生构建 → 通过 `$GITHUB_ENV` 导出全部 `CX_NATIVE_*` 编译测试路径 → 全量单元测试 → 浏览器回归（原生 browser 用例继承同一批变量，不再被跳过）→ `windows/native-build/release/` 发布包冒烟 → 将 ZIP 解压到 `windows/native-build/release-ci/`，检查解压包必需文件、根与 `multi-file/` 完整性以及 GUI/Console 自检 → 上传 `windows/native-build/` 下的 ZIP。原生包不得含 Node 产物；仓库根 `release-ci/` 仅保留历史忽略规则。CI 不覆盖真实 UAC 审批、真实 CEF75 登录后页面、旧 Windows 干净环境或真实考试客户端验收，这些仍需人工完成。
 
 ## 配置项
 
@@ -390,7 +396,7 @@ chaoxing_plus.exe --install-proxy --client "<CXExam.exe>"
 
 开发树里仍优先使用外置代理（`winmm-proxy.dll` → `winmm.dll` → `hook\winmm.dll` → `..\hook\winmm.dll` → `..\..\native-build\hook\winmm.dll`），找不到才回退内嵌资源；`--proxy-source` 可显式指定文件（此时载体会固定，冲突直接报错而不切换）。其它载体（version/uxtheme/…）没有内嵌资源，必须用 `--proxy-source` 指定，否则明确报错。
 
-**原生构建布局**：`windows/native-build/release/chaoxing_plus.exe` 是独立 GUI EXE；启用 `-BuildConsole` 时，Console EXE 生成在 `windows/native-build/bin/chaoxing_plus_console.exe`，随后由发布打包器放入 `multi-file/`。`build.ps1` 在 `windows/native-build/hook/winmm.dll` 缺失时会自动构建它（仅用于嵌入；`-SkipProxy` 会因缺少嵌入源而直接失败），`package-windows.mjs` 不再复制任何代理文件，`release-info.json` 也不再写 `proxyDir`。选择窗口按"内嵌代理 → 宿主目录外置代理"判定 `dll-proxy` 可用性，所以两个变体都能选到该通道。
+**原生构建布局**：PowerShell 默认编译 GUI 与 Console 两种 EXE，分别复制到 `windows/native-build/release/single-file/chaoxing_plus.exe` 和 `windows/native-build/release/multi-file/chaoxing_plus_console.exe`；显式 `-BuildConsole:$false` 只编译 GUI，并清理旧 Console EXE。PowerShell 不负责完整打包；CMD/SH 继续调用发布打包器，直接在相同的 `windows/native-build/release/` 最终目录补齐 `multi-file/` 配套文件、根与 `multi-file/` 清单和校验器，不另建版本目录或根兼容 EXE。构建脚本会清理旧的 `windows/native-build/release/chaoxing_plus.exe` 根文件，避免把旧布局误当成最新产物。`build-windows.ps1` 在 `windows/native-build/hook/winmm.dll` 缺失时会自动构建它（仅用于嵌入；`-SkipProxy` 会因缺少嵌入源而直接失败），`package-windows.mjs` 不再复制任何代理文件，`release-info.json` 也不再写 `proxyDir`。选择窗口按"内嵌代理 → 宿主目录外置代理"判定 `dll-proxy` 可用性，所以两个变体都能选到该通道。
 
 诊断开关：`--pipe-test`（管道启动自检）、`--pipe-client <exe>`（管道握手）、`--pipe-call <exe> [--pipe-expr "<js>"] [--pipe-args "<args>"]`（管道 CDP 全链路 open → getVersion → getTargets → attach → evaluate）。
 ### 完整启动参数
@@ -399,7 +405,7 @@ chaoxing_plus.exe --install-proxy --client "<CXExam.exe>"
 
 帮助与版本开关**不区分大小写**并兼容常见写法（原生宿主）：`--help`、`-h`、`-H`、`--h`、`--H`、`-help`、`--Help`、`--HELP`、`-?`、`/?`、`?` 输出同一份帮助；`--version`、`-v`、`-V`、`--v`、`--Version` 只输出 `6.2.0` 后退出。未知参数以退出码 `2` 报 `unknown command line option (try --help)`。
 
-原生宿主是 **GUI 子系统**程序（`/SUBSYSTEM:WINDOWS`）：无参数、GUI 选择窗口和静默场景都不会分配控制台窗口，双击或 `start-windows*.cmd` 启动不再出现 cmd 黑框。帮助/版本/能力查询这类长输出仍要写到控制台：从 PowerShell/cmd 启动时沿用父控制台（`GetStdHandle` 有效即直接写），没有控制台时可用 `--console` 分配；输出先在内存拼成完整文本再单次 `WriteConsoleW`（重定向时一次 `WriteFile`），内容不会被打断。因为 GUI 子系统不会被 shell 等待，提示符可能先出现、帮助随后完整输出；需要严格顺序时用 `chaoxing_plus.exe -h | Out-String`、`cmd /c "chaoxing_plus.exe -h"` 或 `--console`。单文件 EXE 无法按参数切换子系统（PE 头只有一个 Subsystem 字段），默认 GUI 是为消除每次启动的控制台窗口。
+原生 GUI 变体是 **GUI 子系统**程序（`/SUBSYSTEM:WINDOWS`）：无参数、GUI 选择窗口和静默场景都不会分配控制台窗口，直接双击 GUI EXE 不会出现 cmd 黑框。帮助/版本/能力查询这类长输出仍要写到控制台：从 PowerShell/cmd 启动时沿用父控制台（`GetStdHandle` 有效即直接写），没有控制台时可用 `--console` 分配；输出先在内存拼成完整文本再单次 `WriteConsoleW`（重定向时一次 `WriteFile`），内容不会被打断。因为 GUI 子系统不会被 shell 等待，提示符可能先出现、帮助随后完整输出；需要严格等待和输出顺序时使用 `multi-file/chaoxing_plus_console.exe`，GUI 变体的自动化检查则用 `Start-Process -Wait -PassThru` 检查退出码。单个 EXE 无法按参数切换子系统（PE 头只有一个 Subsystem 字段），两种变体必须分别链接生成。`multi-file/` 的 CMD 启动器使用 Console EXE 并保留命令窗口。
 
 
 
@@ -861,7 +867,7 @@ git diff --check
 
 ```powershell
 npm run build:windows
-powershell -NoProfile -ExecutionPolicy Bypass -File .\windows\native-source\build.ps1 -BuildTests -BuildConsole
+powershell -NoProfile -ExecutionPolicy Bypass -File .\windows\native-source\build-windows.ps1 -BuildTests -BuildConsole
 
 $env:CX_NATIVE_HOST_EXE = (Resolve-Path '.\windows\native-build\bin\chaoxing_plus.exe').Path
 $env:CX_NATIVE_INJECTION_EXE = (Resolve-Path '.\windows\native-build\bin\injection-tests.exe').Path
@@ -902,7 +908,7 @@ try {
 
 `process-check-tests.exe`（`CX_NATIVE_PROCESS_CHECK_EXE`）通过确定性进程快照替身检查空结果、同名跨目录及大小写匹配、枚举失败、错误码和句柄释放；旧 `proc_instances` 在检查失败时返回 `-1`。`windows-native-process-check.test.mjs` 还将 `process-fixture.exe`（`CX_NATIVE_PROCESS_FIXTURE_EXE`）复制到测试自有目录并命名为 `CXExam.exe`，实际验证普通启动拒绝、失败报告及已有进程保持运行，结束时仅清理自己创建的进程与目录。`elevation-host-tests.exe` 检查冲突/检查失败发生在 DPI 前、提升后重新检查及晚发现冲突时先恢复 DPI；均不启动真实考试客户端。
 
-`-BuildTests` 编译实际原生宿主注入代码与确定性 mock CDP 传输，输出 `injection-tests.exe`，同时生成 `assets-tests.exe`、`options-tests.exe`、`json-tests.exe`、`session-tests.exe`、`selection-tests.exe`、`transport-tests.exe`、`audit-tests.exe` 和 `config-store-tests.exe`。`-BuildConsole` 额外链接 `chaoxing_plus_console.exe`（`Subsystem=3`），GUI 宿主保持 `Subsystem=2`；两个入口都使用同一份内嵌资源，但不能通过改名替代。`CX_NATIVE_INJECTION_EXE` 启用策略顺序、重试上限、CDP 请求 ID 及执行确认测试；`CX_NATIVE_ASSETS_EXE` 启用资源字节校验；`CX_NATIVE_OPTIONS_EXE` 启用实际 C 参数回归；`CX_NATIVE_SESSION_EXE` 检查导航、iframe、取消代次、配置任务和启用恢复；`CX_NATIVE_SELECTION_EXE` 构建真实 Win32 隐藏控件；`CX_NATIVE_TRANSPORT_EXE` 检查分段 WebSocket 消息、零超时和控制帧截止时间；`CX_NATIVE_AUDIT_EXE` 检查真实日志/报告文件、中文路径、quiet/noDiskWrite、UTF-8/JSON 转义和文件失败降级；`CX_NATIVE_CONFIG_EXE` 检查共享键解码去重、容量边界、真实文件 patch、原文件保留和自有临时文件清理。未设置对应变量时会显示跳过，不能称为已完成编译验证。`json-tests.exe` 可直接执行验证 JSON 解析。`CX_NATIVE_HOST_EXE` 用于原生 CLI、现代 Chromium 生命周期、审计及配置回归，`--capabilities` 校验内嵌资源并报告 `embeddedResources:true`、资源数量以及 `configReload:true`/`configPersistence:true`/`fileLogging:true`/`runReport:true`。`build/pe-imports.txt` 与 `build/pe-imports-console.txt` 是两个入口的导入表审计记录；这些测试仍不等同于真实客户端验收。
+`-BuildTests` 编译实际原生宿主注入代码与确定性 mock CDP 传输，输出 `injection-tests.exe`，同时生成 `assets-tests.exe`、`options-tests.exe`、`json-tests.exe`、`session-tests.exe`、`selection-tests.exe`、`transport-tests.exe`、`audit-tests.exe` 和 `config-store-tests.exe`。编译入口默认同时链接 `chaoxing_plus_console.exe`（`Subsystem=3`），GUI 宿主保持 `Subsystem=2`；显式 `-BuildConsole:$false` 才只编译 GUI 并清理旧 Console EXE。两个入口都使用同一份内嵌资源，但不能通过改名替代。`CX_NATIVE_INJECTION_EXE` 启用策略顺序、重试上限、CDP 请求 ID 及执行确认测试；`CX_NATIVE_ASSETS_EXE` 启用资源字节校验；`CX_NATIVE_OPTIONS_EXE` 启用实际 C 参数回归；`CX_NATIVE_SESSION_EXE` 检查导航、iframe、取消代次、配置任务和启用恢复；`CX_NATIVE_SELECTION_EXE` 构建真实 Win32 隐藏控件；`CX_NATIVE_TRANSPORT_EXE` 检查分段 WebSocket 消息、零超时和控制帧截止时间；`CX_NATIVE_AUDIT_EXE` 检查真实日志/报告文件、中文路径、quiet/noDiskWrite、UTF-8/JSON 转义和文件失败降级；`CX_NATIVE_CONFIG_EXE` 检查共享键解码去重、容量边界、真实文件 patch、原文件保留和自有临时文件清理。未设置对应变量时会显示跳过，不能称为已完成编译验证。`json-tests.exe` 可直接执行验证 JSON 解析。`CX_NATIVE_HOST_EXE` 用于原生 CLI、现代 Chromium 生命周期、审计及配置回归，`--capabilities` 校验内嵌资源并报告 `embeddedResources:true`、资源数量以及 `configReload:true`/`configPersistence:true`/`fileLogging:true`/`runReport:true`。`build/pe-imports.txt` 与 `build/pe-imports-console.txt` 是两个入口的导入表审计记录；这些测试仍不等同于真实客户端验收。
 
 2026-10-28 配置同步阶段验证记录：显式展开 55 个 `scripts/*.test.mjs`，560/560 通过、0 跳过；原有 6 个浏览器回归文件共 50/50 通过，新增原生配置浏览器回归 8/8 通过，合计 58 项。类型检查、扩展构建、Chrome75 构建、原生 `-BuildTests` 均退出 0；Node 宿主 self-check 为 0 失败、0 警告。当时原生 EXE 为 498176 字节，导入表仅含 Windows 系统 DLL。编译后的故障回归先失败、修复后通过，覆盖写盘失败期间不丢失更新的内存配置；浏览器回归覆盖新宿主接管旧文档，以及默认/显式配置文件删除后的不同恢复行为。自有宿主、浏览器和监听端口已关闭。以上为本地驱动、mock CDP 与现代 Chromium 自动化证据，尚未执行真实 CEF75 客户端登录后验证；后续执行时应重新展开测试文件并报告当次实际数量。
 
@@ -928,7 +934,7 @@ try {
 
 全量浏览器首轮曾发现旧重连夹具把主动中断在途注入也误要求为零失败；新增可控断线确认失败发生于断开与恢复之间，普通到期取消仍要求零失败，原生生产统计没有修改。当前本地验证 EXE 为 542208 字节，SHA256 为 `5C9DABAB37F5E7F3D02F81FEFA93428912513F2D3A8576DB9C59F181996C5576`，导入表仍只含系统 DLL。本地构建配置及产物没有纳入 Git；本阶段新增日志尚未在真实 CEF75 登录后验证，等待人工配合。
 
-2026-10-29 原生数据生命周期验证记录：`--no-retain-data` / `--delete-config` 已在原生宿主接通（此前显式拒绝）。编译 `windows/native-source/build.ps1 -BuildTests` 退出 `0`；`options-tests.exe` 新增断言覆盖 no-retain-data 生效、delete-config 需显式 `--config`、与 `--no-disk-write` 冲突、JSON `retainData:false` / `deleteConfig:true`，执行退出 `0`；新增 `windows-native-lifecycle.test.mjs` 5/5 通过：只删除本轮创建的日志与报告、保留运行前已有文件、JSON 与 CLI 行为一致、只删除显式 `--config`、拒绝缺失 `--config` 或与 `--no-disk-write` 同用。`--capabilities` 新增 `retainData:true`、`deleteConfig:true`；生成器原生模式解除对应禁用并阻止无 `--config` 的 `deleteConfig`（生成器 36/36 通过）。全量：显式展开 74 个 `scripts/*.test.mjs`，763 项中 756 通过、0 失败、7 项可选 GUI 显示测试跳过；9 个浏览器回归文件 77/77 通过。类型检查、扩展构建、Chrome75 构建、Node 自检、原生自检及 `git diff --check` 均退出 `0`。本轮验证 EXE 为 545280 字节，SHA256 为 `433C42097891D716F16A3DD954F07847B8631D5EC2A0714342E0831711E3B472`，导入表仅含系统 DLL。默认配置“仅清理本轮新建文件”的路径与 UAC 交接时由提升子实例执行最终删除的行为目前只有代码审查与命令行生命周期回归，未在真实页面同步/UAC 人工审批场景自动化覆盖；真实 CEF75 登录后验收仍未执行。
+2026-10-29 原生数据生命周期验证记录：`--no-retain-data` / `--delete-config` 已在原生宿主接通（此前显式拒绝）。编译 `windows/native-source/build-windows.ps1 -BuildTests` 退出 `0`；`options-tests.exe` 新增断言覆盖 no-retain-data 生效、delete-config 需显式 `--config`、与 `--no-disk-write` 冲突、JSON `retainData:false` / `deleteConfig:true`，执行退出 `0`；新增 `windows-native-lifecycle.test.mjs` 5/5 通过：只删除本轮创建的日志与报告、保留运行前已有文件、JSON 与 CLI 行为一致、只删除显式 `--config`、拒绝缺失 `--config` 或与 `--no-disk-write` 同用。`--capabilities` 新增 `retainData:true`、`deleteConfig:true`；生成器原生模式解除对应禁用并阻止无 `--config` 的 `deleteConfig`（生成器 36/36 通过）。全量：显式展开 74 个 `scripts/*.test.mjs`，763 项中 756 通过、0 失败、7 项可选 GUI 显示测试跳过；9 个浏览器回归文件 77/77 通过。类型检查、扩展构建、Chrome75 构建、Node 自检、原生自检及 `git diff --check` 均退出 `0`。本轮验证 EXE 为 545280 字节，SHA256 为 `433C42097891D716F16A3DD954F07847B8631D5EC2A0714342E0831711E3B472`，导入表仅含系统 DLL。默认配置“仅清理本轮新建文件”的路径与 UAC 交接时由提升子实例执行最终删除的行为目前只有代码审查与命令行生命周期回归，未在真实页面同步/UAC 人工审批场景自动化覆盖；真实 CEF75 登录后验收仍未执行。
 
 2026-10-29 Node `--print-effective-config` 验证记录：Node 宿主补齐与原生一致的只读配置输出（此前仅原生支持），把 `--print-effective-config` 加进 Node 参数、帮助与文档，并确保它在完整配置合并之后、日志/扫描/UAC/客户端启动之前返回。输出为单行合并后共享设置 JSON：`--options-json` 覆盖 `--config`，独立 CLI 覆盖内联 JSON；`--quiet` 不抑制输出且不产生额外日志行；不扫描、不启动客户端、不申请 UAC、不写日志/配置/报告/诊断，`--data-dir` 不被创建、`--config` 文件不被改写；与 `--list-clients` 同时使用时仍优先输出并退出（约 377ms）。新增 `windows-print-effective-config.test.mjs` 3/3 通过。全量：显式展开 75 个 `scripts/*.test.mjs`，766 项中 759 通过、0 失败、7 项可选 GUI 显示测试跳过；9 个浏览器回归文件 77/77 通过。类型检查、Node 自检、原生自检及 `git diff --check` 均退出 `0`。真实 CEF75 登录后验收仍未执行。
 
@@ -936,7 +942,7 @@ try {
 
 2026-10-31 面板主题（`--panel-theme`）验证记录：该参数从“预留主题名”改为实际生效，支持 `pink`（默认）/`blue`/`green` 三个内置浅色主题。业务色板集中在 `src/projects/common.ts` 的 `panelThemes`，面板重绘时按共享设置解析并写入 `data-chaoxing-plus-theme`，面板内阴影改用 `shadowRgb` 派生的 `panelShadowColor`，换主题不再残留粉色阴影；bootstrap 折叠壳用同名色板先行着色，并在 config 热更新时同步刷新。未知/空主题名回退 `pink`，不加载外部 CSS；生成器新增主题下拉建议与三值校验（非法名称阻止导出），Node/原生帮助列出主题名。新增 `scripts/windows-panel-theme.browser.mjs`（真实构建包 + 真实 Chromium）2/2：blue/green 面板边框与主题属性生效、未知值回退 pink、运行中热更新重绘；`windows-bootstrap.test.mjs` 新增折叠壳主题/回退/热更新测试；`pink-panel-ui.test.mjs` 新增色板驱动断言。全量：显式展开 75 个 `scripts/*.test.mjs`，772 项中 765 通过、0 失败、7 项可选 GUI 显示测试跳过；10 个浏览器回归文件 79/79 通过；类型检查、`npm run build`、Chrome75 构建、原生 `-BuildTests`（内嵌新 bootstrap，EXE 548864 字节）、Node 自检、原生自检及 `git diff --check` 均退出 `0`。该验证使用本地 Chromium 构建页，不是真实 CEF75 客户端登录后验收；真实考试页面上的主题观感与可读性仍需人工确认，未支持暗色主题或自定义 CSS。
 
-2026-11-01 发布打包与 CI 验证记录：新增 `windows/share-file/package-windows.mjs`（`npm run release:windows`）生成原生 EXE + Node 宿主双入口发布包，包含 `release-info.json`、`SHA256SUMS.txt` 与 Windows `Compress-Archive` zip；Node 宿主只带 `main.mjs` 递归运行闭包与 `launch-client.ps1` / `selection-window.ps1` / `system-probe.ps1`，`self-destruct.mjs`、`wipe.mjs`、`owned-files.mjs`、`chrome75-syntax.mjs` 等内部原型/构建期模块不进入发布包，检测到运行闭包包含内部原型或外部 npm 依赖时失败关闭（`--skip-native` 可生成仅 Node 包，`--skip-zip` 仅生成暂存目录）。新增 `.github/workflows/ci.yml`：`windows-latest` 上执行 `npm ci` → 类型检查 → 扩展/Windows/原生构建 → 全量单元测试（全部原生测试变量指向本轮编译产物）→ 10 个浏览器回归 → 发布包冒烟并上传 artifact。新增 `scripts/windows-release-package.test.mjs` 5/5：双入口包结构、`SHA256SUMS` 逐文件校验、zip 条目、仅 Node 模式、缺失资源/内部原型/外部依赖失败关闭、CI 工作流与发布脚本入口契约、原生构建脚本纯 ASCII 且不依赖模块 cmdlet。构建脚本 `windows/native-source/build.ps1` 的 SHA256 输出由 `Get-FileHash` 改为系统 `certutil.exe -hashfile`，修复本机曾出现 `Get-FileHash CommandNotFound` 导致 `npm run build:native` 误报失败；同时保持 `.ps1` 纯 ASCII（中文字面量曾直接导致 PowerShell 5.1 解析失败）。实际打包产物 27 个文件、原生 EXE 548864 字节，解压后 Node 宿主 `--self-check` 与原生 `--self-check` 均退出 `0`。全量：显式展开 76 个 `scripts/*.test.mjs`，777 项中 770 通过、0 失败、7 项可选 GUI 显示测试跳过；10 个浏览器回归文件 79/79 通过；类型检查、`npm run build`、Chrome75 构建、`npm run build:native`、Node 自检、原生自检及 `git diff --check` 均退出 `0`。本记录仍是本地/CI 模拟验证；CI 通过不代表真实 UAC 审批、真实 CEF75 登录后页面、旧 Windows 干净环境或真实考试客户端验收已完成。
+2026-11-01 发布打包与 CI 验证记录：新增 `windows/share-file/package-windows.mjs`（`npm run release:windows`）生成原生 EXE + Node 宿主双入口发布包，包含 `release-info.json`、`SHA256SUMS.txt` 与 Windows `Compress-Archive` zip；Node 宿主只带 `main.mjs` 递归运行闭包与 `launch-client.ps1` / `selection-window.ps1` / `system-probe.ps1`，`self-destruct.mjs`、`wipe.mjs`、`owned-files.mjs`、`chrome75-syntax.mjs` 等内部原型/构建期模块不进入发布包，检测到运行闭包包含内部原型或外部 npm 依赖时失败关闭（`--skip-native` 可生成仅 Node 包，`--skip-zip` 仅生成暂存目录）。新增 `.github/workflows/ci.yml`：`windows-latest` 上执行 `npm ci` → 类型检查 → 扩展/Windows/原生构建 → 全量单元测试（全部原生测试变量指向本轮编译产物）→ 10 个浏览器回归 → 发布包冒烟并上传 artifact。新增 `scripts/windows-release-package.test.mjs` 5/5：双入口包结构、`SHA256SUMS` 逐文件校验、zip 条目、仅 Node 模式、缺失资源/内部原型/外部依赖失败关闭、CI 工作流与发布脚本入口契约、原生构建脚本纯 ASCII 且不依赖模块 cmdlet。构建脚本 `windows/native-source/build-windows.ps1` 的 SHA256 输出由 `Get-FileHash` 改为系统 `certutil.exe -hashfile`，修复本机曾出现 `Get-FileHash CommandNotFound` 导致 `npm run build:native` 误报失败；同时保持 `.ps1` 纯 ASCII（中文字面量曾直接导致 PowerShell 5.1 解析失败）。实际打包产物 27 个文件、原生 EXE 548864 字节，解压后 Node 宿主 `--self-check` 与原生 `--self-check` 均退出 `0`。全量：显式展开 76 个 `scripts/*.test.mjs`，777 项中 770 通过、0 失败、7 项可选 GUI 显示测试跳过；10 个浏览器回归文件 79/79 通过；类型检查、`npm run build`、Chrome75 构建、`npm run build:native`、Node 自检、原生自检及 `git diff --check` 均退出 `0`。本记录仍是本地/CI 模拟验证；CI 通过不代表真实 UAC 审批、真实 CEF75 登录后页面、旧 Windows 干净环境或真实考试客户端验收已完成。
 
 2026-11-02 全盘扫描进度/取消验证记录：Node 选择窗口点击全盘扫描后，宿主在执行递归扫描期间显示独立的 WinForms 进度窗口（`windows/node-scripts/scan-progress-window.ps1` / `.mjs`），实时展示“已检查目录数/发现候选数”；用户点击取消或关闭窗口时写入 `cancel.marker`，宿主通过 `AbortSignal` 中止 discovery（`AbortError`），保留原候选并重新打开选择窗口。发现器新增 `onProgress` 与 `signal`（目录数/候选数/elapsedMs，200ms 节流），进度窗口不可用时降级为无界面扫描并每 2 秒输出进度日志。新增 `windows-scan-progress-window.test.mjs` 6 项（5 通过 + 1 项 `CX_TEST_NATIVE_WINDOW` 真实窗口冒烟默认跳过）：脚本纯 ASCII、payload/状态校验、控制器状态/取消文件/临时目录清理协议、真实 PowerShell 控件探针与可选真实可见性；`windows-client-discovery.test.mjs` 新增进度回调与取消回归，`windows-client-selection.test.mjs` 新增进度窗口完成/取消集成（共 21 项）。全量：显式展开 77 个 `scripts/*.test.mjs`，787 项中 779 通过、0 失败、8 项可选 GUI 显示测试跳过；10 个浏览器回归 79/79；类型检查、扩展构建、Chrome75 构建、Node 自检、原生自检、发布包重打并解压自检及 `git diff --check` 均退出 `0`。原生 EXE 选择流程仍无进度/取消窗口，属已记录的 Node/原生差异；该验证使用测试驱动的取消与控件探针，真实窗口可见性仅在 `CX_TEST_NATIVE_WINDOW=1` 时验证，真实 CEF75 客户端登录后验收仍未执行。
 
@@ -1201,8 +1207,8 @@ render-diagnostics-host.json # 宿主级诊断摘要：launchMode/clientPid/窗�
 
 修复内容：
 
-1. **winmm 代理内嵌为 RCDATA**（`CX_RESOURCE_PROXY_WINMM`，见 `assets.rc.in`）；`--install-proxy`/`dll-proxy`/auto 从 EXE 资源释放到客户端目录，`--uninstall-proxy` 还原。`build.ps1` 在 `windows/native-build/hook/winmm.dll` 缺失时自动构建它（仅用于嵌入；`-SkipProxy` 会因缺少嵌入源直接失败）。
-2. 发布布局收敛为**单个 EXE**：`build.ps1` 不再往 `release/` 复制 hook，`package-windows.mjs` 不再打包 `hook/` 与 `winmm-proxy.dll`，`release-info.json` 不再写 `proxyDir`。
+1. **winmm 代理内嵌为 RCDATA**（`CX_RESOURCE_PROXY_WINMM`，见 `assets.rc.in`）；`--install-proxy`/`dll-proxy`/auto 从 EXE 资源释放到客户端目录，`--uninstall-proxy` 还原。`build-windows.ps1` 在 `windows/native-build/hook/winmm.dll` 缺失时自动构建它（仅用于嵌入；`-SkipProxy` 会因缺少嵌入源直接失败）。
+2. 发布布局收敛为**单个 EXE**：`build-windows.ps1` 不再往 `release/` 复制 hook，`package-windows.mjs` 不再打包 `hook/` 与 `winmm-proxy.dll`，`release-info.json` 不再写 `proxyDir`。
 3. 选择窗口在灰化时**默认不显示原因行**；只有传 `--show-inject-reasons`（调试入口 `start-windows-debug.cmd` 已带）才显示具体原因（加壳 / 非 x86 / 目录不可写 / 无载体 / 缺代理 DLL）。可用性判定顺序为"内嵌代理 → 宿主目录外置代理"。
 4. `cx_selection_client_caps()` 首次使用时自行加载载体列表——此前 `--caps` 这类不打开窗口的入口会误报"客户端没有导入可用代理载体"。
 5. 新增 `selection-tests.exe --caps <CXExam.exe>` 输出 `caps: injectMask=.. carrierMask=.. reasons=.. embedded=..`，可直接判定真实客户端的灰化原因与内嵌载体。

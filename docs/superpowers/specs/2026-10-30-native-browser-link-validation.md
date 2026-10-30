@@ -18,7 +18,7 @@
 node node_modules/typescript/bin/tsc --noEmit
 npm run build
 npm run build:windows
-powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File windows/native-source/build.ps1 -BuildTests
+powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File windows/native-source/build-windows.ps1 -BuildTests
 ```
 
 原生编译仍显示既有 selection、transport、cdp-server、diagnostics 测试的编译警告；本轮新模块未产生编译警告。
