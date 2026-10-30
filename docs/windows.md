@@ -145,7 +145,7 @@ Node 开发宿主的 UAC 重启先对每一项参数执行 Win32 引用，再将
 
 ### 原生文件日志与运行报告
 
-原生宿主普通运行默认将日志写入 `<进程工作目录>/.data/logs/windows-host-<UTC时间>-<宿主PID>.log`。`--data-dir` 可更改数据目录；相对数据目录和 `--report` 路径均以创建审计对象时的进程工作目录为基准，支持中文与空格。日志使用 `CREATE_NEW`，重名时选择带序号的新文件，不覆盖已有会话日志。这里的默认目录与 Node 宿主的 `windows/data` 不同；不声明扩展 UNC 路径 `\\?\UNC\...` 支持。
+原生宿主普通运行默认将日志写入 `<进程工作目录>/.data/chaoxing/logs/windows-host-<UTC时间>-<宿主PID>.log`。`--data-dir` 可更改数据目录（宿主自有文件统一放在其下的 `chaoxing\` 子目录：`logs`、`diagnostics`、`native-scan-cache-v1.bin`）；相对数据目录和 `--report` 路径均以创建审计对象时的进程工作目录为基准，支持中文与空格。日志使用 `CREATE_NEW`，重名时选择带序号的新文件，不覆盖已有会话日志。这里的默认目录与 Node 宿主的 `windows/data` 不同；不声明扩展 UNC 路径 `\\?\UNC\...` 支持。
 
 | 原生开关 | 文件日志 | `--report <path>` 报告 | 控制台 |
 | --- | --- | --- | --- |
@@ -414,7 +414,7 @@ WinForms 窗口在 `Shown` 时显式调用 `ShowWindow` 并请求前台显示：
 
 常规扫描依次检查用户桌面、OneDrive Desktop、Program Files、Program Files (x86)、AppData/ProgramData 等常见根目录，以及所有可访问固定磁盘根目录；每个根目录只检查根目录自身和一级子目录。跳过符号链接、不可访问目录和 Windows 系统目录。常规扫描找到候选后不再递归全盘，即使候选只有 x64 也一样。普通自动选择时，递归回退按固定磁盘和子目录的确定性顺序遍历，记住首个 x64，发现首个 x86 后停止；未发现 x86 时选首个 x64。为支持用户显式选择，`--client-index`、`--select-client` 和 `--list-clients` 会完整枚举全盘结果。架构校验允许 x86 Windows 选择 x86 客户端，x64 Windows 选择 x86/x64 客户端；这不代表当前 Node 宿主已覆盖所有这些系统。自动推荐优先 x86，x64 CEF 客户端尚未做真实客户端验证。
 
-原生 EXE 使用独立的 `<data-dir>/native-scan-cache-v1.bin`，不与 Node 的 `scan-cache.json` 共用格式。仅缓存完整常规扫描的非空结果，有效期 5 分钟；命中时重新校验扫描根目录、系统架构、一级深度、候选 PE、文件标识/大小/修改时间，以及父目录的系统排除和 reparse 状态。新增客户端在缓存期内可能暂不出现，使用 `--rescan` 强制刷新。`--no-scan-cache`、`--no-disk-write`、`--list-clients`、显式客户端路径和强制全盘扫描均不读写该缓存；空结果、递归回退或不完整扫描不写入。缓存损坏、过期、过大、访问/替换失败或范围超出缓存容量时，继续实时扫描，不阻止启动。
+原生 EXE 使用独立的 `<data-dir>/chaoxing/native-scan-cache-v1.bin`，不与 Node 的 `scan-cache.json` 共用格式。仅缓存完整常规扫描的非空结果，有效期 5 分钟；命中时重新校验扫描根目录、系统架构、一级深度、候选 PE、文件标识/大小/修改时间，以及父目录的系统排除和 reparse 状态。新增客户端在缓存期内可能暂不出现，使用 `--rescan` 强制刷新。`--no-scan-cache`、`--no-disk-write`、`--list-clients`、显式客户端路径和强制全盘扫描均不读写该缓存；空结果、递归回退或不完整扫描不写入。缓存损坏、过期、过大、访问/替换失败或范围超出缓存容量时，继续实时扫描，不阻止启动。
 
 选择参数互斥：`--client` 不可与扫描参数（`--scan-clients`、`--scan-mode`、`--rescan`）、`--client-index`、`--client-first`、`--select-client` 或 `--list-clients` 同用；`--client-index` 不可与 `--client-first`、`--select-client` 或 `--list-clients` 同用；`--select-client` 与 `--list-clients` 不可同用。这样可避免“显式路径被扫描结果覆盖”的歧义。
 
@@ -444,6 +444,7 @@ WinForms 窗口在 `Shown` 时显式调用 `ShowWindow` 并请求前台显示：
 | `--expected-browser <text>` | `Chrome/` | 校验 `/json/version` 的 Browser 字段；不匹配时中止，防止误连其它 Chromium。 |
 | `--inject-mode auto\|cdp-port\|cdp-pipe\|dll-proxy\|input` | `auto` | 选择注入方式。显式 `--inject-mode auto` 时若客户端目录存在我们安装的代理（`cxhook-proxy.marker`），自动改走 `dll-proxy`；不传 `--inject-mode` 等同于 `cdp-port`；`cdp-pipe` 已与端口通道对齐（bootstrap + bundle + 配置同步），`input` 未实现。 |
 | `--inject-proxy-dir <dir>` | 客户端目录 | `dll-proxy` 模式检查 `winmm.dll` 的目录；缺失时提示放置路径，已就位时说明进程内 hook 尚未驱动。 |
+| `--show-inject-reasons` | 关闭 | 选择窗口在注入方式被灰化时显示具体原因（加壳 / 非 x86 / 目录不可写 / 无载体 / 缺代理 DLL）。默认不显示，避免正常启动时被提示行干扰；调试入口 `start-windows-debug.cmd` 已带上这个参数。 |
 | `--panel-all-pages` | 关闭 | 非考试页也挂载悬浮面板，用于确认注入是否生效；默认仍只在考试路径显示。 |
 | `--pipe-test` | 关闭 | 诊断：用匿名管道启动 `cmd /c echo` 并读回 stdout，验证宿主可继承句柄启动子进程。 |
 | `--install-proxy [--proxy-source <winmm.dll>]` | 关闭 | 把 winmm 代理安装到 `--client` 推导出的客户端目录；源默认取宿主同目录 `winmm.dll`。`auto` 检测到代理后会自动改走"代理追加调试开关"的注入链路。 |
@@ -1045,7 +1046,7 @@ node windows\node-source\main.mjs --attach 9333 --duration 5000 --report windows
 
 本节的系统 DPI、窗口截图和完整诊断产物说明主要适用于 Node 宿主。原生宿主提供页面布局采样（`pageRenderDiagnostics:true`），并在首次顶层 bundle 确认后通过 CDP `Page.captureScreenshot` 生成 `render-diagnostics-page.png`（`pageScreenshots:true`；对 Node 写入的 base64 做长度、base64 字符、PNG 签名/IHDR 与尺寸上限校验后才写盘，失败非致命）；自有启动还会采集客户端窗口 DPI/系统 DPI/窗口矩形/可见性（`windowDiagnostics:true`，`window-diagnostics.json`），并尝试用 `PrintWindow` → `BitBlt` 生成 `window-capture.bmp`（24 位 BMP，best-effort；硬件加速窗口可能为空白，JSON 的 `screenshot.status` 会标记 `captured` 或 `failed`）。`--attach` 调试模式没有本次启动的自有客户端窗口，因此跳过窗口诊断，但仍会采集页面截图。原生仍不生成 Node 同构的合并 JSON、系统进程命令行或窗口 PNG，`renderDiagnostics:false` 的完整宿主诊断边界保留。原生采样文件写入失败属于非致命诊断故障，不应阻断宿主继续运行或客户端启动；`--no-disk-write` 则完全跳过目录和文件创建。
 
-原生采样需使用 `--diagnose` 开启，在首次成功的顶层业务 bundle 确认后执行，每次宿主运行最多尝试一次；子 iframe 的注入不会触发采样。输出位于 `--diagnostics-dir` 下的独立运行子目录，默认基于 `.data/diagnostics`，生成 `render-diagnostics.json` 与 `render-diagnostics-page.png`；自有启动并开启诊断时还会生成 `window-diagnostics.json` 与 `window-capture.bmp`。坐标与缩放保留三位小数，CSS 中的 URL 或不允许字符会使该样式值被省略；不读取页面 URL、题目、答案或其他正文。`--diagnose` / `--no-diagnose` 以最后一次 CLI 开关为准并覆盖 JSON；`--no-diagnose` 与 `--no-disk-write` 都阻止创建诊断目录。采样不等待后续异步面板挂载，因此首次顶层文档没有面板时 `topPanel` 为 `null`，不代表后续页面也没有面板。
+原生采样需使用 `--diagnose` 开启，在首次成功的顶层业务 bundle 确认后执行，每次宿主运行最多尝试一次；子 iframe 的注入不会触发采样。输出位于 `--diagnostics-dir` 下的独立运行子目录，默认基于 `<data-dir>/chaoxing/diagnostics`（默认数据目录即 `.data`），生成 `render-diagnostics.json` 与 `render-diagnostics-page.png`；自有启动并开启诊断时还会生成 `window-diagnostics.json` 与 `window-capture.bmp`。坐标与缩放保留三位小数，CSS 中的 URL 或不允许字符会使该样式值被省略；不读取页面 URL、题目、答案或其他正文。`--diagnose` / `--no-diagnose` 以最后一次 CLI 开关为准并覆盖 JSON；`--no-diagnose` 与 `--no-disk-write` 都阻止创建诊断目录。采样不等待后续异步面板挂载，因此首次顶层文档没有面板时 `topPanel` 为 `null`，不代表后续页面也没有面板。
 
 启动模式默认开启渲染诊断（`--no-diagnose` 可关闭）。每次运行会写入：
 
@@ -1165,7 +1166,7 @@ render-diagnostics-host.json # 宿主级诊断摘要：launchMode/clientPid/窗�
 
 1. **winmm 代理内嵌为 RCDATA**（`CX_RESOURCE_PROXY_WINMM`，见 `assets.rc.in`）；`--install-proxy`/`dll-proxy`/auto 从 EXE 资源释放到客户端目录，`--uninstall-proxy` 还原。`build.ps1` 在 `windows/native-build/hook/winmm.dll` 缺失时自动构建它（仅用于嵌入；`-SkipProxy` 会因缺少嵌入源直接失败）。
 2. 发布布局收敛为**单个 EXE**：`build.ps1` 不再往 `release/` 复制 hook，`package-windows.mjs` 不再打包 `hook/` 与 `winmm-proxy.dll`，`release-info.json` 不再写 `proxyDir`。
-3. 选择窗口在灰化时显示原因行（加壳 / 非 x86 / 目录不可写 / 无载体 / 缺代理 DLL），不再只显示"（不可用）"；可用性判定顺序为"内嵌代理 → 宿主目录外置代理"。
+3. 选择窗口在灰化时**默认不显示原因行**；只有传 `--show-inject-reasons`（调试入口 `start-windows-debug.cmd` 已带）才显示具体原因（加壳 / 非 x86 / 目录不可写 / 无载体 / 缺代理 DLL）。可用性判定顺序为"内嵌代理 → 宿主目录外置代理"。
 4. `cx_selection_client_caps()` 首次使用时自行加载载体列表——此前 `--caps` 这类不打开窗口的入口会误报"客户端没有导入可用代理载体"。
 5. 新增 `selection-tests.exe --caps <CXExam.exe>` 输出 `caps: injectMask=.. carrierMask=.. reasons=.. embedded=..`，可直接判定真实客户端的灰化原因与内嵌载体。
 6. 「代理载体」与注入方式对齐：只有显式选中 `DLL 代理（dll-proxy）` 时才列出具体载体（不可用项灰化）；「自动（推荐）」与「端口命令行」下只剩「自动（按导入表）」并禁用，避免"选了自动却还要挑载体"的误导。载体候选同时包含内嵌代理，单 EXE 在空目录里也能列出 `winmm.dll`。
@@ -1221,13 +1222,13 @@ winmm → version → uxtheme → msimg32 → sensapi → oledlg → wtsapi32
 | 含 `.themida` 节（加壳） | 「端口命令行（cdp-port）」显示为灰色并追加「（不可用）」；点选会被拒绝并回弹 |
 | 不导入某个载体 DLL | 显式 `dll-proxy` 时「代理载体」里对应项灰化并标注「（不可用）」 |
 | 无任何可用载体 | 「DLL 代理（dll-proxy）」灰化 |
-| 任一显式通道灰化 | 下拉框上方提示具体原因（加壳 / 非 x86 / 目录不可写 / 无载体 / 缺代理 DLL） |
+| 任一显式通道灰化 | 默认不显示原因；传 `--show-inject-reasons` 后在下拉框上方显示具体原因（加壳 / 非 x86 / 目录不可写 / 无载体 / 缺代理 DLL） |
 
 「代理载体」只在**显式选中 `DLL 代理（dll-proxy）`** 时才展开（列出全部载体，不可用的灰化）；默认的「自动（推荐）」和「端口命令行（cdp-port）」下，该下拉只剩「自动（按导入表）」并禁用——auto 的载体本来由宿主按导入表解析，多列条目只会误导（2026-10-30 用户反馈修正）。
 
 默认仍是「自动（推荐）」——运行时按最优顺序选择：加壳 → `dll-proxy`（自动装代理），否则 `cdp-port`。即"用最合适的注入方式"由 auto 承担，用户只在需要时覆盖。
 
-实现要点：`selection_client_caps()` 读取 PE 节表（判加壳）与导入表（判载体）；两个下拉框使用 `CBS_OWNERDRAWFIXED`，禁用项以 `COLOR_GRAYTEXT` 绘制并在 `CBN_SELCHANGE` 中拒绝选中。载体候选来自「宿主目录 `hook`/同级的代理 DLL」与**内嵌资源**两部分，所以单 EXE 也能列出 `winmm.dll`。提示行由 `selection_reason_text()` 从 `CX_SELECTION_REASON_*` 位生成；同样的判定经 `cx_selection_client_caps()` 暴露，`selection-tests.exe --caps <CXExam.exe>` 会打印 `caps: injectMask=0x.. carrierMask=0x.. reasons=0x.. embedded=..`，用于确认某个真实客户端到底是"哪些通道、因为什么"被灰化。
+实现要点：`selection_client_caps()` 读取 PE 节表（判加壳）与导入表（判载体）；两个下拉框使用 `CBS_OWNERDRAWFIXED`，禁用项以 `COLOR_GRAYTEXT` 绘制并在 `CBN_SELCHANGE` 中拒绝选中。载体候选来自「宿主目录 `hook`/同级的代理 DLL」与**内嵌资源**两部分，所以单 EXE 也能列出 `winmm.dll`。提示行由 `selection_reason_text()` 从 `CX_SELECTION_REASON_*` 位生成，默认隐藏、由 `--show-inject-reasons` 开启（`cx_select_client`/`cx_selection_probe` 的 `explainReasons` 参数，探针用 `statusShown` 断言）；同样的判定经 `cx_selection_client_caps()` 暴露，`selection-tests.exe --caps <CXExam.exe>` 会打印 `caps: injectMask=0x.. carrierMask=0x.. reasons=0x.. embedded=..`，用于确认某个真实客户端到底是"哪些通道、因为什么"被灰化。
 
 ### 载体可用性四要素（2026-10-30）
 
