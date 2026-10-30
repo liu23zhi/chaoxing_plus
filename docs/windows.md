@@ -387,7 +387,8 @@ chaoxing_plus.exe --install-proxy --client "<CXExam.exe>"
 
 帮助与版本开关**不区分大小写**并兼容常见写法（原生宿主）：`--help`、`-h`、`-H`、`--h`、`--H`、`-help`、`--Help`、`--HELP`、`-?`、`/?`、`?` 输出同一份帮助；`--version`、`-v`、`-V`、`--v`、`--Version` 只输出 `6.2.0` 后退出。未知参数以退出码 `2` 报 `unknown command line option (try --help)`。
 
-原生宿主是 GUI 子系统程序，PowerShell/cmd 不会像等待控制台程序那样等待它，提示符可能在输出前或输出后才出现。为避免提示符被夹在帮助中间，`--help`/`--version`/`--capabilities`/`--print-effective-config` 的输出会先在内存里拼成完整文本，再用**一次** `WriteConsoleW`（重定向时一次 `WriteFile`）写出；需要严格保证"输出结束后才回到提示符"时请用 `chaoxing_plus.exe -h | Out-String`、`cmd /c "chaoxing_plus.exe -h"` 或 `--console` 启动。
+原生宿主是 **CONSOLE 子系统**程序（`/SUBSYSTEM:CONSOLE`），PowerShell/cmd 会像等待普通命令行程序一样等待它，所以帮助/版本输出一定在提示符之前完整结束。动作型运行（`--help`/`--version`/`--capabilities`/`--print-effective-config`/`--self-check`/`--list-clients`/`--probe-*`/`--install-proxy` 等）保留控制台；普通 GUI 运行与静默场景在参数解析后立即 `FreeConsole()` 脱离控制台，避免 `start ""` 或双击时留下黑框窗口，因此用 `.cmd` 启动器（内部 `start`）不会阻塞桌面，直接命令行运行则要等宿主结束才回到提示符。帮助/版本这类输出仍会先在内存拼成完整文本再单次写出，双保险。
+
 
 
 参数名的整体兼容规则（原生宿主，适用于全部开关）：
@@ -469,7 +470,7 @@ WinForms 窗口在 `Shown` 时显式调用 `ShowWindow` 并请求前台显示：
 | `--uninstall-proxy` | 关闭 | 仅当客户端目录存在安装标记 `cxhook-proxy.marker` 时删除 `winmm.dll` 与标记，避免误删第三方同名 DLL。 |
 | `--proxy-port <1024-65534>` | 不写 | 可选：`--install-proxy`、`--proxy-target winmm|version|uxtheme|msimg32|sensapi|oledlg|wtsapi32|auto`（auto 按客户端导入表自动挑载体） 时写入 `cxhook-port.txt`。写好后，客户端被第三方拉起（没有 `CX_INJECT_PORT`）时，代理读取该文件并固定打开此端口，宿主可用 `--attach` 连接。不传则不写，避免客户端每次启动都开端口。 |
 | `--probe-client <CXExam.exe>` / `--probe-all` | 关闭 | 离线探测：架构、版本、`libcef.dll` 是否含 `remote-debugging-port`/`-pipe`、客户端是否导入 `winmm.dll`（决定代理能否被加载）、代理/标记/固定端口文件状态，并给出建议通道；`--probe-all` 扫描常见目录逐条输出。 |
-| `--console` | 关闭 | GUI 子系统宿主附加或分配控制台，便于看到 `[launch]`/`[bootstrap]` 等日志。 |
+| `--console` | 关闭 | 保持/附加控制台，便于看到 `[launch]`/`[bootstrap]` 等日志。宿主为 CONSOLE 子系统，但普通 GUI 运行与静默场景会主动 `FreeConsole()`，只有这个开关（或动作型命令）保留控制台。 |
 | `--stage-boot` | 关闭 | 静默暂存启动：把自身复制到 `%TEMP%` 随机文件名（隐藏+系统属性）后由副本接管，原文件随后清理。 |
 | `--probe-client <CXExam.exe>` | 关闭 | 离线探测客户端：架构、版本、`libcef.dll` 是否含 `remote-debugging-port`/`-pipe`、代理与标记是否存在，并给出建议通道（不启动客户端）。 |
 | `--pipe-client <客户端路径>` | 关闭 | 诊断：以 `--remote-debugging-pipe` 启动客户端并发一帧 `Browser.getVersion`；返回 740 时自动提权重启自身。 || `--inject-strategy hybrid\|runtime\|script` | `hybrid` | `runtime` 直接在目标 execution context 执行；`script` 创建临时 DOM `<script>` 执行并在失败时回退 runtime；`hybrid` 先 runtime、失败后 script。两种方式都只针对已验证的本机 CDP target。 |
