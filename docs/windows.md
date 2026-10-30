@@ -8,6 +8,18 @@ Windows 6.2.0 第一阶段提供 **普通可审计 Windows 宿主**：它用官�
 
 ## 状态与适用对象
 
+### 浏览器临时会话与在线扩展
+
+双击原生 EXE 先打开首页。“考试客户端”进入原有选择与注入流程；带参数的既有命令行入口继续按原规则运行。
+
+首页可以新建 Edge 或 Chrome 临时会话，最多同时八个。每个会话有独立资料目录与扩展存储，关闭最后一个浏览器窗口、在首页关闭会话或退出首页时清理本次资料。程序只管理自己启动的进程，不复用日常浏览器资料。它采用支持 `Extensions.loadUnpacked` 的 Chromium CDP 管道；不支持该协议的旧浏览器会明确报错。
+
+扩展只从“设置注入”中的 tikuAdapter 地址获取：`GET /adapter-service/extensions/edge/latest` 与响应中的下载地址；每个新会话重新获取当前包，先校验大小、SHA256、CRX3 开发者签名、扩展 ID 与 ZIP 内容，再加载。原生 EXE 不内嵌 CRX，不读取下载目录，没有本地 CRX 入口。Chrome 当前使用同一 Edge 发布包；服务端为未来 Chrome 商店保留独立来源。服务端须先部署扩展分发接口，并通过管理后台配置与检查更新；无已验证缓存时客户端显示失败，不启动缺少扩展的会话。
+
+“设置注入”可填写服务地址、API key 和允许共享键的 JSON（例如 `{"common.settings.extension-enabled":true}`；具体键以当前扩展为准）。“单独配置会话”从公共配置复制，修改只应用到新会话。现有会话也可以通过扩展界面独立调整。设置仅保存在当前宿主进程内存中，密码与 JWT 不写入日志或文件。账号登录需要服务器验证码，成功后复用已有访问令牌；只有显式勾选后才会在没有令牌时创建。
+
+新增回归使用原生测试 EXE：`CX_NATIVE_HOME_EXE`、`CX_NATIVE_ADAPTER_EXE`、`CX_NATIVE_ACCOUNT_WINDOW_EXE`、`CX_NATIVE_BROWSER_SESSION_EXE`，分别指向 `windows/native-build/bin/` 下的 `home-tests.exe`、`adapter-account-tests.exe`、`account-window-tests.exe`、`browser-session-tests.exe`。这些变量只用于测试，不是产品运行配置。`CX_TEST_NATIVE_WINDOW=1` 会显示测试窗口并自动关闭。真实 Chrome/Edge 的多会话、存储和清理测试不等于真实超星课程或 CEF75 考试验收。
+
 | 项 | 状态 |
 | --- | --- |
 | 目标客户端 | 电子科技大学中山学院 考试客户端 V4.1.4.25512（x86，CEF 75.1.4 / Chromium 75.0.3770.100） |
