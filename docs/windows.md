@@ -385,6 +385,21 @@ chaoxing_plus.exe --install-proxy --client "<CXExam.exe>"
 
 命令行参数优先级高于 JSON 配置。重复的标量开关以命令行中最后一次设置为准；`--self-check`、`--help`、`--list-clients` 等动作型开关按各自语义执行。
 
+帮助与版本开关**不区分大小写**并兼容常见写法（原生宿主）：`--help`、`-h`、`-H`、`--h`、`--H`、`-help`、`--Help`、`--HELP`、`-?`、`/?`、`?` 输出同一份帮助；`--version`、`-v`、`-V`、`--v`、`--Version` 只输出 `6.2.0` 后退出。未知参数以退出码 `2` 报 `unknown command line option (try --help)`。
+
+参数名的整体兼容规则（原生宿主，适用于全部开关）：
+
+| 写法 | 例子 | 说明 |
+| --- | --- | --- |
+| 大小写 | `--QUIET`、`--Quiet` | 参数名不区分大小写 |
+| 单横线长参数 | `-quiet`、`-client <path>` | 等价 `--quiet`、`--client`；`-h`/`-v`/`-?` 仍是短参数 |
+| Windows 风格 | `/quiet`、`/client=<path>`、`/h`、`/version` | 等价对应 `--` 形式 |
+| 下划线 | `--panel_theme`、`--no_disk_write` | `_` 与 `-` 等价 |
+| 内联值 | `--duration=1`、`--client=C:\Exam\CXExam.exe`、`--options-json={"port":0}` | 值也可继续用空格分隔；含 `=` 的值只按第一个 `=` 拆分 |
+| 帮助/版本短写 | `-h`、`-?`、`/?`、`?`、`-v` | 见上一段 |
+
+值本身不做归一化（路径、中文、JSON 原样传递）；以 `/` 开头但不像开关的字符串仍按位置参数报错。
+
 #### 客户端扫描和选择
 
 | 参数 | 默认/范围 | 行为 |
@@ -509,9 +524,9 @@ CDP 断开时关闭旧页面会话；target 仍存在则在下一轮枚举重新
 | `--assets <dir>` | `dist-windows` | 指定注入资源目录。 |
 | `--duration <ms>` | `0`，不限时 | 测试模式运行指定时长后退出；仅接受 `0-2147483647` 整数毫秒，两条宿主一致。 |
 | `--attach <port>` | 不启用 | 仅测试/调试连接已存在端点；不会启动客户端或校验进程归属。 |
-| `--self-check` / `--help` | 关闭 | 只做环境检查或输出参数帮助。Node 自检默认保持只读：不创建数据目录、日志、诊断或配置（与原生自检对齐）；显式 `--report` 仍写运行报告（自检报告含 `version:"6.2.0"`/`host:"node"`），显式 `--log` 才写文件日志，`--no-disk-write` 继续禁止所有落盘。 |
+| `--self-check` / `--help` | 关闭 | 只做环境检查或输出参数帮助。Node 自检默认保持只读：不创建数据目录、日志、诊断或配置（与原生自检对齐）；显式 `--report` 仍写运行报告（自检报告含 `version:"6.2.0"`/`host:"node"`），显式 `--log` 才写文件日志，`--no-disk-write` 继续禁止所有落盘。原生宿主的 `--help` 另接受 `-h`/`-H`/`--h`/`--H`/`-help`/`--Help`/`--HELP`/`-?`/`/?`/`?`（大小写不敏感）。 |
 | `--print-effective-config` | 关闭 | 只输出合并后的共享设置 JSON（单行）后以 0 退出；不扫描、不启动客户端、不申请 UAC、不写日志/配置/报告，`--quiet` 不抑制该输出。两种宿主语义一致。原生宿主把页面共享设置中由类型化字段托管的键（extension-enabled、windows-panel-*、windows-answer-* 等）从原始快照中过滤后再统一输出，避免同一 JSON 出现重复键；未托管键（如题库服务地址/密钥、未知共享键）原样保留。输出可能包含敏感共享设置，请勿外发。 |
-| `--version` / `-v` | 关闭 | 只输出版本号 `6.2.0`（单行）后退出，不扫描、不启动客户端、不写日志/配置/诊断；原生宿主同样支持。 |
+| `--version` / `-v` | 关闭 | 只输出版本号 `6.2.0`（单行）后退出，不扫描、不启动客户端、不写日志/配置/诊断；原生宿主同样支持，并额外接受 `-V`/`--v`/`--Version`（大小写不敏感）。 |
 | `--capabilities` | 关闭 | 输出机器可读的能力标记。Node 宿主列出 `executionModes:["normal","memory"]`、扫描、参数生成器、原生选择窗口，以及 `configReload`/`configPersistence`/`fileLogging`/`runReport`/`pageRenderDiagnostics`/`pageScreenshots`/`windowDiagnostics`/`renderDiagnostics`/`retainData`/`deleteConfig` 等已支持能力；删除挂起、启动清理和自毁均标记为不支持，并保留设计 schema。原生 capabilities 同样输出 `executionModes`、`memory` 与 `deleteSuspend:false`。原生宿主单独输出自身能力，不得把两者的已支持项合并推断。新增/移除能力时必须同步该输出与 `windows-host.test.mjs` 的内容断言。 |
 | `--elevate-on-start` | 关闭 | 两种宿主均在扫描和 GUI 前请求管理员权限；JSON 字段为 `elevateOnStart`。已提升时不重复请求，只读模式不请求；与 `--no-elevate` 冲突。 |
 | `--no-elevate` | 关闭 | 禁止自动申请 UAC；普通权限可启动的客户端照常运行，实际启动返回 Win32 `740` 时失败。 |
