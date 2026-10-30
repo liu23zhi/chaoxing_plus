@@ -387,7 +387,8 @@ chaoxing_plus.exe --install-proxy --client "<CXExam.exe>"
 
 帮助与版本开关**不区分大小写**并兼容常见写法（原生宿主）：`--help`、`-h`、`-H`、`--h`、`--H`、`-help`、`--Help`、`--HELP`、`-?`、`/?`、`?` 输出同一份帮助；`--version`、`-v`、`-V`、`--v`、`--Version` 只输出 `6.2.0` 后退出。未知参数以退出码 `2` 报 `unknown command line option (try --help)`。
 
-原生宿主是 **CONSOLE 子系统**程序（`/SUBSYSTEM:CONSOLE`），PowerShell/cmd 会像等待普通命令行程序一样等待它，所以帮助/版本输出一定在提示符之前完整结束。动作型运行（`--help`/`--version`/`--capabilities`/`--print-effective-config`/`--self-check`/`--list-clients`/`--probe-*`/`--install-proxy` 等）保留控制台；普通 GUI 运行与静默场景在参数解析后立即 `FreeConsole()` 脱离控制台。用 Explorer 双击或 `start ""` 启动时系统会先为 CONSOLE 程序分配控制台窗口，宿主在入口处（`GetConsoleProcessList` 判定只有自己一个进程时）第一件事就 `ShowWindow(SW_HIDE)` 隐藏它，随后 `FreeConsole()` 销毁，避免出现 cmd 黑框；`--console` 会在解析后重新显示。日常建议仍用 `start-windows.cmd`（内部 `start`），直接命令行运行普通模式则要等宿主结束才回到提示符。帮助/版本这类输出仍会先在内存拼成完整文本再单次写出，双保险。
+原生宿主是 **GUI 子系统**程序（`/SUBSYSTEM:WINDOWS`）：无参数、GUI 选择窗口和静默场景都不会分配控制台窗口，双击或 `start-windows*.cmd` 启动不再出现 cmd 黑框。帮助/版本/能力查询这类长输出仍要写到控制台：从 PowerShell/cmd 启动时沿用父控制台（`GetStdHandle` 有效即直接写），没有控制台时可用 `--console` 分配；输出先在内存拼成完整文本再单次 `WriteConsoleW`（重定向时一次 `WriteFile`），内容不会被打断。因为 GUI 子系统不会被 shell 等待，提示符可能先出现、帮助随后完整输出；需要严格顺序时用 `chaoxing_plus.exe -h | Out-String`、`cmd /c "chaoxing_plus.exe -h"` 或 `--console`。单文件 EXE 无法按参数切换子系统（PE 头只有一个 Subsystem 字段），默认 GUI 是为消除每次启动的控制台窗口。
+
 
 
 
