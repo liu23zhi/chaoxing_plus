@@ -5,7 +5,7 @@
 ## 0. 先看这台客户端支持什么
 
 ```powershell
-.\build-windows\bin\chaoxing_plus.exe --probe-all --no-disk-write --quiet
+.\windows\native-build\bin\chaoxing_plus.exe --probe-all --no-disk-write --quiet
 ```
 
 输出示例（本机实测）：
@@ -28,13 +28,13 @@ probe: suggested=cdp-port
 单独探测一台：
 
 ```powershell
-.\build-windows\bin\chaoxing_plus.exe --probe-client "C:\...\CXExam.exe"
+.\windows\native-build\bin\chaoxing_plus.exe --probe-client "C:\...\CXExam.exe"
 ```
 
 ## 1. 通道 A：宿主启动客户端（端口）
 
 ```powershell
-.\build-windows\bin\chaoxing_plus.exe --client "C:\...\CXExam.exe" --panel-all-pages
+.\windows\native-build\bin\chaoxing_plus.exe --client "C:\...\CXExam.exe" --panel-all-pages
 ```
 
 - 默认（不传 `--inject-mode`）就是这条通道；
@@ -46,20 +46,20 @@ probe: suggested=cdp-port
 适用：客户端会忽略外部命令行参数，或需要验证代理链路。
 
 ```powershell
-# 2.1 构建代理（只需一次，产物在 build-windows\hook\winmm.dll）
+# 2.1 构建代理（只需一次，产物在 windows\native-build\hook\winmm.dll）
 powershell -ExecutionPolicy Bypass -File windows\hook-source\build-proxy.ps1
 
 # 2.2 安装到客户端目录（写 winmm.dll + 标记；带 --proxy-port 时才写固定端口文件）
-.\build-windows\bin\chaoxing_plus.exe --install-proxy `
-  --proxy-source ".\build-windows\hook\winmm.dll" `
+.\windows\native-build\bin\chaoxing_plus.exe --install-proxy `
+  --proxy-source ".\windows\native-build\hook\winmm.dll" `
   --proxy-port 9222 `
   --client "C:\...\CXExam.exe"
 
 # 2.3 用代理通道启动
-.\build-windows\bin\chaoxing_plus.exe --inject-mode dll-proxy --client "C:\...\CXExam.exe" --panel-all-pages
+.\windows\native-build\bin\chaoxing_plus.exe --inject-mode dll-proxy --client "C:\...\CXExam.exe" --panel-all-pages
 
 # 2.4 还原（只删我们装的文件）
-.\build-windows\bin\chaoxing_plus.exe --uninstall-proxy --client "C:\...\CXExam.exe"
+.\windows\native-build\bin\chaoxing_plus.exe --uninstall-proxy --client "C:\...\CXExam.exe"
 ```
 
 验证代理是否生效：`%TEMP%\cxhook-<pid>.log` 里应出现 `winmm proxy loaded | ...\CXExam.exe`（每个 CEF 进程一条）。
@@ -72,7 +72,7 @@ powershell -ExecutionPolicy Bypass -File windows\hook-source\build-proxy.ps1
 # 3.1 安装代理并写入固定端口（同 2.2，端口记在 cxhook-port.txt）
 # 3.2 由考试系统/启动器正常启动客户端（不要用宿主启动）
 # 3.3 宿主接管已打开的端点
-.\build-windows\bin\chaoxing_plus.exe --attach 9222 --client "C:\...\CXExam.exe" --panel-all-pages
+.\windows\native-build\bin\chaoxing_plus.exe --attach 9222 --client "C:\...\CXExam.exe" --panel-all-pages
 ```
 
 - `--attach` 不做归属校验（报告里 `ownershipVerified=false` 是预期值）；
@@ -81,7 +81,7 @@ powershell -ExecutionPolicy Bypass -File windows\hook-source\build-proxy.ps1
 ## 4. 通道 D：管道（cdp-pipe）
 
 ```powershell
-.\build-windows\bin\chaoxing_plus.exe --inject-mode cdp-pipe --client "C:\...\CXExam.exe" --panel-all-pages
+.\windows\native-build\bin\chaoxing_plus.exe --inject-mode cdp-pipe --client "C:\...\CXExam.exe" --panel-all-pages
 ```
 
 链路：`--remote-debugging-pipe` 启动 → `Target.getTargets` → `Target.attachToTarget` → 三次 `Runtime.evaluate`（配置、bootstrap、bundle）。
@@ -89,9 +89,9 @@ powershell -ExecutionPolicy Bypass -File windows\hook-source\build-proxy.ps1
 诊断命令（不需要真实客户端）：
 
 ```powershell
-.\build-windows\bin\chaoxing_plus.exe --pipe-test
-.\build-windows\bin\chaoxing_plus.exe --pipe-client ".\build-windows\bin\cdp-echo.exe"
-.\build-windows\bin\chaoxing_plus.exe --pipe-call ".\build-windows\bin\cdp-echo.exe" --pipe-expr "document.title.length"
+.\windows\native-build\bin\chaoxing_plus.exe --pipe-test
+.\windows\native-build\bin\chaoxing_plus.exe --pipe-client ".\windows\native-build\bin\cdp-echo.exe"
+.\windows\native-build\bin\chaoxing_plus.exe --pipe-call ".\windows\native-build\bin\cdp-echo.exe" --pipe-expr "document.title.length"
 ```
 
 ## 5. 症状对照表
@@ -132,8 +132,8 @@ powershell -ExecutionPolicy Bypass -File windows\hook-source\build-proxy.ps1
 | --- | --- |
 | `--probe-all --no-disk-write --quiet` | exit 0，扫描到 2 个候选（电子科大 4.1.4.25512、超星 4.3.0.4），均 `port=yes pipe=yes` |
 | `--pipe-test` | exit 0，输出 `pipe-test: PIPE-TEST-OK` |
-| `--pipe-client .\build-windows\bin\cdp-echo.exe` | exit 0，返回 `{"id":1,"result":{"product":"Chrome/75.0.3770.100",…}}` |
-| `--pipe-call .\build-windows\bin\cdp-echo.exe --pipe-expr "document.title.length"` | exit 0，打印 7 个阶段（open/getVersion/getTargets/attach/evaluate/done） |
+| `--pipe-client .\windows\native-build\bin\cdp-echo.exe` | exit 0，返回 `{"id":1,"result":{"product":"Chrome/75.0.3770.100",…}}` |
+| `--pipe-call .\windows\native-build\bin\cdp-echo.exe --pipe-expr "document.title.length"` | exit 0，打印 7 个阶段（open/getVersion/getTargets/attach/evaluate/done） |
 | `--install-proxy --proxy-port 9222 → --probe-client → --uninstall-proxy` | 安装后 3 个文件就位、探测建议 `dll-proxy`、卸载后全部删除 |
 | `--help` | 含 `--console`/`--stage-boot`/`--pipe-call`/`--probe-all`/`--proxy-port` |
 
@@ -141,6 +141,6 @@ powershell -ExecutionPolicy Bypass -File windows\hook-source\build-proxy.ps1
 
 提示：`--proxy-source` 建议用绝对路径（或确认当前目录是仓库根），避免复制到非预期位置。
 
-发布包会随附 `winmm-proxy.dll`（存在构建产物时）。不传 `--proxy-source` 时，`--install-proxy` 依次在宿主目录查找 `winmm-proxy.dll`、`winmm.dll`、`hook\winmm.dll`、`..\hook\winmm.dll`、`build-windows\hook\winmm.dll`，找到第一个即用。
+发布包会随附 `winmm-proxy.dll`（存在构建产物时）。不传 `--proxy-source` 时，`--install-proxy` 依次在宿主目录查找 `winmm-proxy.dll`、`winmm.dll`、`hook\winmm.dll`、`..\hook\winmm.dll`、`..\..\native-build\hook\winmm.dll`，找到第一个即用。
 
 

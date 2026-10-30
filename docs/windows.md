@@ -224,7 +224,8 @@ src/ / public/                  与插件共用的源码和资源，保留原位
 build.mjs / build-browser.sh    插件构建入口，保留原位
 dist/                          插件构建输出，保留原位
 dist-windows/                  Windows 注入资源，保留原位
-build-windows/bin/             原生构建输出，保留原位
+windows/native-build/bin/      原生构建输出，保留原位
+windows/node-build/             Node 备用构建输出，保留原位
 release/                       发布包输出，保留原位
 scripts/                       全量测试入口与共用测试辅助文件
 .github/workflows/ci.yml        Windows CI 构建、测试与发布包冒烟
@@ -318,7 +319,7 @@ bash windows/native-source/build-windows.sh --skip-tests
 
 - 打包脚本 `windows/share-file/package-windows.mjs` 只读取构建产物、不修改工作区；输出目录 `release/` 已 gitignore。发布包会校验 `dist-windows/package-manifest.json` 的 `features.injectionLog`（且清单 `version` 必须存在并与发布版本完全一致，防止旧构建被打成新版本），若为 `true`（本机 `windows/local-features.json` 开启的调试构建）则失败关闭并提示先运行 `npm run build:windows -- --release`；CI 的构建步骤固定使用 `--release`。
 - 发布包默认使用原生宿主：包含 `chaoxing_plus.exe`、五个原生 `start-windows*.cmd` 启动器、`README.md`、`docs/windows.md`、`windows/share-file/config.example.json`、`verify-release.mjs`、`release-info.json` 与 `SHA256SUMS.txt`。Node 备用包使用 `--with-node`（原生 + Node）或 `--skip-native`（纯 Node），`windows/node-source/build-windows-node.sh` 即后者。
-- 原生 EXE 默认取 `build-windows/bin/chaoxing_plus.exe`，可用 `--exe <path>` 指定；未构建原生时用 `--skip-native` 生成仅 Node 宿主包。
+- 原生 EXE 默认取 `windows/native-build/bin/chaoxing_plus.exe`，可用 `--exe <path>` 指定；未构建原生时用 `--skip-native` 生成仅 Node 宿主包。
 - Node 包的普通入口为 `start-windows-node.cmd`（通过 `silent-launch.vbs` 隐藏 Node 控制台、保留 GUI）及 `start-windows-node-debug.cmd`（可见控制台）；`start-windows-node-silent.cmd` 通过 `silent-memory-launch.vbs` / `silent-memory-bootstrap.mjs` 进入固定静默内存场景，另有 `start-windows-node-silent-debug.cmd` 和 `start-windows-node-silent-no-full-scan-debug.cmd` 调试变体。`release-info.json` 的 `entrypoints` 记录这些入口。宿主运行闭包与配套 PowerShell/VBS 放在 `windows/node-source/`；`windows/share-file/config.example.json` 用于首次生成完整配置。构建期模块与外部 npm 依赖不得进入运行闭包，打包时失败关闭。
 - 包内提供 `release-info.json`（版本、入口 `native`/`node`/`nodeDebug`/`nodeSilent`、`verifier`、payload 文件数、Node 版本）、`SHA256SUMS.txt` 与 `verify-release.mjs`；zip 由 Windows `Compress-Archive` 生成。解压后可运行 `node verify-release.mjs` 按校验清单逐文件校验 SHA-256（缺失/摘要不匹配返回 1，清单缺失/格式错误返回 2），CI 与本机发布验证都会先运行该自校验。
 - 冒烟：包含 Node 时，解压后运行 `node windows/node-source/main.mjs --self-check --no-disk-write --quiet` 验证运行闭包；原生使用 `chaoxing_plus.exe --self-check --no-disk-write`。两种自检默认只读，不扫描、启动或连接客户端；保留 `--no-disk-write` 明确禁止全部宿主落盘。`scripts/windows-release-package.test.mjs` 覆盖包结构、校验和、zip 条目、内部原型/外部依赖拒绝及 CI 工作流契约。
@@ -356,14 +357,14 @@ bash windows/native-source/build-windows.sh --skip-tests
 
 ```powershell
 # 1) 安装（复制 winmm.dll 并写 cxhook-proxy.marker）
-chaoxing_plus.exe --install-proxy --proxy-source "build-windows\hook\winmm.dll" --client "<CXExam.exe>"
+chaoxing_plus.exe --install-proxy --proxy-source "windows\native-build\hook\winmm.dll" --client "<CXExam.exe>"
 # 2) 显式启用代理通道（auto 不会自动切换，保持默认行为可预测）
 chaoxing_plus.exe --inject-mode dll-proxy --client "<CXExam.exe>" --panel-all-pages
 # 3) 还原
 chaoxing_plus.exe --uninstall-proxy --client "<CXExam.exe>"
 ```
 
-代理 DLL 由 `windows/hook-source/build-proxy.ps1` 构建（读取系统 winmm 导出表生成 180 个转发桩）；`--install-proxy`、`--proxy-target winmm|version|uxtheme|msimg32|sensapi|oledlg|wtsapi32|auto`（auto 按客户端导入表自动挑载体） 只负责复制，不负责构建。不传 `--proxy-source` 时按宿主目录的 `winmm-proxy.dll` → `winmm.dll` → `hook\winmm.dll` → `..\hook\winmm.dll` → `build-windows\hook\winmm.dll` 顺序查找。发布包在存在构建产物时会附带 `winmm-proxy.dll`。
+代理 DLL 由 `windows/hook-source/build-proxy.ps1` 构建（读取系统 winmm 导出表生成 180 个转发桩）；`--install-proxy`、`--proxy-target winmm|version|uxtheme|msimg32|sensapi|oledlg|wtsapi32|auto`（auto 按客户端导入表自动挑载体） 只负责复制，不负责构建。不传 `--proxy-source` 时按宿主目录的 `winmm-proxy.dll` → `winmm.dll` → `hook\winmm.dll` → `..\hook\winmm.dll` → `..\..\native-build\hook\winmm.dll` 顺序查找。发布包在存在构建产物时会附带 `winmm-proxy.dll`。
 
 诊断开关：`--pipe-test`（管道启动自检）、`--pipe-client <exe>`（管道握手）、`--pipe-call <exe> [--pipe-expr "<js>"] [--pipe-args "<args>"]`（管道 CDP 全链路 open → getVersion → getTargets → attach → evaluate）。
 ### 完整启动参数
@@ -810,27 +811,27 @@ git diff --check
 npm run build:windows
 powershell -NoProfile -ExecutionPolicy Bypass -File .\windows\native-source\build.ps1 -BuildTests
 
-$env:CX_NATIVE_HOST_EXE = (Resolve-Path '.\build-windows\bin\chaoxing_plus.exe').Path
-$env:CX_NATIVE_INJECTION_EXE = (Resolve-Path '.\build-windows\bin\injection-tests.exe').Path
-$env:CX_NATIVE_ASSETS_EXE = (Resolve-Path '.\build-windows\bin\assets-tests.exe').Path
-$env:CX_NATIVE_OPTIONS_EXE = (Resolve-Path '.\build-windows\bin\options-tests.exe').Path
-$env:CX_NATIVE_CACHE_EXE = (Resolve-Path '.\build-windows\bin\discovery-cache-driver.exe').Path
-$env:CX_NATIVE_CACHE_HOST_EXE = (Resolve-Path '.\build-windows\bin\discovery-cache-host-tests.exe').Path
+$env:CX_NATIVE_HOST_EXE = (Resolve-Path '.\windows\native-build\bin\chaoxing_plus.exe').Path
+$env:CX_NATIVE_INJECTION_EXE = (Resolve-Path '.\windows\native-build\bin\injection-tests.exe').Path
+$env:CX_NATIVE_ASSETS_EXE = (Resolve-Path '.\windows\native-build\bin\assets-tests.exe').Path
+$env:CX_NATIVE_OPTIONS_EXE = (Resolve-Path '.\windows\native-build\bin\options-tests.exe').Path
+$env:CX_NATIVE_CACHE_EXE = (Resolve-Path '.\windows\native-build\bin\discovery-cache-driver.exe').Path
+$env:CX_NATIVE_CACHE_HOST_EXE = (Resolve-Path '.\windows\native-build\bin\discovery-cache-host-tests.exe').Path
 $env:CX_DISCOVERY_TEST_DRIVER = $env:CX_NATIVE_CACHE_EXE
-$env:CX_NATIVE_SESSION_EXE = (Resolve-Path '.\build-windows\bin\session-tests.exe').Path
-$env:CX_NATIVE_SELECTION_EXE = (Resolve-Path '.\build-windows\bin\selection-tests.exe').Path
-$env:CX_NATIVE_CLI_SELECTION_EXE = (Resolve-Path '.\build-windows\bin\cli-selection-tests.exe').Path
-$env:CX_NATIVE_TRANSPORT_EXE = (Resolve-Path '.\build-windows\bin\transport-tests.exe').Path
-$env:CX_NATIVE_AUDIT_EXE = (Resolve-Path '.\build-windows\bin\audit-tests.exe').Path
-$env:CX_NATIVE_CONFIG_EXE = (Resolve-Path '.\build-windows\bin\config-store-tests.exe').Path
-$env:CX_NATIVE_DIAGNOSTICS_EXE = (Resolve-Path '.\build-windows\bin\diagnostics-tests.exe').Path
-$env:CX_NATIVE_ELEVATION_EXE = (Resolve-Path '.\build-windows\bin\elevation-tests.exe').Path
-$env:CX_NATIVE_ELEVATION_HOST_EXE = (Resolve-Path '.\build-windows\bin\elevation-host-tests.exe').Path
-$env:CX_NATIVE_DPI_EXE = (Resolve-Path '.\build-windows\bin\dpi-tests.exe').Path
-$env:CX_NATIVE_DPI_PROCESS_EXE = (Resolve-Path '.\build-windows\bin\dpi-process-tests.exe').Path
-$env:CX_NATIVE_DPI_CHILD_EXE = (Resolve-Path '.\build-windows\bin\dpi-child.exe').Path
-$env:CX_NATIVE_PROCESS_CHECK_EXE = (Resolve-Path '.\build-windows\bin\process-check-tests.exe').Path
-$env:CX_NATIVE_PROCESS_FIXTURE_EXE = (Resolve-Path '.\build-windows\bin\process-fixture.exe').Path
+$env:CX_NATIVE_SESSION_EXE = (Resolve-Path '.\windows\native-build\bin\session-tests.exe').Path
+$env:CX_NATIVE_SELECTION_EXE = (Resolve-Path '.\windows\native-build\bin\selection-tests.exe').Path
+$env:CX_NATIVE_CLI_SELECTION_EXE = (Resolve-Path '.\windows\native-build\bin\cli-selection-tests.exe').Path
+$env:CX_NATIVE_TRANSPORT_EXE = (Resolve-Path '.\windows\native-build\bin\transport-tests.exe').Path
+$env:CX_NATIVE_AUDIT_EXE = (Resolve-Path '.\windows\native-build\bin\audit-tests.exe').Path
+$env:CX_NATIVE_CONFIG_EXE = (Resolve-Path '.\windows\native-build\bin\config-store-tests.exe').Path
+$env:CX_NATIVE_DIAGNOSTICS_EXE = (Resolve-Path '.\windows\native-build\bin\diagnostics-tests.exe').Path
+$env:CX_NATIVE_ELEVATION_EXE = (Resolve-Path '.\windows\native-build\bin\elevation-tests.exe').Path
+$env:CX_NATIVE_ELEVATION_HOST_EXE = (Resolve-Path '.\windows\native-build\bin\elevation-host-tests.exe').Path
+$env:CX_NATIVE_DPI_EXE = (Resolve-Path '.\windows\native-build\bin\dpi-tests.exe').Path
+$env:CX_NATIVE_DPI_PROCESS_EXE = (Resolve-Path '.\windows\native-build\bin\dpi-process-tests.exe').Path
+$env:CX_NATIVE_DPI_CHILD_EXE = (Resolve-Path '.\windows\native-build\bin\dpi-child.exe').Path
+$env:CX_NATIVE_PROCESS_CHECK_EXE = (Resolve-Path '.\windows\native-build\bin\process-check-tests.exe').Path
+$env:CX_NATIVE_PROCESS_FIXTURE_EXE = (Resolve-Path '.\windows\native-build\bin\process-fixture.exe').Path
 try {
   node --test scripts/windows-native-cache.test.mjs scripts/windows-native-discovery.test.mjs
   node --test scripts/windows-native-host.test.mjs scripts/windows-native-self-check.test.mjs scripts/windows-native-assets.test.mjs scripts/windows-native-options.test.mjs scripts/windows-native-session.test.mjs scripts/windows-native-selection.test.mjs scripts/windows-native-cli-selection.test.mjs scripts/windows-native-transport.test.mjs scripts/windows-native-audit.test.mjs scripts/windows-native-config.test.mjs scripts/windows-native-diagnostics.test.mjs scripts/windows-native-elevation.test.mjs scripts/windows-native-dpi.test.mjs scripts/windows-native-process-check.test.mjs
@@ -926,7 +927,7 @@ try {
 原生 Win32 选择窗口的实际显示与自动选择冒烟需单独启用，整个过程中不会启动考试客户端：
 
 ```powershell
-$env:CX_NATIVE_SELECTION_EXE = (Resolve-Path '.\build-windows\bin\selection-tests.exe').Path
+$env:CX_NATIVE_SELECTION_EXE = (Resolve-Path '.\windows\native-build\bin\selection-tests.exe').Path
 $env:CX_TEST_NATIVE_WINDOW = '1'
 try {
   node --test scripts/windows-native-selection.test.mjs
@@ -1149,13 +1150,13 @@ render-diagnostics-host.json # 宿主级诊断摘要：launchMode/clientPid/窗�
 
 ```powershell
 # 单客户端：会走哪条通道、能用哪些载体
-.\build-windows\bin\chaoxing_plus.exe --probe-client "<客户端>\CXExam.exe"
+.\windows\native-build\bin\chaoxing_plus.exe --probe-client "<客户端>\CXExam.exe"
 #   probe: packed=themida
 #   probe: channel=dll-proxy
 #   probe: proxies=winmm,version,uxtheme,msimg32,sensapi,oledlg,wtsapi32
 
 # 全机：候选数量与通道分布
-.\build-windows\bin\chaoxing_plus.exe --probe-all --no-disk-write
+.\windows\native-build\bin\chaoxing_plus.exe --probe-all --no-disk-write
 #   probe-all: candidates=3
 #   plan: clients=3 cdp-port=2 dll-proxy=1
 ```
@@ -1189,7 +1190,7 @@ winmm → version → uxtheme → msimg32 → sensapi → oledlg → wtsapi32
 | 检查 | 不满足时的表现 | 原因 |
 | --- | --- | --- |
 | 客户端导入表里有该 DLL | 该载体灰化 | 不导入就永远不会被加载 |
-| 宿主目录存在该载体的代理 DLL（`build-windows\hook\<name>.dll`） | 该载体灰化 | 没有代理文件，安装必然失败 |
+| 宿主目录存在该载体的代理 DLL（`windows\native-build\hook\<name>.dll`） | 该载体灰化 | 没有代理文件，安装必然失败 |
 | 客户端是 x86 | 全部载体灰化 | 代理 DLL 是 x86，x64 客户端无法侧加载 |
 | 客户端目录可写 | 全部载体灰化 | dll-proxy 需要往该目录放 DLL |
 
@@ -1218,7 +1219,7 @@ msimg32.dll / sensapi.dll / oledlg.dll / wtsapi32.dll
 | 架构 | PE `FileHeader.Machine` | 非 x86 → 载体全部不可用（代理是 x86） |
 | 目录可写 | 在客户端目录创建临时文件（`FILE_FLAG_DELETE_ON_CLOSE`） | 不可写 → 载体全部不可用 |
 
-实测（当前 `build-windows\hook` 下 8 个 DLL，其中 imm32 是 KnownDLL）：
+实测（当前 `windows\native-build\hook` 下 8 个 DLL，其中 imm32 是 KnownDLL）：
 
 ```
 carrier-count=8            ← 自动 + 7（imm32 已被注册表过滤）

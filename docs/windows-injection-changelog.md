@@ -93,7 +93,7 @@ node --test scripts/windows-native-attach.test.mjs
 node --test scripts/windows-native-help-sync.test.mjs
 
 # 离线兼容性表
-.\build-windows\bin\chaoxing_plus.exe --probe-all --no-disk-write --quiet
+.\windows\native-build\bin\chaoxing_plus.exe --probe-all --no-disk-write --quiet
 ```
 
 最近一次全量结果：**857 项 / 825 通过 / 0 失败 / 32 跳过**。
@@ -132,7 +132,7 @@ node --test scripts/windows-native-help-sync.test.mjs
 - 夹具验证：`--inject-mode cdp-pipe` 对 `cdp-echo` 假对端可完成 bootstrap + bundle（`bootstraps=1 bundles=1`）。
 - 真机：宿主在管道模式启动客户端时若返回 Win32 740，会请求 UAC（`cdp-pipe: client requires administrator rights; requesting UAC`）；本会话的自动化提权未能稳定建立，因此**真机 pipe 注入尚未取得报告证据**。建议在管理员 PowerShell 中直接执行：
   ```powershell
-  .\build-windows\bin\chaoxing_plus.exe --inject-mode cdp-pipe --client "<4.1.4 客户端>" --panel-all-pages
+  .\windows\native-build\bin\chaoxing_plus.exe --inject-mode cdp-pipe --client "<4.1.4 客户端>" --panel-all-pages
   ```
 补测（2026-10-29）：把 4.1.4 客户端复制到临时目录并用 `mt.exe` 改写清单为 `asInvoker`，绕开 UAC 后以管理员无关身份运行：
 
@@ -158,11 +158,11 @@ cdp-pipe: Target.getTargets attempt 4 status 0
 
 复测建议（需要用户操作）：
 
-1. 把以下路径加入火绒信任区：仓库根目录（尤其 `build-windows\`）、被测客户端目录、`%TEMP%` 下 `cx-*` 目录；
+1. 把以下路径加入火绒信任区：仓库根目录（尤其 `windows\native-build\`）、被测客户端目录、`%TEMP%` 下 `cx-*` 目录；
 2. 或临时退出火绒的"实时监控/主动防御"；
 3. 重新执行：
    ```powershell
-   .\build-windows\bin\chaoxing_plus.exe --inject-mode cdp-pipe --client "<4.1.4 客户端>" --panel-all-pages
+   .\windows\native-build\bin\chaoxing_plus.exe --inject-mode cdp-pipe --client "<4.1.4 客户端>" --panel-all-pages
    ```
 4. 若排除后管道仍无回包，才能确认"该 CEF 构建不支持 pipe 调试"这一结论。
 
@@ -224,11 +224,11 @@ port-open-after=1s
 
 ```powershell
 # 1) 安装代理到 4.3.0.4 客户端目录
-.\build-windows\bin\chaoxing_plus.exe --install-proxy --proxy-source ".\build-windows\hook\winmm.dll" --client "<4.3.0.4>\CXExam.exe"
+.\windows\native-build\bin\chaoxing_plus.exe --install-proxy --proxy-source ".\windows\native-build\hook\winmm.dll" --client "<4.3.0.4>\CXExam.exe"
 # 2) 正常启动（会弹 UAC），登录后面板应出现
-.\build-windows\bin\chaoxing_plus.exe --client "<4.3.0.4>\CXExam.exe" --panel-all-pages
+.\windows\native-build\bin\chaoxing_plus.exe --client "<4.3.0.4>\CXExam.exe" --panel-all-pages
 # 3) 还原
-.\build-windows\bin\chaoxing_plus.exe --uninstall-proxy --client "<4.3.0.4>\CXExam.exe"
+.\windows\native-build\bin\chaoxing_plus.exe --uninstall-proxy --client "<4.3.0.4>\CXExam.exe"
 ```
 
 `--probe-client` 对加壳客户端现在输出 `suggested=dll-proxy-required`（未装代理）或 `dll-proxy`（已装）。
@@ -546,7 +546,7 @@ report: injectMode=dll-proxy ownershipVerified=True stopReason=duration
 ### 实现
 
 - 代理源码把目标 DLL 名参数化：`CX_PROXY_TARGET_DLL`（默认 `L"winmm.dll"`），加载系统同名 DLL 时使用该宏；
-- `build-proxy.ps1` 增加 `-Target <name>`：按该名字 dump 系统导出、生成 stubs/def、输出 `build-windows/hook/<name>.dll`；
+- `build-proxy.ps1` 增加 `-Target <name>`：按该名字 dump 系统导出、生成 stubs/def、输出 `windows/native-build/hook/<name>.dll`；
 - 宿主新增 `--proxy-target winmm|version`，安装/卸载/自动安装都按目标名落到 `<name>.dll`。
 
 ### 无 UAC 实测
@@ -717,7 +717,7 @@ listener=True   alive=True
 - `--proxy-target` 可接受的名字同步扩展；
 - 回归用例的小载体列表扩为 `msimg32 / sensapi / oledlg / wtsapi32`。
 
-注意：`build-windows/hook/imm32.dll` 仍会被构建脚本产出（`-Target imm32` 手动构建），但宿主已把它列入 KnownDLL 黑名单，不会使用。
+注意：`windows/native-build/hook/imm32.dll` 仍会被构建脚本产出（`-Target imm32` 手动构建），但宿主已把它列入 KnownDLL 黑名单，不会使用。
 ### 自愈触发条件细化（2026-10-30）
 
 自愈不再"只要失败就重试"，改为按端点探测结果判断：
