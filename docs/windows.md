@@ -1182,3 +1182,27 @@ winmm → version → uxtheme → msimg32 → sensapi → oledlg → wtsapi32
 默认仍是「自动（推荐）」——运行时按最优顺序选择：加壳 → `dll-proxy`（自动装代理），否则 `cdp-port`。即"用最合适的注入方式"由 auto 承担，用户只在需要时覆盖。
 
 实现要点：`selection_client_caps()` 读取 PE 节表（判加壳）与导入表（判载体）；两个下拉框使用 `CBS_OWNERDRAWFIXED`，禁用项以 `COLOR_GRAYTEXT` 绘制并在 `CBN_SELCHANGE` 中拒绝选中。
+### 载体可用性四要素（2026-10-30）
+
+「代理载体」下拉在灰化时，判定依据不止"有没有导入"，共四项：
+
+| 检查 | 不满足时的表现 | 原因 |
+| --- | --- | --- |
+| 客户端导入表里有该 DLL | 该载体灰化 | 不导入就永远不会被加载 |
+| 宿主目录存在该载体的代理 DLL（`build-windows\hook\<name>.dll`） | 该载体灰化 | 没有代理文件，安装必然失败 |
+| 客户端是 x86 | 全部载体灰化 | 代理 DLL 是 x86，x64 客户端无法侧加载 |
+| 客户端目录可写 | 全部载体灰化 | dll-proxy 需要往该目录放 DLL |
+
+实测（把 `version.dll`、`uxtheme.dll` 两个代理临时移走后打开界面）：
+
+```
+自动（按导入表）
+winmm.dll
+version.dll（不可用）     ← 灰色
+uxtheme.dll（不可用）     ← 灰色
+msimg32.dll / sensapi.dll / oledlg.dll / wtsapi32.dll
+```
+
+而不是导入表检查那轮：移回文件后同样两项恢复可选，说明判定按文件存在与否实时生效。
+
+补充说明（未做静态预判、由运行时处理）：客户端目录若已有**第三方同名 DLL**，宿主会在安装时自动换下一个载体；KnownDLLs 名单（imm32 等）已从载体表剔除，因此无需在界面重复判断。
