@@ -454,7 +454,7 @@ WinForms 窗口在 `Shown` 时显式调用 `ShowWindow` 并请求前台显示：
 
 点击全盘扫描后，选择窗口关闭并由宿主执行全盘扫描；扫描期间显示独立的进度窗口，实时显示“已检查目录数/发现候选数”，可点击“取消扫描”中止并保留原候选。扫描完成后重新打开选择窗口，仍须人工确认选择，不自动启动客户端；进度窗口不可用时继续无界面全盘扫描。Node 使用 `windows/node-scripts/scan-progress-window.ps1`（WinForms）；原生 EXE 使用 `windows/native-source/selection.c` 的独立线程 Win32 进度窗口（类名 `CXPlusNativeScanProgress`），取消通过 discovery 的进度/取消钩子中止并回到原候选。两端真实窗口可见性都由 `CX_TEST_NATIVE_WINDOW=1` 的显式冒烟验证，真实客户端全盘扫描均未在自动化中执行，汇报时须区分两端测试证据。
 
-原生 EXE 的 `--ui gui` / `--select-client` 则调用 `windows/native-source/selection.c`，没有 PowerShell 子进程。其隐藏控件探针由 `selection-tests.exe` 执行；实际显示、取消和选择 Unicode 路径的交互冒烟需显式设置 `CX_TEST_NATIVE_WINDOW=1`，测试通过 `CXPLUS_NATIVE_SELECTION_AUTO_CLOSE_MS` 自动取消，避免等待人工操作。全盘扫描进度窗口另有 `selection-tests.exe --scan-progress` 冒烟（同样需 `CX_TEST_NATIVE_WINDOW=1`），检查 `IsWindowVisible` 并模拟点击取消；隐藏生命周期与 discovery 进度/取消回调在默认探针中覆盖。取消全盘扫描后宿主重新打开选择窗口时会显示“已取消全盘扫描，保留原候选；可重试或手动浏览。”提示，隐藏探针覆盖通知标题切换。原生 EXE 内嵌 `dpiAware=true`/`asInvoker` manifest，选择与扫描进度窗口按系统 DPI 缩放固定像素布局和字体；测试可用 `CXPLUS_NATIVE_UI_DPI=144` 覆盖 DPI 验证缩放，能力标记为 `highDpiUi:true`。该测试不会执行所选客户端，也不会执行真实全盘扫描。
+原生 EXE 的 `--ui gui` 表示使用 GUI 首页和后续选择流程；首页的“考试客户端”操作再调用 `windows/native-source/selection.c`，没有 PowerShell 子进程。`--select-client` 可直接进入客户端选择窗口。其隐藏控件探针由 `selection-tests.exe` 执行；实际显示、取消和选择 Unicode 路径的交互冒烟需显式设置 `CX_TEST_NATIVE_WINDOW=1`，测试通过 `CXPLUS_NATIVE_SELECTION_AUTO_CLOSE_MS` 自动取消，避免等待人工操作。全盘扫描进度窗口另有 `selection-tests.exe --scan-progress` 冒烟（同样需 `CX_TEST_NATIVE_WINDOW=1`），检查 `IsWindowVisible` 并模拟点击取消；隐藏生命周期与 discovery 进度/取消回调在默认探针中覆盖。取消全盘扫描后宿主重新打开选择窗口时会显示“已取消全盘扫描，保留原候选；可重试或手动浏览。”提示，隐藏探针覆盖通知标题切换。原生 EXE 内嵌 `dpiAware=true`/`asInvoker` manifest，选择与扫描进度窗口按系统 DPI 缩放固定像素布局和字体；测试可用 `CXPLUS_NATIVE_UI_DPI=144` 覆盖 DPI 验证缩放，能力标记为 `highDpiUi:true`。该测试不会执行所选客户端，也不会执行真实全盘扫描。
 
 原生 EXE 的 `--ui cli` 列出候选序号、架构、版本、完整路径和推荐项；`--list-clients` 同样输出这些元信息。终端交互接受完整数字序号、Enter 选择推荐项、`q`/`Q` 取消（退出码 `3`），也接受有效 `CXExam.exe` 路径或安装目录，支持中文、空格及外层双引号。没有扫描候选时仍可手动输入路径；非法输入或输入流结束会明确失败，不会擅自启动推荐客户端。
 
@@ -477,7 +477,7 @@ WinForms 窗口在 `Shown` 时显式调用 `ShowWindow` 并请求前台显示：
 
 配置合并顺序为：内置默认值 < 默认宿主配置（默认 `windows/data/config.json`） < 同目录 `chaoxing-plus.json` < `--config` 指定配置 < `--options-json` < 独立命令行参数。配置层支持对应的宿主启动选项和共享 `settings` 中的 Windows 设置；命令行始终优先。使用 `--no-disk-write` 时仍可读取现有配置，但所有宿主侧写入都关闭。配置只会向页面共享键白名单同步。
 
-显式 `--ui gui` / `--ui cli` 会忽略低优先级配置中的客户端路径，进入扫描与选择；显式 `--client` 仍优先直接启动。JSON 配置中，更高层的 `gui` / `cli` 覆盖低层路径，同层或更高层的 `clientPath` 仍生效；最终界面模式改回 `auto` 时可继续使用原有配置路径。
+显式 `--ui cli` 会忽略低优先级配置中的客户端路径并进入终端扫描与选择；`--ui gui` 选择原生 GUI 首页，首页操作再进入客户端选择；显式 `--select-client` 或 `--client-index` 可直接进入客户端选择，显式 `--client` 仍优先直接启动。JSON 配置中，更高层的 `gui` / `cli` 覆盖低层路径，同层或更高层的 `clientPath` 仍生效；最终界面模式改回 `auto` 时可继续使用原有配置路径。
 
 配置文件热更新和页面设置同步继续按相同优先级合并并校验，不会覆盖命令行或内联 JSON 指定的设置；未覆盖的共享设置可以更新。无效更新保留上一份有效配置。客户端、数据目录、日志、诊断、注入策略等宿主启动选项需要重启才能生效；`noDiskWrite` 是本次运行锁定的写入策略，不能通过热更新改变。
 
@@ -609,7 +609,7 @@ PowerShell 输出兼容 Windows PowerShell 5.1 和 PowerShell 7：通过 `Proces
 
 原生模式另行校验自身入口的边界：面板坐标/宽度必须是整数，序号最大 `2147483647`，快捷键使用原生支持的 `Ctrl` / `Alt` / `Shift` / `Win` 与一个基础按键，不能重复修饰键。原生内联 JSON 不接受未知顶层键，也会校验被 CLI 覆盖前的 JSON 类型。路径参数最多为 1023 个 UTF-16 字符，Browser 文本、主题和快捷键最多为 127 个；表单与 JSON 使用相同限制。导出 JSON 会按原生 CLI 的覆盖规则规范化客户端选择参数族及诊断反向别名，避免命令可运行而 JSON 冲突。原生宿主同样支持 `--no-retain-data` / `--delete-config`（后者要求显式 `--config` 且不能与 `--no-disk-write` 同用），表单在两种宿主下都可用，切换宿主不会静默丢弃清理请求。原生诊断现包含页面布局采样、页面 PNG 截图与自有启动窗口 DPI/BMP（`pageScreenshots:true`、`windowDiagnostics:true`），仍不采集正文/URL/窗口标题；选择“友好交互型”也不会改变这个能力边界。生成器中的 `--dpi-aware` 表示客户端 DPI 兼容层，与原生宿主界面自身的高 DPI 感知（`highDpiUi:true`）不是同一概念。
 
-常规路径扫描会检查桌面、OneDrive Desktop、Program Files、Program Files (x86)、AppData/ProgramData，以及所有可识别固定磁盘根目录；每个根目录只检查根目录自身和一级直接子目录。若常规扫描找到候选，默认不递归全盘。常规无候选时 `fallback-all` 才递归固定磁盘；`all` 直接全盘扫描。扫描结果会按模式写入数据目录的 `scan-cache.json`，缓存默认 5 分钟有效；命中前逐个检查文件仍存在且 PE 架构未变化，任何候选失效、缓存过期或解析失败都会自动实时重扫。缓存还会核对当前常规根目录、固定磁盘及目录排除策略；这些范围变化或旧版缓存会实时重扫。默认 `fallback-all` 可复用已完整完成根目录和一级子目录扫描的常规命中结果；提前停止的递归结果不缓存，不能冒充完整候选列表。`--no-scan-cache` 和 `--no-disk-write` 都完全禁止缓存读写。`--ui cli`、`--ui gui` 或 `--select-client` 会显示完整候选列表；`--select-client`/`--ui gui` 使用 Windows 原生选择窗口（支持手动浏览），即使扫描没有候选也可以手动浏览。终端提示则支持输入列表序号或带引号的手动 `CXExam.exe` 路径。`--ui auto` 优先使用配置中的客户端路径；没有配置路径时，交互终端提示选择，Windows 非交互环境显示原生选择窗口，quiet/client-first 模式则直接使用推荐候选。
+常规路径扫描会检查桌面、OneDrive Desktop、Program Files、Program Files (x86)、AppData/ProgramData，以及所有可识别固定磁盘根目录；每个根目录只检查根目录自身和一级直接子目录。若常规扫描找到候选，默认不递归全盘。常规无候选时 `fallback-all` 才递归固定磁盘；`all` 直接全盘扫描。扫描结果会按模式写入数据目录的 `scan-cache.json`，缓存默认 5 分钟有效；命中前逐个检查文件仍存在且 PE 架构未变化，任何候选失效、缓存过期或解析失败都会自动实时重扫。缓存还会核对当前常规根目录、固定磁盘及目录排除策略；这些范围变化或旧版缓存会实时重扫。默认 `fallback-all` 可复用已完整完成根目录和一级子目录扫描的常规命中结果；提前停止的递归结果不缓存，不能冒充完整候选列表。`--no-scan-cache` 和 `--no-disk-write` 都完全禁止缓存读写。`--ui cli`、`--select-client` 或 `--client-index` 会直接显示完整候选列表；`--ui gui` 先显示原生首页，再由首页进入选择窗口；原生选择窗口支持手动浏览，即使扫描没有候选也可以手动浏览。终端提示则支持输入列表序号或带引号的手动 `CXExam.exe` 路径。`--ui auto` 优先使用配置中的客户端路径；没有配置路径时，交互终端提示选择，Windows 非交互环境显示原生选择窗口，quiet/client-first 模式则直接使用推荐候选。
 
 #### 启动示例
 
