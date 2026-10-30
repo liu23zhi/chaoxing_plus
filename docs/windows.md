@@ -1168,6 +1168,7 @@ render-diagnostics-host.json # 宿主级诊断摘要：launchMode/clientPid/窗�
 3. 选择窗口在灰化时显示原因行（加壳 / 非 x86 / 目录不可写 / 无载体 / 缺代理 DLL），不再只显示"（不可用）"；可用性判定顺序为"内嵌代理 → 宿主目录外置代理"。
 4. `cx_selection_client_caps()` 首次使用时自行加载载体列表——此前 `--caps` 这类不打开窗口的入口会误报"客户端没有导入可用代理载体"。
 5. 新增 `selection-tests.exe --caps <CXExam.exe>` 输出 `caps: injectMask=.. carrierMask=.. reasons=.. embedded=..`，可直接判定真实客户端的灰化原因与内嵌载体。
+6. 「代理载体」与注入方式对齐：只有显式选中 `DLL 代理（dll-proxy）` 时才列出具体载体（不可用项灰化）；「自动（推荐）」与「端口命令行」下只剩「自动（按导入表）」并禁用，避免"选了自动却还要挑载体"的误导。载体候选同时包含内嵌代理，单 EXE 在空目录里也能列出 `winmm.dll`。
 
 现场复核：
 
@@ -1175,6 +1176,7 @@ render-diagnostics-host.json # 宿主级诊断摘要：launchMode/clientPid/窗�
 - 对该客户端输出 `caps: injectMask=0x2 carrierMask=0x0 reasons=0x1 embedded=winmm.dll` —— 只禁用 `cdp-port`，`dll-proxy` 可选。
 - 把单个 EXE 复制到空目录执行 `--install-proxy --client <夹具>`：输出"已释放内嵌代理"，客户端目录出现 21504 字节、以 `MZ` 开头的 `winmm.dll`；`--uninstall-proxy` 清除。
 - `assets-tests.exe` 覆盖内嵌代理枚举/加载（PE 头 + NUL 结尾）；`--capabilities` 报 `embeddedResourceCount:5` 与 `embeddedProxy:true`。
+- `selection-tests.exe` 断言：默认自动模式载体下拉只有 1 项（「自动（按导入表）」），切到 `dll-proxy` 后项数增加；把该 EXE 单独放进空目录重跑同样通过。
 
 
 ### 自愈触发条件
@@ -1217,13 +1219,16 @@ winmm → version → uxtheme → msimg32 → sensapi → oledlg → wtsapi32
 | 探测结果 | 界面表现 |
 | --- | --- |
 | 含 `.themida` 节（加壳） | 「端口命令行（cdp-port）」显示为灰色并追加「（不可用）」；点选会被拒绝并回弹 |
-| 不导入某个载体 DLL | 「代理载体」里对应项灰化并标注「（不可用）」 |
+| 不导入某个载体 DLL | 显式 `dll-proxy` 时「代理载体」里对应项灰化并标注「（不可用）」 |
 | 无任何可用载体 | 「DLL 代理（dll-proxy）」灰化 |
 | 任一显式通道灰化 | 下拉框上方提示具体原因（加壳 / 非 x86 / 目录不可写 / 无载体 / 缺代理 DLL） |
 
+「代理载体」只在**显式选中 `DLL 代理（dll-proxy）`** 时才展开（列出全部载体，不可用的灰化）；默认的「自动（推荐）」和「端口命令行（cdp-port）」下，该下拉只剩「自动（按导入表）」并禁用——auto 的载体本来由宿主按导入表解析，多列条目只会误导（2026-10-30 用户反馈修正）。
+
 默认仍是「自动（推荐）」——运行时按最优顺序选择：加壳 → `dll-proxy`（自动装代理），否则 `cdp-port`。即"用最合适的注入方式"由 auto 承担，用户只在需要时覆盖。
 
-实现要点：`selection_client_caps()` 读取 PE 节表（判加壳）与导入表（判载体）；两个下拉框使用 `CBS_OWNERDRAWFIXED`，禁用项以 `COLOR_GRAYTEXT` 绘制并在 `CBN_SELCHANGE` 中拒绝选中。提示行由 `selection_reason_text()` 从 `CX_SELECTION_REASON_*` 位生成；同样的判定经 `cx_selection_client_caps()` 暴露，`selection-tests.exe --caps <CXExam.exe>` 会打印 `caps: injectMask=0x.. carrierMask=0x.. reasons=0x..`，用于确认某个真实客户端到底是"哪些通道、因为什么"被灰化。
+实现要点：`selection_client_caps()` 读取 PE 节表（判加壳）与导入表（判载体）；两个下拉框使用 `CBS_OWNERDRAWFIXED`，禁用项以 `COLOR_GRAYTEXT` 绘制并在 `CBN_SELCHANGE` 中拒绝选中。载体候选来自「宿主目录 `hook`/同级的代理 DLL」与**内嵌资源**两部分，所以单 EXE 也能列出 `winmm.dll`。提示行由 `selection_reason_text()` 从 `CX_SELECTION_REASON_*` 位生成；同样的判定经 `cx_selection_client_caps()` 暴露，`selection-tests.exe --caps <CXExam.exe>` 会打印 `caps: injectMask=0x.. carrierMask=0x.. reasons=0x.. embedded=..`，用于确认某个真实客户端到底是"哪些通道、因为什么"被灰化。
+
 ### 载体可用性四要素（2026-10-30）
 
 「代理载体」下拉在灰化时，判定依据不止"有没有导入"，共四项：
@@ -1231,7 +1236,7 @@ winmm → version → uxtheme → msimg32 → sensapi → oledlg → wtsapi32
 | 检查 | 不满足时的表现 | 原因 |
 | --- | --- | --- |
 | 客户端导入表里有该 DLL | 该载体灰化 | 不导入就永远不会被加载 |
-| 宿主目录存在该载体的代理 DLL（`windows\native-build\hook\<name>.dll`） | 该载体灰化 | 没有代理文件，安装必然失败 |
+| 宿主目录存在该载体的代理 DLL，或该载体已内嵌（`winmm.dll`） | 该载体灰化 | 没有代理来源，安装必然失败 |
 | 客户端是 x86 | 全部载体灰化 | 代理 DLL 是 x86，x64 客户端无法侧加载 |
 | 客户端目录可写 | 全部载体灰化 | dll-proxy 需要往该目录放 DLL |
 
