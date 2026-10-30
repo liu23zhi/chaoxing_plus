@@ -387,6 +387,9 @@ chaoxing_plus.exe --install-proxy --client "<CXExam.exe>"
 
 帮助与版本开关**不区分大小写**并兼容常见写法（原生宿主）：`--help`、`-h`、`-H`、`--h`、`--H`、`-help`、`--Help`、`--HELP`、`-?`、`/?`、`?` 输出同一份帮助；`--version`、`-v`、`-V`、`--v`、`--Version` 只输出 `6.2.0` 后退出。未知参数以退出码 `2` 报 `unknown command line option (try --help)`。
 
+原生宿主是 GUI 子系统程序，PowerShell/cmd 不会像等待控制台程序那样等待它，提示符可能在输出前或输出后才出现。为避免提示符被夹在帮助中间，`--help`/`--version`/`--capabilities`/`--print-effective-config` 的输出会先在内存里拼成完整文本，再用**一次** `WriteConsoleW`（重定向时一次 `WriteFile`）写出；需要严格保证"输出结束后才回到提示符"时请用 `chaoxing_plus.exe -h | Out-String`、`cmd /c "chaoxing_plus.exe -h"` 或 `--console` 启动。
+
+
 参数名的整体兼容规则（原生宿主，适用于全部开关）：
 
 | 写法 | 例子 | 说明 |
