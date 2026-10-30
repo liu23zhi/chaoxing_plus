@@ -368,7 +368,9 @@ chaoxing_plus.exe --inject-mode dll-proxy --client "<CXExam.exe>" --panel-all-pa
 chaoxing_plus.exe --uninstall-proxy --client "<CXExam.exe>"
 ```
 
-代理 DLL 由 `windows/hook-source/build-proxy.ps1` 构建（读取系统 winmm 导出表生成 180 个转发桩）；`--install-proxy`、`--proxy-target winmm|version|uxtheme|msimg32|sensapi|oledlg|wtsapi32|auto`（auto 按客户端导入表自动挑载体） 只负责复制，不负责构建。不传 `--proxy-source` 时按宿主目录的 `winmm-proxy.dll` → `winmm.dll` → `hook\winmm.dll` → `..\hook\winmm.dll` → `..\..\native-build\hook\winmm.dll` 顺序查找。发布包在存在构建产物时会附带 `winmm-proxy.dll`。
+代理 DLL 由 `windows/hook-source/build-proxy.ps1` 构建（读取系统 winmm 导出表生成 180 个转发桩）；`--install-proxy`、`--proxy-target winmm|version|uxtheme|msimg32|sensapi|oledlg|wtsapi32|auto`（auto 按客户端导入表自动挑载体） 只负责复制，不负责构建。不传 `--proxy-source` 时按宿主目录的 `winmm-proxy.dll` → `winmm.dll` → `hook\winmm.dll` → `..\hook\winmm.dll` → `..\..\native-build\hook\winmm.dll` 顺序查找。
+
+发布必须附带代理目录：`build.ps1` 在 `windows/native-build/hook/*.dll` 缺失时自动运行 `build-proxy.ps1`，并把全部 `*.dll` 复制到 `windows/native-build/release/hook/`；`package-windows.mjs` 再把同样的 DLL 复制成包内 `hook/<carrier>.dll`，并在 `release-info.json` 写 `proxyDir: "hook"`。选择窗口是按 `<宿主目录>\hook\<carrier>.dll` 判定 `dll-proxy` 可用的——只放包根 `winmm-proxy.dll`（`--install-proxy` 的默认源）**不能**解除灰化。`-SkipProxy` 可跳过构建，但那样 release 会缺代理目录。
 
 诊断开关：`--pipe-test`（管道启动自检）、`--pipe-client <exe>`（管道握手）、`--pipe-call <exe> [--pipe-expr "<js>"] [--pipe-args "<args>"]`（管道 CDP 全链路 open → getVersion → getTargets → attach → evaluate）。
 ### 完整启动参数
@@ -1141,6 +1143,25 @@ render-diagnostics-host.json # 宿主级诊断摘要：launchMode/clientPid/窗�
 | 已装代理 + 加壳 | `dll-proxy` | 不会重复安装、也不会在退出时删除 |
 | `cdp-port` 拿不到端点（且端口未被他人占用） | 自愈：改用 `dll-proxy` 重试一次 | 触发条件见下 |
 
+### 发布布局必须带 hook 代理（2026-10-30 复盘）
+
+现场反馈：4.3.0.4 客户端（桌面上的 `电子科技大学中山学院考试客户端-4.3.0.4\CXExam.exe`）在选择窗口里"两种注入方式都不可用"。离线探测结论：
+
+| 事实 | 依据 |
+| --- | --- |
+| 客户端 x86、4.3.0.4，节表含 `.themida`/`.boot` | `--probe-client` 输出 `machine=x86 version=4.3.0.4`、`packed=themida` |
+| cdp-port 灰化是正确行为 | 4.3.0.4 实测不响应 `--remote-debugging-port`，只有 dll-proxy 可用 |
+| dll-proxy 灰化的根因是 release 目录没有代理 DLL | `windows\native-build\release` 当时只有 EXE，没有 `hook\*.dll`；选择窗口按 `<宿主目录>\hook\<carrier>.dll` 判定 |
+
+修复内容：
+
+1. `build.ps1` 在 `windows/native-build/hook/*.dll` 缺失时自动运行 `build-proxy.ps1`，并把代理 DLL 复制到 `release/hook/`；`package-windows.mjs` 把同一批 DLL 打进包内 `hook/`，`release-info.json` 记录 `proxyDir`。
+2. 选择窗口在灰化时显示原因行（加壳 / 非 x86 / 目录不可写 / 无载体 / 缺代理 DLL），不再只显示"（不可用）"。
+3. `cx_selection_client_caps()` 首次使用时自行加载载体列表——此前 `--caps` 这类不打开窗口的入口会误报"客户端没有导入可用代理载体"。
+4. 新增 `selection-tests.exe --caps <CXExam.exe>` 输出 `caps: injectMask=.. carrierMask=.. reasons=..`，可直接判定真实客户端的灰化原因。
+
+现场复核（`npm run release:windows` 产物 `release/chaoxing-plus-6.2.0-windows`，包内 `hook/winmm.dll` 存在）：对该客户端输出 `caps: injectMask=0x2 carrierMask=0x0 reasons=0x1` —— 只禁用 `cdp-port`，`dll-proxy` 可选，提示行为"端口注入不可用：客户端已加壳，命令行调试开关会被忽略"。`verify-release.mjs` 校验 13 个文件通过。
+
 ### 自愈触发条件
 
 仅在**端口没有出现监听**时重试；以下情况不重试：
@@ -1183,10 +1204,11 @@ winmm → version → uxtheme → msimg32 → sensapi → oledlg → wtsapi32
 | 含 `.themida` 节（加壳） | 「端口命令行（cdp-port）」显示为灰色并追加「（不可用）」；点选会被拒绝并回弹 |
 | 不导入某个载体 DLL | 「代理载体」里对应项灰化并标注「（不可用）」 |
 | 无任何可用载体 | 「DLL 代理（dll-proxy）」灰化 |
+| 任一显式通道灰化 | 下拉框上方提示具体原因（加壳 / 非 x86 / 目录不可写 / 无载体 / 缺代理 DLL） |
 
 默认仍是「自动（推荐）」——运行时按最优顺序选择：加壳 → `dll-proxy`（自动装代理），否则 `cdp-port`。即"用最合适的注入方式"由 auto 承担，用户只在需要时覆盖。
 
-实现要点：`selection_client_caps()` 读取 PE 节表（判加壳）与导入表（判载体）；两个下拉框使用 `CBS_OWNERDRAWFIXED`，禁用项以 `COLOR_GRAYTEXT` 绘制并在 `CBN_SELCHANGE` 中拒绝选中。
+实现要点：`selection_client_caps()` 读取 PE 节表（判加壳）与导入表（判载体）；两个下拉框使用 `CBS_OWNERDRAWFIXED`，禁用项以 `COLOR_GRAYTEXT` 绘制并在 `CBN_SELCHANGE` 中拒绝选中。提示行由 `selection_reason_text()` 从 `CX_SELECTION_REASON_*` 位生成；同样的判定经 `cx_selection_client_caps()` 暴露，`selection-tests.exe --caps <CXExam.exe>` 会打印 `caps: injectMask=0x.. carrierMask=0x.. reasons=0x..`，用于确认某个真实客户端到底是"哪些通道、因为什么"被灰化。
 ### 载体可用性四要素（2026-10-30）
 
 「代理载体」下拉在灰化时，判定依据不止"有没有导入"，共四项：
