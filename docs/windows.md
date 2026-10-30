@@ -553,22 +553,22 @@ CDP 断开时关闭旧页面会话；target 仍存在则在下一轮枚举重新
 
 #### 禁用能力的参数设计
 
-以下能力已在 Node 宿主实现；原生宿主仅作引导并明确拒绝。破坏性操作只允许在发布包布局中执行，调试入口只模拟删除。内部清理器或状态机的单元测试不代表发布入口已支持；本阶段也不自动把自毁请求转换为另一种执行模式。
+以下高级参数已在原生宿主实现；破坏性操作只允许在发布包布局（EXE 同级 `SHA256SUMS.txt`）执行，源码/构建目录会跳过真实删除。共享设置（`common.settings.windows-*`）仍然不接受这些意图，避免网页误改安全策略。
 
 | 能力或参数 | 设计值 | 当前行为 |
 | --- | --- | --- |
 | `--execution-mode memory`、`--memory-exec` | 内存执行 | **已支持**：宿主零落盘，客户端正常可见启动；不创建配置/数据目录，不写日志/诊断/报告/扫描缓存。 |
-| `--execution-mode delete-suspend`、`--delete-suspend` | 删除挂起 | 启动前报错。 |
-| `--wipe-owned-files-on-start` | 关闭 | 设计为启动清理宿主登记的自有文件；当前拒绝，不执行删除。 |
-| `--wipe-failure-policy retry\|background\|ignore\|abort` | `retry` | 设计为删除失败处理策略；当前拒绝。 |
-| `--wipe-retries <1-20>` | `5` | 设计为启动阶段有限尝试上限；当前拒绝。 |
-| `--wipe-retry-delay <ms>` | `200`，`50-5000` | 设计为启动尝试间隔；当前拒绝。 |
-| `--wipe-runtime-retry` / `--no-wipe-runtime-retry` | 开启 | 设计为启动失败后是否继续非阻塞重试；当前拒绝。 |
-| `--wipe-runtime-interval <sec>` | `30`，`1-86400` | 设计为运行期间重试间隔；当前拒绝。 |
-| `--self-destruct-key <shortcut>` | 可重复，默认无 | 自毁快捷键尚未实现，报错。 |
-| `--self-destruct-on-fullscreen-exit` | 关闭 | 全屏/进程退出监控尚未实现，报错。 |
-| `--self-destruct-delay <ms>` | `0` | 自毁延迟尚未实现，报错。 |
-| `--no-self-destruct-confirm` | 关闭 | 自毁确认控制尚未实现，报错。 |
+| `--execution-mode delete-suspend`、`--delete-suspend` | 删除挂起 | **已支持**：客户端启动后删除程序痕迹并继续运行；需要发布布局，强制 no-disk-write，禁止 `--attach`/`--list-clients`。 |
+| `--wipe-owned-files-on-start` | 关闭 | **已支持**：启动时只清理 `<data-dir>\chaoxing` 登记的扫描缓存、宿主日志和本次诊断产物。 |
+| `--wipe-failure-policy retry\|background\|ignore\|abort` | `retry` | **已支持**：abort 失败退出 3；background 转后台；ignore 尝试一次。 |
+| `--wipe-retries <1-20>` | `5` | **已支持**：启动阶段每个文件的尝试次数。 |
+| `--wipe-retry-delay <ms>` | `200`，`50-5000` | **已支持**：重试间隔。 |
+| `--wipe-runtime-retry` / `--no-wipe-runtime-retry` | 开启 | **已支持**：剩余文件由后台线程按间隔重试，退出时停止。 |
+| `--wipe-runtime-interval <sec>` | `30`，`1-86400` | **已支持**：后台重试间隔。 |
+| `--self-destruct-key <shortcut>` | 可重复，默认无 | **已支持**：最多 4 个，不得与 `--answer-key` 相同。 |
+| `--self-destruct-on-fullscreen-exit` | 关闭 | **已支持**：只有先进入全屏后退出才触发。 |
+| `--self-destruct-delay <ms>` | `0` | **已支持**：0–60000ms，确认后延迟执行。 |
+| `--self-destruct-confirm` / `--no-self-destruct-confirm` | 开启 | **已支持**：默认弹 MessageBox 确认；无确认开关时测试走 `--no-self-destruct-confirm`。 |
 
 这些能力只做 schema、范围与冲突说明；显式通过 CLI、内联 JSON、配置文件或共享 Windows 设置请求它们时都报错，包括单独指定 `--wipe-retries` 等调优参数。生成器不得把包含这些请求的配置导出为可运行命令。
 
@@ -584,7 +584,7 @@ CDP 断开时关闭旧页面会话；target 仍存在则在下一轮枚举重新
 
 原生宿主能力应按实际实现区分：普通启动、宿主零写盘、扫描与选择、共享配置、面板、答题设置和诊断均已接入；诊断包含页面布局、页面 PNG、窗口 DPI、BMP/PNG 和宿主摘要。`input` 注入已于 2026-10-30 按用户决定放弃开发，不再列为待实现功能；`cdp-pipe` 目前只做首次引导注入，未完成常驻会话、导航后的重注入与重连，生成器将两项显示为禁用且阻止导出命令和 JSON。注入方式“沿用宿主默认”不传 `--inject-mode`，由宿主与选择窗口决定方式，不保证采用端口方式，也不等同于显式 `--inject-mode auto`。
 
-通用 `delete-suspend`、`wipe-*`、`self-destruct-*` 参数仍会被宿主拒绝；已有原生固定 `--silent-scenario` 不等于实现了这些通用参数，本页不导出该固定场景。真实 CEF75 登录后页面与旧 Windows 兼容性仍需分别验收，不能用自动化模拟结果替代。
+原生宿主现已支持 `delete-suspend`、`wipe-*`、`self-destruct-*` 参数；它们与固定的 `--silent-scenario` 是两套入口，参数生成器仍只导出普通启动与内存执行，需手工传参。真实 CEF75 登录后页面与旧 Windows 兼容性仍需分别验收，不能用自动化模拟结果替代。
 
 Node 模式需要 Node.js 22+，默认根据 HTML 所在位置定位 `windows\node-source\main.mjs`，并以该脚本对应的项目根目录作为工作目录，数据目录默认 `windows\data`。原生模式直接启动填写的 `chaoxing_plus.exe`，无需 Node.js，以 EXE 所在目录作为工作目录，数据目录默认 `.data`。两种模式的相对配置、数据与报告路径均按对应工作目录解析；切换宿主只调整未自定义的默认数据/诊断目录。入口只接受 Windows 驱动器绝对路径（支持 `C:/`）或包含服务器及共享名的完整 UNC 路径，不接受相对路径、`C:foo` 或仅以 `\` 开头的路径；生成器无法确认文件存在，请填写实际发布文件的位置。
 
