@@ -18,6 +18,8 @@ Windows 6.2.0 第一阶段提供 **普通可审计 Windows 宿主**：它用官�
 
 “设置注入”可填写服务地址、API key 和允许共享键的 JSON（例如 `{"common.settings.extension-enabled":true}`；具体键以当前扩展为准）。“单独配置会话”从公共配置复制，修改只应用到新会话。现有会话也可以通过扩展界面独立调整。设置仅保存在当前宿主进程内存中，密码与 JWT 不写入日志或文件。账号登录需要服务器验证码，成功后复用已有访问令牌；只有显式勾选后才会在没有令牌时创建。
 
+原生主页的“注入设置”表单与 Windows 悬浮面板使用同一份共享设置：除 tikuAdapter 地址/API key 外，还可直接设置启用注入、自动答题、AI 兜底搜题、异步/同步搜题、深度思考、AI 兜底失败后的停留/继续策略、考试自动交卷和本地题库缓存。保存后这些值写入 `cx.new.study.*` 或 `common.settings.extension-enabled`，页面悬浮面板与原生启动的考试客户端会读取相同结果；高级 JSON 仍可用于扩展未在表单中展示的共享键。Windows 面板专属的显示位置、主题、答题快捷键、线程数、倒计时、重试和宿主日志选项仍保留在同一窗口中。
+
 新增回归使用原生测试 EXE：`CX_NATIVE_HOME_EXE`、`CX_NATIVE_ADAPTER_EXE`、`CX_NATIVE_ACCOUNT_WINDOW_EXE`、`CX_NATIVE_BROWSER_SESSION_EXE`，分别指向 `windows/native-build/bin/` 下的 `home-tests.exe`、`adapter-account-tests.exe`、`account-window-tests.exe`、`browser-session-tests.exe`。这些变量只用于测试，不是产品运行配置。`CX_TEST_NATIVE_WINDOW=1` 会显示测试窗口并自动关闭。真实 Chrome/Edge 的多会话、存储和清理测试不等于真实超星课程或 CEF75 考试验收。
 
 | 项 | 状态 |
