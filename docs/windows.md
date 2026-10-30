@@ -1206,3 +1206,32 @@ msimg32.dll / sensapi.dll / oledlg.dll / wtsapi32.dll
 而不是导入表检查那轮：移回文件后同样两项恢复可选，说明判定按文件存在与否实时生效。
 
 补充说明（未做静态预判、由运行时处理）：客户端目录若已有**第三方同名 DLL**，宿主会在安装时自动换下一个载体；KnownDLLs 名单（imm32 等）已从载体表剔除，因此无需在界面重复判断。
+### 注入能力检测器（2026-10-30）
+
+界面不再"死记"支持列表，全部改为**直接检测**：
+
+| 检测项 | 方法 | 结果 |
+| --- | --- | --- |
+| 可用载体 | 扫描宿主目录的 `hook\*.dll`（以及同级的 `*.dll`），取文件名作为候选，再与客户端导入表求交 | 新增/删除代理 DLL 后界面自动增减，无需改代码 |
+| KnownDLLs | 读注册表 `HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\KnownDLLs` | 同名 DLL 自动从候选中剔除（如 `imm32`） |
+| 加壳 | 扫描**全部节名**匹配 10 类壳特征（themida/winlicense/vmp/upx/aspack/mpress/enigma/obsidium/packed/protect/.boot） | 命中即判为"命令行开关大概率无效" |
+| 架构 | PE `FileHeader.Machine` | 非 x86 → 载体全部不可用（代理是 x86） |
+| 目录可写 | 在客户端目录创建临时文件（`FILE_FLAG_DELETE_ON_CLOSE`） | 不可写 → 载体全部不可用 |
+
+实测（当前 `build-windows\hook` 下 8 个 DLL，其中 imm32 是 KnownDLL）：
+
+```
+carrier-count=8            ← 自动 + 7（imm32 已被注册表过滤）
+[0] 自动（按导入表）
+[1] msimg32.dll
+[2] oledlg.dll
+[3] sensapi.dll
+[4] uxtheme.dll
+[5] version.dll
+[6] winmm.dll
+[7] wtsapi32.dll
+```
+
+顺序来自文件系统枚举（字母序），不是代码里写死的顺序——这正是"检测而非硬编码"的直接证据。
+
+宿主侧的 `h_carrier_is_known_dll()` 也改为**优先查注册表**，查不到才回退内置兜底表；`auto` 的加壳判定同样换成上面的通用特征扫描。
