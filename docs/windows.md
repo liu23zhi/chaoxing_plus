@@ -22,7 +22,7 @@ Windows 6.2.0 第一阶段提供 **普通可审计 Windows 宿主**：它用官�
 
 Node 备用源码入口 `windows/node-source/start-windows-node.cmd`（隐藏控制台）、`start-windows-node-debug.cmd`（调试）及静默变体要求 Node.js 22+；客户端选择窗口使用 PowerShell 5.1 与 WinForms。需要 Node 的发布包通过 `--with-node` 或 `--skip-native` 显式生成，并可携带 `runtime/node.exe`（`package-windows.mjs` 的 `--runtime-exe` / `--no-runtime`）。启动器先定位仓库根或发布包根，再优先使用该根目录内的运行时；`runtime/node.exe` 永不纳入程序痕迹清理。原生 EXE 使用 Win32 选择窗口，不依赖 Node、PowerShell 或 WinForms。
 
-`windows/native-source/` 是另一条普通运行的原生宿主原型。构建生成 x86 `chaoxing_plus.exe`，现已将 bootstrap、业务 bundle、新文档探针和 SweetAlert2 CSS 作为 RCDATA 嵌入 EXE；默认直接读取资源，不解包旁置文件。已在本机验证把 EXE 单独复制到含中文与空格的空目录后，四项资源的长度及 SHA256 均与构建输入一致；导入表只包含系统 DLL，没有 Node、.NET 或 VC++ Runtime。显式 `--assets <dir>` 可用于调试覆盖，目录结构须与 `dist-windows` 一致，CSS 位于 `vendor/sweetalert2.min.css`；覆盖文件缺失或无效时明确报错，不回退内嵌版本。
+`windows/native-source/` 是另一条普通运行的原生宿主原型。构建生成 x86 `chaoxing_plus.exe`，现已将 bootstrap、业务 bundle、新文档探针和 SweetAlert2 CSS 作为 RCDATA 嵌入 EXE；winmm 代理 DLL 也作为第五个 RCDATA（`CX_RESOURCE_PROXY_WINMM`）内嵌，发布产物因此只有单个 EXE。默认直接读取资源，不解包旁置文件。已在本机验证把 EXE 单独复制到含中文与空格的空目录后，四项注入资源的长度及 SHA256 均与构建输入一致；导入表只包含系统 DLL，没有 Node、.NET 或 VC++ Runtime。显式 `--assets <dir>` 可用于调试覆盖，目录结构须与 `dist-windows` 一致，CSS 位于 `vendor/sweetalert2.min.css`；覆盖文件缺失或无效时明确报错，不回退内嵌版本。
 
 原生路径现已通过真实 TCP/WebSocket 适配器持续轮询 page target，为各 target 建立上下文会话，处理导航、新 target、延迟创建的 iframe、上下文销毁、连接关闭与重连重试；首次连接和导航后保留顶层补注入。`runtime`、`script`、`hybrid` 三种注入策略均接入同一生命周期。宿主在本次启动的客户端退出或 `--duration` 到期后关闭会话；默认不结束仍存活的客户端，只有 `--stop-client-on-exit` 或启动失败时结束本次创建的进程，`--attach` 的外部浏览器不在该范围内。
 
@@ -368,9 +368,17 @@ chaoxing_plus.exe --inject-mode dll-proxy --client "<CXExam.exe>" --panel-all-pa
 chaoxing_plus.exe --uninstall-proxy --client "<CXExam.exe>"
 ```
 
-代理 DLL 由 `windows/hook-source/build-proxy.ps1` 构建（读取系统 winmm 导出表生成 180 个转发桩）；`--install-proxy`、`--proxy-target winmm|version|uxtheme|msimg32|sensapi|oledlg|wtsapi32|auto`（auto 按客户端导入表自动挑载体） 只负责复制，不负责构建。不传 `--proxy-source` 时按宿主目录的 `winmm-proxy.dll` → `winmm.dll` → `hook\winmm.dll` → `..\hook\winmm.dll` → `..\..\native-build\hook\winmm.dll` 顺序查找。
+代理 DLL 由 `windows/hook-source/build-proxy.ps1` 构建（读取系统 winmm 导出表生成 180 个转发桩）；`--proxy-target winmm|version|uxtheme|msimg32|sensapi|oledlg|wtsapi32|auto`（auto 按客户端导入表自动挑载体）只负责选择载体。**winmm 代理已经作为 RCDATA 内嵌在 `chaoxing_plus.exe` 里**（`CX_RESOURCE_PROXY_WINMM`），`--install-proxy`/`dll-proxy`/auto 会把它释放到客户端目录，不再需要任何外置 DLL：
 
-发布必须附带代理目录：`build.ps1` 在 `windows/native-build/hook/*.dll` 缺失时自动运行 `build-proxy.ps1`，并把全部 `*.dll` 复制到 `windows/native-build/release/hook/`；`package-windows.mjs` 再把同样的 DLL 复制成包内 `hook/<carrier>.dll`，并在 `release-info.json` 写 `proxyDir: "hook"`。选择窗口是按 `<宿主目录>\hook\<carrier>.dll` 判定 `dll-proxy` 可用的——只放包根 `winmm-proxy.dll`（`--install-proxy` 的默认源）**不能**解除灰化。`-SkipProxy` 可跳过构建，但那样 release 会缺代理目录。
+```powershell
+# 单 EXE 即可安装（旁边没有任何 DLL）
+chaoxing_plus.exe --install-proxy --client "<CXExam.exe>"
+# 输出：install-proxy: 已释放内嵌代理 -> <客户端目录>\winmm.dll
+```
+
+开发树里仍优先使用外置代理（`winmm-proxy.dll` → `winmm.dll` → `hook\winmm.dll` → `..\hook\winmm.dll` → `..\..\native-build\hook\winmm.dll`），找不到才回退内嵌资源；`--proxy-source` 可显式指定文件（此时载体会固定，冲突直接报错而不切换）。其它载体（version/uxtheme/…）没有内嵌资源，必须用 `--proxy-source` 指定，否则明确报错。
+
+**发布布局只有一个文件**：`windows/native-build/release/chaoxing_plus.exe`。`build.ps1` 在 `windows/native-build/hook/winmm.dll` 缺失时会自动构建它（仅用于嵌入；`-SkipProxy` 会因缺少嵌入源而直接失败），`package-windows.mjs` 不再复制任何代理文件，`release-info.json` 也不再写 `proxyDir`。选择窗口按"内嵌代理 → 宿主目录外置代理"判定 `dll-proxy` 可用性，所以单 EXE 也能选到该通道。
 
 诊断开关：`--pipe-test`（管道启动自检）、`--pipe-client <exe>`（管道握手）、`--pipe-call <exe> [--pipe-expr "<js>"] [--pipe-args "<args>"]`（管道 CDP 全链路 open → getVersion → getTargets → attach → evaluate）。
 ### 完整启动参数
@@ -1143,24 +1151,31 @@ render-diagnostics-host.json # 宿主级诊断摘要：launchMode/clientPid/窗�
 | 已装代理 + 加壳 | `dll-proxy` | 不会重复安装、也不会在退出时删除 |
 | `cdp-port` 拿不到端点（且端口未被他人占用） | 自愈：改用 `dll-proxy` 重试一次 | 触发条件见下 |
 
-### 发布布局必须带 hook 代理（2026-10-30 复盘）
+### 单 EXE 与内嵌代理（2026-10-30 复盘）
 
-现场反馈：4.3.0.4 客户端（桌面上的 `电子科技大学中山学院考试客户端-4.3.0.4\CXExam.exe`）在选择窗口里"两种注入方式都不可用"。离线探测结论：
+现场反馈：4.3.0.4 客户端（桌面上的 `电子科技大学中山学院考试客户端-4.3.0.4\CXExam.exe`）在选择窗口里"两种注入方式都不可用"；随后要求发布产物**只保留单个 `chaoxing_plus.exe`**。离线探测结论：
 
 | 事实 | 依据 |
 | --- | --- |
 | 客户端 x86、4.3.0.4，节表含 `.themida`/`.boot` | `--probe-client` 输出 `machine=x86 version=4.3.0.4`、`packed=themida` |
 | cdp-port 灰化是正确行为 | 4.3.0.4 实测不响应 `--remote-debugging-port`，只有 dll-proxy 可用 |
-| dll-proxy 灰化的根因是 release 目录没有代理 DLL | `windows\native-build\release` 当时只有 EXE，没有 `hook\*.dll`；选择窗口按 `<宿主目录>\hook\<carrier>.dll` 判定 |
+| dll-proxy 灰化的根因是 release 目录没有代理 DLL | 当时选择窗口只按 `<宿主目录>\hook\<carrier>.dll` 判定可用性 |
 
 修复内容：
 
-1. `build.ps1` 在 `windows/native-build/hook/*.dll` 缺失时自动运行 `build-proxy.ps1`，并把代理 DLL 复制到 `release/hook/`；`package-windows.mjs` 把同一批 DLL 打进包内 `hook/`，`release-info.json` 记录 `proxyDir`。
-2. 选择窗口在灰化时显示原因行（加壳 / 非 x86 / 目录不可写 / 无载体 / 缺代理 DLL），不再只显示"（不可用）"。
-3. `cx_selection_client_caps()` 首次使用时自行加载载体列表——此前 `--caps` 这类不打开窗口的入口会误报"客户端没有导入可用代理载体"。
-4. 新增 `selection-tests.exe --caps <CXExam.exe>` 输出 `caps: injectMask=.. carrierMask=.. reasons=..`，可直接判定真实客户端的灰化原因。
+1. **winmm 代理内嵌为 RCDATA**（`CX_RESOURCE_PROXY_WINMM`，见 `assets.rc.in`）；`--install-proxy`/`dll-proxy`/auto 从 EXE 资源释放到客户端目录，`--uninstall-proxy` 还原。`build.ps1` 在 `windows/native-build/hook/winmm.dll` 缺失时自动构建它（仅用于嵌入；`-SkipProxy` 会因缺少嵌入源直接失败）。
+2. 发布布局收敛为**单个 EXE**：`build.ps1` 不再往 `release/` 复制 hook，`package-windows.mjs` 不再打包 `hook/` 与 `winmm-proxy.dll`，`release-info.json` 不再写 `proxyDir`。
+3. 选择窗口在灰化时显示原因行（加壳 / 非 x86 / 目录不可写 / 无载体 / 缺代理 DLL），不再只显示"（不可用）"；可用性判定顺序为"内嵌代理 → 宿主目录外置代理"。
+4. `cx_selection_client_caps()` 首次使用时自行加载载体列表——此前 `--caps` 这类不打开窗口的入口会误报"客户端没有导入可用代理载体"。
+5. 新增 `selection-tests.exe --caps <CXExam.exe>` 输出 `caps: injectMask=.. carrierMask=.. reasons=.. embedded=..`，可直接判定真实客户端的灰化原因与内嵌载体。
 
-现场复核（`npm run release:windows` 产物 `release/chaoxing-plus-6.2.0-windows`，包内 `hook/winmm.dll` 存在）：对该客户端输出 `caps: injectMask=0x2 carrierMask=0x0 reasons=0x1` —— 只禁用 `cdp-port`，`dll-proxy` 可选，提示行为"端口注入不可用：客户端已加壳，命令行调试开关会被忽略"。`verify-release.mjs` 校验 13 个文件通过。
+现场复核：
+
+- `windows\native-build\release\` 只有 `chaoxing_plus.exe`（712192 字节，含内嵌代理）。
+- 对该客户端输出 `caps: injectMask=0x2 carrierMask=0x0 reasons=0x1 embedded=winmm.dll` —— 只禁用 `cdp-port`，`dll-proxy` 可选。
+- 把单个 EXE 复制到空目录执行 `--install-proxy --client <夹具>`：输出"已释放内嵌代理"，客户端目录出现 21504 字节、以 `MZ` 开头的 `winmm.dll`；`--uninstall-proxy` 清除。
+- `assets-tests.exe` 覆盖内嵌代理枚举/加载（PE 头 + NUL 结尾）；`--capabilities` 报 `embeddedResourceCount:5` 与 `embeddedProxy:true`。
+
 
 ### 自愈触发条件
 

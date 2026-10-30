@@ -141,6 +141,6 @@ powershell -ExecutionPolicy Bypass -File windows\hook-source\build-proxy.ps1
 
 提示：`--proxy-source` 建议用绝对路径（或确认当前目录是仓库根），避免复制到非预期位置。
 
-发布包会随附 `winmm-proxy.dll`（存在构建产物时）。不传 `--proxy-source` 时，`--install-proxy` 依次在宿主目录查找 `winmm-proxy.dll`、`winmm.dll`、`hook\winmm.dll`、`..\hook\winmm.dll`、`..\..\native-build\hook\winmm.dll`，找到第一个即用。
+发布包只有单个 `chaoxing_plus.exe`：winmm 代理已作为 RCDATA 内嵌，`--install-proxy` 不传 `--proxy-source` 时直接从 EXE 资源释放 `winmm.dll` 到客户端目录（开发树里仍优先使用宿主目录的 `winmm-proxy.dll`、`winmm.dll`、`hook\winmm.dll`、`..\hook\winmm.dll`、`..\..\native-build\hook\winmm.dll`）。其它载体（version/uxtheme 等）没有内嵌资源，必须用 `--proxy-source` 指定。
 
 
