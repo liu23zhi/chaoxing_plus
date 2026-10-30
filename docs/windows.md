@@ -568,7 +568,11 @@ CDP 断开时关闭旧页面会话；target 仍存在则在下一轮枚举重新
 
 ### Windows 参数生成器与启动示例
 
-`windows/share-file/parameter-generator.html` 是离线单文件参数生成器，可在浏览器中打开，生成 PowerShell、cmd、JSON 配置和参数摘要。先选择“Node 开发宿主”或“原生单文件 EXE”，再套用预设；切换预设保留宿主类型和入口路径。页面不联网、不执行命令、不保存输入。
+`windows/share-file/parameter-generator.html` 是离线单文件参数生成器，可在浏览器中打开，生成 PowerShell、cmd、JSON 配置和参数摘要。默认选择原生单文件 EXE，并在仓库布局下自动定位 `windows/native-build/release/chaoxing_plus.exe`；发布文件复制到其他位置后请填写实际绝对路径，单独复制 HTML 时不会猜测 EXE 路径。套用预设和重置保留已选原生入口。原生默认诊断目录为 `<data-dir>/chaoxing/diagnostics`，随数据目录调整，手动指定诊断目录后保留输入。页面不联网、不执行命令、不保存输入；Node 兼容入口已冻结，仅供历史兼容和排障。切回原生时会清除并隐藏 Node 专属 `--hide-console` 开关。
+
+原生宿主能力应按实际实现区分：普通启动、宿主零写盘、扫描与选择、共享配置、面板、答题设置和诊断均已接入；诊断包含页面布局、页面 PNG、窗口 DPI、BMP/PNG 和宿主摘要。`input` 注入尚未实现；`cdp-pipe` 目前只做首次引导注入，未完成常驻会话、导航后的重注入与重连，生成器将两项显示为禁用且阻止导出命令和 JSON。注入方式“沿用宿主默认”不传 `--inject-mode`，由宿主与选择窗口决定方式，不保证采用端口方式，也不等同于显式 `--inject-mode auto`。
+
+通用 `delete-suspend`、`wipe-*`、`self-destruct-*` 参数仍会被宿主拒绝；已有原生固定 `--silent-scenario` 不等于实现了这些通用参数，本页不导出该固定场景。真实 CEF75 登录后页面与旧 Windows 兼容性仍需分别验收，不能用自动化模拟结果替代。
 
 Node 模式需要 Node.js 22+，默认根据 HTML 所在位置定位 `windows\node-source\main.mjs`，并以该脚本对应的项目根目录作为工作目录，数据目录默认 `windows\data`。原生模式直接启动填写的 `chaoxing_plus.exe`，无需 Node.js，以 EXE 所在目录作为工作目录，数据目录默认 `.data`。两种模式的相对配置、数据与报告路径均按对应工作目录解析；切换宿主只调整未自定义的默认数据/诊断目录。入口只接受 Windows 驱动器绝对路径（支持 `C:/`）或包含服务器及共享名的完整 UNC 路径，不接受相对路径、`C:foo` 或仅以 `\` 开头的路径；生成器无法确认文件存在，请填写实际发布文件的位置。
 
