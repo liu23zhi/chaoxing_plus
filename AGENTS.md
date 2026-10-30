@@ -185,6 +185,8 @@ handler 返回 `boolean | undefined`：`true` 跳过、`false` 与 `undefined` �
 
 ### 必须遵守的边界
 
+- **放弃 input 注入（2026-10-30，用户决定）**：`input` 注入方式已放弃开发，不再列为待实现功能或后续开发计划。保留现有禁用/拒绝行为，文档、生成器与能力盘点统一标记为“已放弃开发”；只有用户明确重新提出时才重新评估。
+
 - **Node 宿主冻结（2026-10-30，用户决定）**：本次用户明确要求的 Node SEA 单 EXE 封装与共享图标接入完成后，`windows/node-source/` 的宿主、启动器、构建与打包能力均停止更新；后续功能、修复和发布演进只做原生宿主。保留现有 Node 源码、备用目录包与回归用于历史兼容、对照和排障，不因原生参数或共享功能变化而同步扩展 Node。下方 Node 专属条款记录冻结实现的行为与验证方式，不构成继续维护 Node 的授权；只有用户再次明确要求时才修改 Node。插件共用构建和工具使用 Node.js 不属于 Node 宿主冻结范围。
 
 - **独立 EXE 与共享图标（2026-10-30）**：原生 `build.ps1` 保留 `windows/native-build/bin/` 中全部调试/测试 EXE，并另产出 `windows/native-build/release/chaoxing_plus.exe`。Node 构建入口保留备用目录包，另用 `package-node-exe.mjs` / `sea-bootstrap.cjs` 生成 `windows/node-build/release/chaoxing_plus_node.exe`；SEA 模块与注入资源从内存加载，不能依赖源码目录，`--version` / `--help` / `--self-check --no-disk-write` 不解包或写入宿主数据。Node 原有 GUI 全盘扫描的系统临时状态文件行为保留。两种 EXE 共用 `windows/share-file/assets/app-icon.ico`，同目录 `app-icon.png` 保留原图；更新图标须重建双方 EXE 并核对 PE 图标资源，不能只改 PNG。封装回归为 `scripts/windows-node-exe.test.mjs`，须覆盖复制单 EXE 到空目录、无 Node PATH、内嵌自检、参数保真及图标字节一致。

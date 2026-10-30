@@ -463,7 +463,7 @@ WinForms 窗口在 `Shown` 时显式调用 `ShowWindow` 并请求前台显示：
 | 参数 | 默认/范围 | 行为 |
 | --- | --- | --- |
 | `--expected-browser <text>` | `Chrome/` | 校验 `/json/version` 的 Browser 字段；不匹配时中止，防止误连其它 Chromium。 |
-| `--inject-mode auto\|cdp-port\|cdp-pipe\|dll-proxy\|input` | `auto` | 选择注入方式。显式 `--inject-mode auto` 时若客户端目录存在我们安装的代理（`cxhook-proxy.marker`），自动改走 `dll-proxy`；不传 `--inject-mode` 等同于 `cdp-port`；`cdp-pipe` 已与端口通道对齐（bootstrap + bundle + 配置同步），`input` 未实现。 |
+| `--inject-mode auto\|cdp-port\|cdp-pipe\|dll-proxy\|input` | `auto` | 选择注入方式。显式 `--inject-mode auto` 时若客户端目录存在我们安装的代理（`cxhook-proxy.marker`），自动改走 `dll-proxy`；不传 `--inject-mode` 等同于 `cdp-port`；`cdp-pipe` 已与端口通道对齐（bootstrap + bundle + 配置同步），`input` 已于 2026-10-30 按用户决定放弃开发，仅保留拒绝行为，不再规划实现。 |
 | `--inject-proxy-dir <dir>` | 客户端目录 | `dll-proxy` 模式检查 `winmm.dll` 的目录；缺失时提示放置路径，已就位时说明进程内 hook 尚未驱动。 |
 | `--show-inject-reasons` | 关闭 | 选择窗口在注入方式被灰化时显示具体原因（加壳 / 非 x86 / 目录不可写 / 无载体 / 缺代理 DLL）。默认不显示，避免正常启动时被提示行干扰；调试入口 `start-windows-debug.cmd` 已带上这个参数。 |
 | `--panel-all-pages` | 关闭 | 非考试页也挂载悬浮面板，用于确认注入是否生效；默认仍只在考试路径显示。 |
@@ -570,7 +570,7 @@ CDP 断开时关闭旧页面会话；target 仍存在则在下一轮枚举重新
 
 `windows/share-file/parameter-generator.html` 是离线单文件参数生成器，可在浏览器中打开，生成 PowerShell、cmd、JSON 配置和参数摘要。默认选择原生单文件 EXE，并在仓库布局下自动定位 `windows/native-build/release/chaoxing_plus.exe`；发布文件复制到其他位置后请填写实际绝对路径，单独复制 HTML 时不会猜测 EXE 路径。套用预设和重置保留已选原生入口。原生默认诊断目录为 `<data-dir>/chaoxing/diagnostics`，随数据目录调整，手动指定诊断目录后保留输入。页面不联网、不执行命令、不保存输入；Node 兼容入口已冻结，仅供历史兼容和排障。切回原生时会清除并隐藏 Node 专属 `--hide-console` 开关。
 
-原生宿主能力应按实际实现区分：普通启动、宿主零写盘、扫描与选择、共享配置、面板、答题设置和诊断均已接入；诊断包含页面布局、页面 PNG、窗口 DPI、BMP/PNG 和宿主摘要。`input` 注入尚未实现；`cdp-pipe` 目前只做首次引导注入，未完成常驻会话、导航后的重注入与重连，生成器将两项显示为禁用且阻止导出命令和 JSON。注入方式“沿用宿主默认”不传 `--inject-mode`，由宿主与选择窗口决定方式，不保证采用端口方式，也不等同于显式 `--inject-mode auto`。
+原生宿主能力应按实际实现区分：普通启动、宿主零写盘、扫描与选择、共享配置、面板、答题设置和诊断均已接入；诊断包含页面布局、页面 PNG、窗口 DPI、BMP/PNG 和宿主摘要。`input` 注入已于 2026-10-30 按用户决定放弃开发，不再列为待实现功能；`cdp-pipe` 目前只做首次引导注入，未完成常驻会话、导航后的重注入与重连，生成器将两项显示为禁用且阻止导出命令和 JSON。注入方式“沿用宿主默认”不传 `--inject-mode`，由宿主与选择窗口决定方式，不保证采用端口方式，也不等同于显式 `--inject-mode auto`。
 
 通用 `delete-suspend`、`wipe-*`、`self-destruct-*` 参数仍会被宿主拒绝；已有原生固定 `--silent-scenario` 不等于实现了这些通用参数，本页不导出该固定场景。真实 CEF75 登录后页面与旧 Windows 兼容性仍需分别验收，不能用自动化模拟结果替代。
 
