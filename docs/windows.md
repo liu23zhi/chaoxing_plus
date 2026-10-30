@@ -1169,5 +1169,16 @@ winmm → version → uxtheme → msimg32 → sensapi → oledlg → wtsapi32
 ```
 
 目标位置已有第三方同名 DLL 时自动换下一个；`imm32` 等 KnownDLLs 名字会被拒绝（系统强制从 System32 加载）。
+### 选择窗口的能力感知（2026-10-30）
 
+选择窗口在**切换客户端行**时会对该 EXE 做静态探测（PE 节表 + 导入表），据此灰化不可用的选项：
 
+| 探测结果 | 界面表现 |
+| --- | --- |
+| 含 `.themida` 节（加壳） | 「端口命令行（cdp-port）」显示为灰色并追加「（不可用）」；点选会被拒绝并回弹 |
+| 不导入某个载体 DLL | 「代理载体」里对应项灰化并标注「（不可用）」 |
+| 无任何可用载体 | 「DLL 代理（dll-proxy）」灰化 |
+
+默认仍是「自动（推荐）」——运行时按最优顺序选择：加壳 → `dll-proxy`（自动装代理），否则 `cdp-port`。即"用最合适的注入方式"由 auto 承担，用户只在需要时覆盖。
+
+实现要点：`selection_client_caps()` 读取 PE 节表（判加壳）与导入表（判载体）；两个下拉框使用 `CBS_OWNERDRAWFIXED`，禁用项以 `COLOR_GRAYTEXT` 绘制并在 `CBN_SELCHANGE` 中拒绝选中。
