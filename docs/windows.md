@@ -2,7 +2,7 @@
 
 源码按 `windows/node-source/`、`windows/native-source/` 与 `windows/share-file/` 分组，插件共用的源码与插件构建目录保留原位。仓库内原生入口为 `windows/native-scripts/start-windows*.cmd`，Node 备用入口为 `windows/node-scripts/start-windows-node*.cmd`；原生包启动器位于 `multi-file/`，Node 兼容包启动器仍在包根。文末历史验证记录中的旧入口名只代表当时的布局，当前可执行命令以本文目录与快速开始部分为准。
 
-Windows 6.2.0 第一阶段提供 **普通可审计 Windows 宿主**：它用官方 CEF 远程调试参数启动超星考试客户端，并通过 CDP（Chrome DevTools Protocol）把扩展的业务 bundle 注入到客户端网页主世界。扫描、配置和离线参数生成器属于本阶段；内存执行（`--execution-mode memory` / `--memory-exec`：宿主侧零落盘、客户端仍正常可见启动）已支持；**状态（2026-10-29）**：**Node 宿主已弃用**——`windows/node-source/*` 只保留文件作兼容/对照与排障，不再开发新能力。单文件原生宿主保留既有静默场景实现；本轮多文件原生宿主不支持删除挂起、自删、自毁或 `--stage-boot` 暂存启动，并明确拒绝相关请求，不能将单文件能力视为已适配多文件发布包。发布构建主入口是 `windows/native-source/build-windows.sh`；`windows/node-source/build-windows-node.sh` 只构建备用 Node 包（`--skip-native`），不再演进。
+扩展版本 `6.3.0`、原生 EXE 版本 `0.1.0` 的第一阶段提供 **普通可审计 Windows 宿主**：它用官方 CEF 远程调试参数启动超星考试客户端，并通过 CDP（Chrome DevTools Protocol）把扩展的业务 bundle 注入到客户端网页主世界。扫描、配置和离线参数生成器属于本阶段；内存执行（`--execution-mode memory` / `--memory-exec`：宿主侧零落盘、客户端仍正常可见启动）已支持；**状态（2026-10-29）**：**Node 宿主已弃用**——`windows/node-source/*` 只保留文件作兼容/对照与排障，不再开发新能力。单文件原生宿主保留既有静默场景实现；本轮多文件原生宿主不支持删除挂起、自删、自毁或 `--stage-boot` 暂存启动，并明确拒绝相关请求，不能将单文件能力视为已适配多文件发布包。发布构建主入口是 `windows/native-source/build-windows.sh`；`windows/node-source/build-windows-node.sh` 只构建备用 Node 包（`--skip-native`），不再演进。
 
 **2026-10-30 发布目录与冻结规则**：原生三个构建入口默认生成嵌入资源的 `single-file/chaoxing_plus.exe`（GUI），以及外置资源的 `multi-file/chaoxing_plus.exe`（GUI）和 `multi-file/chaoxing_plus.com`（Console helper）。`BuildConsole` 保留默认 `true`，包含新多文件变体的编译；显式 `-BuildConsole:$false` 仅生成单文件 GUI。PowerShell `build-windows.ps1` 只编译，CMD/SH 继续完成完整打包与校验。最终目录直接为 `windows/native-build/release/`，不追加版本目录，不在仓库根 `release/` 另建原生包，不生成 ZIP，也不复制 README 或 docs；`single-file/` 只含 GUI EXE，`multi-file/` 带外置资源、helper、普通临时释放包、普通与调试两个启动器、配置及独立清单/校验器。原生发布根另有清单与校验器，不放兼容 EXE 或启动器；`windows/native-build/bin/` 保留宿主与调试/测试 EXE。Node 单 EXE 为 `windows/node-build/release/chaoxing_plus_node.exe`，使用 Node SEA 内嵌运行时、宿主模块、页面资源、配置模板与 PowerShell 脚本，目标机器无需安装 Node；`npm run build:node:exe` 使用已有 release 资源生成它，Node CMD/SH 构建同时生成单 EXE 和备用目录包，历史 ZIP/文档行为保持不变。模块与注入资源从内存加载，原有 GUI 全盘扫描仍使用系统临时状态文件。原生主程序、helper、临时释放包启动器与 Node EXE 使用 `windows/share-file/assets/app-icon.ico`，PNG 源图在同目录。Node 宿主及其构建/启动器保持冻结，只保留历史兼容、对照和排障；后续演进仅做原生。
 
@@ -70,7 +70,7 @@ Node 备用源码入口 `windows/node-scripts/start-windows-node.cmd`（隐藏�
 
 “单文件”和“旧系统兼容”需要分别验收：[Node 24 官方平台要求](https://github.com/nodejs/node/blob/v24.12.0/BUILDING.md)为 Windows 10 / Server 2016 起，Windows 发布架构为 x64/arm64；[SEA 打包](https://nodejs.org/download/release/v24.12.0/docs/api/single-executable-applications.html)不能降低这一系统要求。[Go 1.21 起](https://go.dev/doc/go1.21#windows)也以 Windows 10 / Server 2016 为最低要求，原设计的 Go 1.22+ 静态构建不能据此宣称覆盖 Windows 7。Chromium 75 [官方构建说明](https://github.com/chromium/chromium/blob/75.0.3770.100/build/config/win/BUILD.gn)仍以 Windows 7 为受支持系统；样本 PE 头的 `5.1` 声明不能证明客户端支持 Windows XP。
 
-后续普通单文件宿主仍须补齐与 Node 的参数行为差异，并在明确的 x86/x64、旧版和现代 Windows 干净环境中验证。当前 CDP 使用 TCP/WebSocket 通信，宿主与客户端无需相同位数；没有必要仅为页面注入拆分两套业务资源。现代 Chromium 自动化已覆盖原生实际 WebSocket 注入、导航、iframe、新 target、CSP 回退和限时关闭；历史探针和样式诊断只证明当时记录的局部行为，**本次 Windows 6.2.0 第一阶段尚未完成真实 CEF75 客户端端到端验收**。
+后续普通单文件宿主仍须补齐与 Node 的参数行为差异，并在明确的 x86/x64、旧版和现代 Windows 干净环境中验证。当前 CDP 使用 TCP/WebSocket 通信，宿主与客户端无需相同位数；没有必要仅为页面注入拆分两套业务资源。现代 Chromium 自动化已覆盖原生实际 WebSocket 注入、导航、iframe、新 target、CSP 回退和限时关闭；历史探针和样式诊断只证明当时记录的局部行为，**本次原生 EXE 0.1.0 第一阶段尚未完成真实 CEF75 客户端端到端验收**。
 
 ### 原生环境自检
 
@@ -172,7 +172,7 @@ Node 开发宿主的 UAC 重启先对每一项参数执行 Win32 引用，再将
 
 日志为无 BOM 的 UTF-8 单行文本，包含 UTC 时间、级别和事件种类。宿主只传入预先脱敏的固定事件，例如启动、连接、导航、bootstrap/bundle 执行确认及停止；不记录原始配置 JSON、Token、题目、答案、URL 查询参数或片段。`--capture-console` 只把页面异常和 console error 转为省略原文的固定事件；关闭后仍保留注入就绪与 bootstrap 控制错误的处理。
 
-报告记录 `version: "6.2.0"`、`host: "native"`、UTC `startedAt`/`finishedAt`、`mode: "launch" | "attach"`、运行时长、客户端 PID、端口、归属校验结果、成功状态、注入策略与停止原因。`ownershipVerified` 表示本轮曾实际成功校验监听归属，不是结束时的快照；调试 `--attach` 始终为 false。`totals.contexts` 是停止时仍存活的默认上下文数量；`totals.bootstraps`、`totals.bundles` 按完成 ACK 历史累计，导航、页面关闭和重连不会清零。`totals.pageSessions` 累计成功连接次数，`totals.reconnects` 记录同 target 的成功重连次数。`totals.errors` 累计页面异常、bootstrap 控制错误、注入/连接错误及最终执行失败；`console.error` 只生成告警事件，不增加该计数，正常停止取消在途任务也不计为执行错误。`success` 表示宿主流程执行结果，成功运行仍可能伴随页面告警或非零错误计数。
+报告记录 `version: "0.1.0"`、`host: "native"`、UTC `startedAt`/`finishedAt`、`mode: "launch" | "attach"`、运行时长、客户端 PID、端口、归属校验结果、成功状态、注入策略与停止原因。`ownershipVerified` 表示本轮曾实际成功校验监听归属，不是结束时的快照；调试 `--attach` 始终为 false。`totals.contexts` 是停止时仍存活的默认上下文数量；`totals.bootstraps`、`totals.bundles` 按完成 ACK 历史累计，导航、页面关闭和重连不会清零。`totals.pageSessions` 累计成功连接次数，`totals.reconnects` 记录同 target 的成功重连次数。`totals.errors` 累计页面异常、bootstrap 控制错误、注入/连接错误及最终执行失败；`console.error` 只生成告警事件，不增加该计数，正常停止取消在途任务也不计为执行错误。`success` 表示宿主流程执行结果，成功运行仍可能伴随页面告警或非零错误计数。
 
 日志创建或写入失败不终止注入流程；写入失败后关闭该日志句柄，后续事件继续按控制台设置输出，不反复重试文件。报告会先在内存中完整生成并校验 UTF-8，再打开目标文件，因此生成失败保留已有报告；实际写入失败只报告错误，不改变宿主执行结果，也不保证原子替换。
 
@@ -412,7 +412,7 @@ chaoxing_plus.exe --install-proxy --client "<CXExam.exe>"
 
 命令行参数优先级高于 JSON 配置。重复的标量开关以命令行中最后一次设置为准；`--self-check`、`--help`、`--list-clients` 等动作型开关按各自语义执行。
 
-帮助与版本开关**不区分大小写**并兼容常见写法（原生宿主）：`--help`、`-h`、`-H`、`--h`、`--H`、`-help`、`--Help`、`--HELP`、`-?`、`/?`、`?` 输出同一份帮助；`--version`、`-v`、`-V`、`--v`、`--Version` 只输出 `6.2.0` 后退出。未知参数以退出码 `2` 报 `unknown command line option (try --help)`。
+帮助与版本开关**不区分大小写**并兼容常见写法（原生宿主）：`--help`、`-h`、`-H`、`--h`、`--H`、`-help`、`--Help`、`--HELP`、`-?`、`/?`、`?` 输出同一份帮助；`--version`、`-v`、`-V`、`--v`、`--Version` 只输出 `0.1.0` 后退出。未知参数以退出码 `2` 报 `unknown command line option (try --help)`。
 
 单文件和多文件的原生主程序都是 **GUI 子系统**程序（`/SUBSYSTEM:WINDOWS`），直接双击不会分配控制台窗口。帮助/版本/能力查询沿用调用方控制台或重定向句柄，长输出先在内存拼完整再单次写出。显式执行 `.\chaoxing_plus.exe` 时，PowerShell 不能保证等待 GUI，提示符和 `$LASTEXITCODE` 不能证明 GUI 已退出；需要顺序输出时，在多文件目录使用扩展省略的 `.\chaoxing_plus`（默认解析 `.com`）或显式 `.\chaoxing_plus.com`，helper 会等待同目录 GUI 并传回退出码。必须执行 `.exe` 时使用 `Start-Process -Wait -PassThru` 并检查返回进程的 `ExitCode`。单个 PE 只能有一个 Subsystem 字段，GUI（2）与 `.com` Console helper（3）分别链接，不能仅通过改名替代。多文件普通 `start-windows.cmd` 使用 GUI `.exe`；只有调试 `start-windows-debug.cmd` 使用 `.com` helper。
 
@@ -440,7 +440,7 @@ chaoxing_plus.exe --install-proxy --client "<CXExam.exe>"
 | `--client <path>` | 未指定 | 直接启动指定的 `CXExam.exe`，跳过扫描；仍会检查 PE 架构。 |
 | `--client-index <n>` | 未指定，`n >= 1` | 启动扫描结果第 n 个；常规候选按完整路径排序，全盘候选按遍历顺序。为确保序号可用，全盘扫描会完整枚举候选，不在首个 x86 提前停止。 |
 | `--client-first` | 关闭 | 选择推荐候选；常规扫描结果中 x86 优先，同架构按路径排序。 |
-| `--list-clients` | 关闭 | 列出候选和架构后退出，不启动客户端。Node 宿主显式 `--report <path>` 时额外写入 `mode: "list-clients"` 报告（含 `version:"6.2.0"`、`host:"node"`、`stopReason:"list-clients"`、`scanMode`、`startedAt/finishedAt`、`durationMs`、`success`、`total` 及候选 `path/name/machine`，字段与原生列表报告对齐），`--no-disk-write` 抑制报告写入；原生宿主遵循同样的“仅显式报告才写入”规则。 |
+| `--list-clients` | 关闭 | 列出候选和架构后退出，不启动客户端。Node 宿主显式 `--report <path>` 时额外写入 `mode: "list-clients"` 报告（含 `version:"6.3.0"`、`host:"node"`、`stopReason:"list-clients"`、`scanMode`、`startedAt/finishedAt`、`durationMs`、`success`、`total` 及候选 `path/name/machine`，字段与原生列表报告对齐），`--no-disk-write` 抑制报告写入；原生宿主遵循同样的“仅显式报告才写入”规则。 |
 | `--select-client` | 关闭 | 扫描后显示 **Windows 原生选择窗口**，可选择候选、手动浏览或点击“全盘扫描”刷新列表；全盘扫描后仍须确认选择，不自动启动。窗口不可用时回退终端逐项选择，非交互终端回退推荐候选；用户取消时以退出码 3 结束，不启动客户端。 |
 | `--scan-mode common\|fallback-all\|all` | `fallback-all` | `common` 只扫常规根目录及一级直接子目录；`fallback-all` 仅在常规扫描为零结果时递归固定磁盘；`all` 直接递归固定磁盘。 |
 | `--scan-all` / `--no-scan-all` | 默认 fallback-all | `--scan-all` 启用常规无结果后的递归回退；`--no-scan-all` 将扫描限制为常规路径。 |
@@ -448,7 +448,7 @@ chaoxing_plus.exe --install-proxy --client "<CXExam.exe>"
 | `--no-scan-cache` | 关闭 | 不读取或写入扫描缓存；实时扫描仍照常执行。 |
 | `--ui auto\|gui\|cli` | `auto`；Windows 真正无参数入口使用 `gui` | `gui` 使用 Windows 原生选择窗口；`cli` 使用终端交互；显式 `auto` 优先使用已配置客户端路径，否则交互终端提示选择，Windows 非交互环境默认显示原生选择窗口，其他非交互环境使用推荐候选。显式 `--client` 在三种界面模式下均跳过扫描和选择窗口。Windows `auto` 窗口不可用时回退推荐候选；需要窗口时，`gui` 在非 Windows 平台或窗口不可用时直接报错。`--quiet` 或 `--client-first` 会关闭 `auto` 原生选择窗口并使用推荐候选。 |
 
-此处参数表描述 Node 宿主。它的宿主支持 `--version`（输出 `6.2.0` 后以 0 退出，只读无副作用）与 `--print-effective-config` 等只读诊断入口。选择窗口使用 Windows 自带的 PowerShell（5.1+）与 WinForms，不新增 npm 依赖：窗口列出扫描到的 `CXExam.exe`（架构、完整路径），支持双击/按钮确认与“手动浏览”选择任意 `CXExam.exe`，取消返回 `cancelled`。`windows/node-scripts/selection-window.ps1` **必须保持纯 ASCII**（Windows PowerShell 5.1 对无 BOM 的 `.ps1` 按 ANSI/OEM 解析，中文文案会破坏语法），所有界面文案经 UTF-8 JSON 传入；`--self-check` 会构建一次窗口控件做冒烟（不显示窗口），`--capabilities` 的 `supported.nativeClientSelection` 在 Windows 上为 true。自动化验证可用环境变量 `CXPLUS_SELECTION_AUTO_CLOSE_MS=<ms>` 让窗口自动关闭（仅测试/调试，避免无人值守阻塞）。
+此处参数表描述 Node 宿主。它的宿主支持 `--version`（输出 `6.3.0` 后以 0 退出，只读无副作用）与 `--print-effective-config` 等只读诊断入口。选择窗口使用 Windows 自带的 PowerShell（5.1+）与 WinForms，不新增 npm 依赖：窗口列出扫描到的 `CXExam.exe`（架构、完整路径），支持双击/按钮确认与“手动浏览”选择任意 `CXExam.exe`，取消返回 `cancelled`。`windows/node-scripts/selection-window.ps1` **必须保持纯 ASCII**（Windows PowerShell 5.1 对无 BOM 的 `.ps1` 按 ANSI/OEM 解析，中文文案会破坏语法），所有界面文案经 UTF-8 JSON 传入；`--self-check` 会构建一次窗口控件做冒烟（不显示窗口），`--capabilities` 的 `supported.nativeClientSelection` 在 Windows 上为 true。自动化验证可用环境变量 `CXPLUS_SELECTION_AUTO_CLOSE_MS=<ms>` 让窗口自动关闭（仅测试/调试，避免无人值守阻塞）。
 
 Windows 上直接双击 `start-windows.cmd`、无参数运行 Node 宿主或直接双击原生 EXE，都会只做常规扫描（根目录及一级直接子目录），然后显示客户端选择 GUI，即使配置已保存客户端路径或全盘扫描模式。常规无结果也不自动递归全盘，仍显示窗口供手动浏览或点击“全盘扫描”；Node 全盘扫描失败时保留现有候选，原生宿主失败时明确退出。取消选择不启动客户端；默认到启动客户端时才按需请求 UAC，提权后继续使用本次选择，不再弹出选择窗口。仅传 `--elevate-on-start` 时保留此常规扫描和 GUI 行为，但先申请管理员权限。带有 `--config`、`--options-json` 等其他参数时，仍按参数和配置优先级运行；需要沿用已保存路径时可显式传 `--ui auto`。这里的 GUI 是客户端选择窗口，完整参数表单仍使用离线 `windows/share-file/parameter-generator.html`。
 
@@ -520,7 +520,7 @@ Node 宿主在每轮 target 刷新和 WebSocket 建连前仍实时查询监听�
 
 CDP 断开时关闭旧页面会话；target 仍存在则在下一轮枚举重新连接。初次连接、重连和顶层导航后都会延迟检查 bootstrap/bundle，避免已有 bootstrap 不再发送 `ready` 时漏注入。同一执行上下文的并发 `ready` 合并为一次业务注入；上下文销毁或会话关闭后，迟到结果作废，停止后续策略切换及重试。DOM script 注入使用执行完成标记识别 CSP 阻止或脚本异常，失败后按所选策略回退，不把无异常的 CDP 响应当作脚本已成功执行。配置广播使用 `{kind:"config", values:...}` 包装；原生宿主的完整快照另带 `replace:true` 以删除已移除的旧共享键，不带该标记时保留增量合并语义。同实例重连复用已有配置桥水合最新完整快照，不重复安装监听或面板。
 
-运行报告累计保留历次 target 会话的统计；断线重连或页面关闭不会抹去此前成功注入的计数，也不会因此误报“没有完成任何业务注入”。Node 普通运行/attach 报告与列表报告同样包含 `version:"6.2.0"` 与 `host:"node"`，与原生报告的 `version`/`host:"native"` 对应，便于工具按统一字段区分宿主类型与版本。
+运行报告累计保留历次 target 会话的统计；断线重连或页面关闭不会抹去此前成功注入的计数，也不会因此误报“没有完成任何业务注入”。Node 冻结兼容宿主的普通运行/attach 报告与列表报告包含 `version:"6.3.0"` 与 `host:"node"`；原生 EXE 报告包含 `version:"0.1.0"` 与 `host:"native"`，便于工具按宿主类型区分版本。
 
 #### 面板和答题
 
@@ -557,9 +557,9 @@ CDP 断开时关闭旧页面会话；target 仍存在则在下一轮枚举重新
 | `--assets <dir>` | `dist-windows` | 指定注入资源目录。 |
 | `--duration <ms>` | `0`，不限时 | 测试模式运行指定时长后退出；仅接受 `0-2147483647` 整数毫秒，两条宿主一致。 |
 | `--attach <port>` | 不启用 | 仅测试/调试连接已存在端点；不会启动客户端或校验进程归属。 |
-| `--self-check` / `--help` | 关闭 | 只做环境检查或输出参数帮助。Node 自检默认保持只读：不创建数据目录、日志、诊断或配置（与原生自检对齐）；显式 `--report` 仍写运行报告（自检报告含 `version:"6.2.0"`/`host:"node"`），显式 `--log` 才写文件日志，`--no-disk-write` 继续禁止所有落盘。原生宿主的 `--help` 另接受 `-h`/`-H`/`--h`/`--H`/`-help`/`--Help`/`--HELP`/`-?`/`/?`/`?`（大小写不敏感）。 |
+| `--self-check` / `--help` | 关闭 | 只做环境检查或输出参数帮助。Node 自检默认保持只读：不创建数据目录、日志、诊断或配置（与原生自检对齐）；显式 `--report` 仍写运行报告（自检报告含 `version:"6.3.0"`/`host:"node"`），显式 `--log` 才写文件日志，`--no-disk-write` 继续禁止所有落盘。原生宿主的 `--help` 另接受 `-h`/`-H`/`--h`/`--H`/`-help`/`--Help`/`--HELP`/`-?`/`/?`/`?`（大小写不敏感）。 |
 | `--print-effective-config` | 关闭 | 只输出合并后的共享设置 JSON（单行）后以 0 退出；不扫描、不启动客户端、不申请 UAC、不写日志/配置/报告，`--quiet` 不抑制该输出。两种宿主语义一致。原生宿主把页面共享设置中由类型化字段托管的键（extension-enabled、windows-panel-*、windows-answer-* 等）从原始快照中过滤后再统一输出，避免同一 JSON 出现重复键；未托管键（如题库服务地址/密钥、未知共享键）原样保留。输出可能包含敏感共享设置，请勿外发。 |
-| `--version` / `-v` | 关闭 | 只输出版本号 `6.2.0`（单行）后退出，不扫描、不启动客户端、不写日志/配置/诊断；原生宿主同样支持，并额外接受 `-V`/`--v`/`--Version`（大小写不敏感）。 |
+| `--version` / `-v` | 关闭 | 原生宿主只输出版本号 `0.1.0`（单行），Node 冻结兼容宿主输出 `6.3.0`；随后退出，不扫描、不启动客户端、不写日志/配置/诊断。原生宿主额外接受 `-V`/`--v`/`--Version`（大小写不敏感）。 |
 | `--capabilities` | 关闭 | 输出机器可读的能力标记。Node 宿主列出 `executionModes:["normal","memory"]`、扫描、参数生成器、原生选择窗口，以及 `configReload`/`configPersistence`/`fileLogging`/`runReport`/`pageRenderDiagnostics`/`pageScreenshots`/`windowDiagnostics`/`renderDiagnostics`/`retainData`/`deleteConfig` 等已支持能力；删除挂起、启动清理和自毁均标记为不支持，并保留设计 schema。原生 capabilities 同样输出 `executionModes`、`memory` 与 `deleteSuspend:false`。原生宿主单独输出自身能力，不得把两者的已支持项合并推断。新增/移除能力时必须同步该输出与 `windows-host.test.mjs` 的内容断言。 |
 | `--elevate-on-start` | 关闭 | 两种宿主均在扫描和 GUI 前请求管理员权限；JSON 字段为 `elevateOnStart`。已提升时不重复请求，只读模式不请求；与 `--no-elevate` 冲突。 |
 | `--no-elevate` | 关闭 | 禁止自动申请 UAC；普通权限可启动的客户端照常运行，实际启动返回 Win32 `740` 时失败。 |
