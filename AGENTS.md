@@ -47,10 +47,12 @@
 ## 章节测验截止与延期
 
 - 静态截止只在实际题目文档的章节状态块识别：`.CeYan .ceyan_name` 内同一段落的截止时间和精确状态文案；旧模板仅认可测验容器内专用 `.testTit_status` 的精确状态。不得扫描题干、选项、脚本或兄弟 iframe 的文本判断当前任务过期。
-- 静态命中先延期，正常子任务全部检查后才回访；记录按课程、班级、章节、子任务和任务 ID 隔离，不能以题目 qid 或可能复用的 mid 代替任务 ID。初次静态跳过不消耗答题次数，回访采用正常重试设置。
+- 静态命中先延期，课程内其它正常章节及各子任务全部检查后才回访，不能仅在当前章节结束时立即回访；记录按课程、班级、章节、子任务和任务 ID 隔离，不能以题目 qid 或可能复用的 mid 代替任务 ID。初次静态跳过不消耗答题次数，回访采用正常重试设置。目录仍显示未完成不能重新激活已放弃的任务。
+- 普通任务仍有未处理附件或可见内容未映射时，不得记录为已检查或开始延期回访；须暂停并保留任务。手动跳转模式下，延期扫描和回访均不得自动跨章节或切换同章子任务页。
 - 回访须执行实际提交并等待 `addStudentWorkNewWeb` 的 XHR/fetch 响应。普通失败正常重试，明确的作业过期响应或原生过期弹窗立即放弃该任务并处理弹窗；对象、JSON 字符串和包装响应应统一识别，显式成功状态不得因消息含过期文案误判。
+- 过期终止路径须在实际 ownerDocument 关闭 `#workpop` 的“确认提交”弹层并清理残留遮罩，优先走取消/关闭回调；禁止点击提交、隐藏其它提示或破坏后续弹窗复用。
 - 跨 iframe 的手动选择须共享 pending/declined 状态；取消后停止扫描和回访，不再重复询问。异步结果写回前重读最新延期记录，禁止倒退重试次数或恢复已放弃任务。
-- 修改此流程须运行 `cx-chapter-expiry`、`cx-deferred-chapters`、`cx-deferred-study`、`cx-chapter-submission`、`cx-expiry-browser` 测试，以及全量测试、类型检查和构建；实际 Chromium 模拟页面与真实课程验收须分别汇报。
+- 修改此流程须运行 `cx-chapter-expiry`、`cx-deferred-chapters`、`cx-deferred-course`、`cx-deferred-study`、`cx-chapter-submission`、`cx-chapter-dialog`、`cx-expiry-browser` 测试，以及全量测试、类型检查和构建；实际 Chromium 模拟页面与真实课程验收须分别汇报。
 
 ## Product Branding
 
