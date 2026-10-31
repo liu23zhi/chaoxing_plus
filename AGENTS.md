@@ -44,6 +44,14 @@
 
 - 原生发布重建须允许终端将 `release/single-file/` 或 `release/multi-file/` 作为工作目录：保留变体目录本身，重建其中内容，避免 Windows 的目录占用导致 `EBUSY`。发布回归用持有该工作目录的子进程验证，不得结束用户进程来完成打包。
 
+## 章节测验截止与延期
+
+- 静态截止只在实际题目文档的章节状态块识别：`.CeYan .ceyan_name` 内同一段落的截止时间和精确状态文案；旧模板仅认可测验容器内专用 `.testTit_status` 的精确状态。不得扫描题干、选项、脚本或兄弟 iframe 的文本判断当前任务过期。
+- 静态命中先延期，正常子任务全部检查后才回访；记录按课程、班级、章节、子任务和任务 ID 隔离，不能以题目 qid 或可能复用的 mid 代替任务 ID。初次静态跳过不消耗答题次数，回访采用正常重试设置。
+- 回访须执行实际提交并等待 `addStudentWorkNewWeb` 的 XHR/fetch 响应。普通失败正常重试，明确的作业过期响应或原生过期弹窗立即放弃该任务并处理弹窗；对象、JSON 字符串和包装响应应统一识别，显式成功状态不得因消息含过期文案误判。
+- 跨 iframe 的手动选择须共享 pending/declined 状态；取消后停止扫描和回访，不再重复询问。异步结果写回前重读最新延期记录，禁止倒退重试次数或恢复已放弃任务。
+- 修改此流程须运行 `cx-chapter-expiry`、`cx-deferred-chapters`、`cx-deferred-study`、`cx-chapter-submission`、`cx-expiry-browser` 测试，以及全量测试、类型检查和构建；实际 Chromium 模拟页面与真实课程验收须分别汇报。
+
 ## Product Branding
 
 - The user-visible product name is `超星学习助手`.
