@@ -155,7 +155,9 @@ handler 返回 `boolean | undefined`：`true` 跳过、`false` 与 `undefined` �
   普通搜题与 AI 兜底的回归测试都应覆盖绝对跨来源地址。
 - 超时常量：搜索 240s、兜底请求 180s、普通搜题及兜底各自轮询最长 600s。
 - 错误码：`AI_UNAVAILABLE` / `NO_ANSWER` / `UPSTREAM_ERROR` / `INVALID_INPUT` /
-  `UNSAFE_TO_ANSWER` / `INSUFFICIENT_BALANCE`。**区分它们**，不要统一提示"失败"。
+  `UNSAFE_TO_ANSWER` / `INSUFFICIENT_BALANCE` / `ACCESS_TOKEN_QUOTA_EXCEEDED`。**区分它们**，不要统一提示"失败"。
+- `ACCESS_TOKEN_QUOTA_EXCEEDED` 是 Key 额度已耗尽或本次将超额，不等于钱包余额不足或登录失效；提示调整额度／更换 Key，不引导单纯充值，不转发到 AI 兜底或自动重建任务。
+- 已创建任务的状态查询与在途请求的同一幂等 Key／请求体传输重试只重投递原操作，不应被本地钱包暂停标记拦截；新执行与认证是否有效仍由服务端检查。
 - 服务端可能返回 `warnings`（例如"模型未配置价格"）：**只走管理员调试日志**，
   绝不进入面向用户的界面。
 
