@@ -217,7 +217,7 @@ exit 0
 
 其中整包用例加载实际 `dist/chaoxing-plus.js`、扩展入口、background 和 vendor，运行真实 CommonProject、worker 与 Swal；本地拦截页面及搜题请求。已验证按钮常驻可点击、同标签 URL 导航保留暂停、独立新标签不继承暂停、手动拒绝后显示继续、一次继续恢复实际搜题，以及 `window.open` 复制存储后新标签仍有独立人工决定。扩展目标还覆盖跨源 iframe、service worker 重启、快速切换、存储错误和消息校验；manifest 目标确认构建产物与权限范围。
 
-- 最终全量：显式展开 111 个 `scripts/*.test.mjs` 文件，以 `node --test --test-concurrency=4 @testFiles` 执行，退出码 0。原始摘要如下；完整输出保存在本机忽略文件 `.tmp-tests-final-complete.log`。140 项跳过主要是需要显式提供已编译原生测试 EXE 或窗口环境的既有条件用例，不能视为这些原生场景已验收。
+- 最终全量：显式展开 111 个 `scripts/*.test.mjs` 文件，以 `node --test --test-concurrency=4 @testFiles` 执行，退出码 0。原始摘要如下；当时的完整输出保存在本机忽略文件 `.tmp-tests-final-complete.log`，该临时日志现已清理。140 项跳过主要是需要显式提供已编译原生测试 EXE 或窗口环境的既有条件用例，不能视为这些原生场景已验收。
 
 ```text
 tests 1135

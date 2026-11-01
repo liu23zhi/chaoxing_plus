@@ -29,7 +29,7 @@
 - 项目类型检查使用 TypeScript 7；测试脚本若需 `transpileModule`，从 `@typescript/typescript6` 导入。测试中的单文件 CommonJS 编译统一经 `scripts/test-helpers/tsc-compat.mjs`，不得直接调用 TypeScript 7 CLI（它不提供旧 API，也不支持原有的 `moduleResolution=node` 参数）。
 - 汇报命令、退出码和原始结果摘要；明确区分自动化模拟页面验证与真实超星课程页面验证，未做真实课程验证时如实说明。
 - `dist/` 是构建产物且已被 `.gitignore` 忽略，**不要手工改 `dist/`**。
-- `.tmp-tests*` 目录由测试自行重建，已在 `.gitignore` 内。
+- 测试编译与临时截图目录统一通过 `scripts/test-helpers/temp-directory.mjs` 的 `createTestDirectory(label)` 创建：固定锚定仓库根，使用 `.tmp-tests-<label>-<随机后缀>` 独占目录，不得改回固定目录或依赖调用方工作目录。默认在测试结束时删除，并为顶层异常及显式进程退出提供同步兜底；强杀、系统崩溃或文件持续占用不保证清理。`CX_TEST_KEEP_TEMP=1` 仅显式保留此 helper 管理的目录，并输出实际路径；排障后须取消该变量。现有扩展浏览器夹具保留先关浏览器、再删独占目录的清理顺序。新增生命周期行为须运行 `node --test scripts/test-temp-directories.test.mjs`，全量测试后核对没有新增 `.tmp-tests-*` 目录或文件。命令输出日志应放系统临时目录，不要写仓库根的 `.tmp-tests-*.log`；helper 不接管 shell 重定向文件。`.gitignore` 只忽略产物，不负责删除，禁止通过前缀扫描自动删除其它进程或历史目录。
 
 ## Swal 弹窗与 iframe
 
@@ -194,8 +194,7 @@ handler 返回 `boolean | undefined`：`true` 跳过、`false` 与 `undefined` �
 
 - `data` 里的 handler 是**字符串**，用 `Function(handler)()` 求值后才得到函数。
   写断言时不要直接 `Function(src)`（会拿到未转义的 TS 源码文本）。
-- 编译产物在 `.tmp-tests-tiku-cjs/`；断言 handler 行为前确认它**不是陈旧产物**
-  （对比产物与 `src/` 的修改时间，或看 handler 里是否含最新逻辑）。
+- 编译产物由当前测试进程写入独占的 `.tmp-tests-tiku-cjs-<随机后缀>/`，默认在测试结束后删除；需要检查实际产物时显式设置 `CX_TEST_KEEP_TEMP=1` 并使用输出的本次目录，不得读取旧固定目录或其它进程的产物。
 - 新增过滤/映射规则时，至少覆盖：正常输入不误删、噪音被剔除、全噪音回退、空输入。
 
 ### 汇报口径
