@@ -121,7 +121,7 @@ Node 开发宿主的 UAC 重启先对每一项参数执行 Win32 引用，再将
 
 ### 原生临时 DPI 兼容层
 
-真实子进程回归使用 `dpi-process-tests.exe`（`CX_NATIVE_DPI_PROCESS_EXE`）调用 `proc_launch` 启动 `dpi-child.exe`（`CX_NATIVE_DPI_CHILD_EXE`）的测试自有副本。该无窗口、无文件输出、`asInvoker` 程序用退出码报告 `IsProcessDPIAware()` 状态：普通启动应为 unaware，临时覆盖并在进程创建后立即恢复时应为 aware，再次普通启动应回到 unaware；同时检查测试 EXE 路径的兼容层值已不存在。它只临时操作测试自有 EXE 的对应值，不启动考试客户端，不申请 UAC；测试副本及目录由 Node 清理。
+真实子进程回归使用 `dpi-process-tests.exe`（`CX_NATIVE_DPI_PROCESS_EXE`）调用 `proc_launch` 启动 `dpi-child.exe`（`CX_NATIVE_DPI_CHILD_EXE`）的测试自有副本。该无窗口、无文件输出、`asInvoker` 程序用退出码报告 `IsProcessDPIAware()` 状态：普通启动应为 unaware，临时覆盖并在进程创建后立即恢复时应为 aware，再次普通启动应回到 unaware；同时检查测试 EXE 路径的兼容层值已不存在。它只临时操作测试自有 EXE 的对应值，不启动考试客户端，不申请 UAC；测试副本及目录由 Node 清理。部分 Hosted Windows runner 不会让瞬时 `AppCompatFlags\Layers` 层在 `CreateProcessW` 返回后立即对新进程可见；若写入、启动、恢复和清理均成功但子进程仍全部为 unaware，夹具输出 `DPI_SHIM_UNOBSERVED` 并由 Node 测试显式跳过该平台能力项，不把普通的启动/恢复错误转成跳过。该跳过不替代真实 CEF75 客户端 DPI 验收。
 
 原生宿主支持 `--dpi-aware`，能力标记为 `temporaryDpiOverride:true`。它只为本次普通启动的客户端临时设置系统 DPI 兼容层；开启 `--diagnose` 时会采集页面截图（`pageScreenshots:true`），自有启动还会采集窗口 DPI/矩形与 best-effort BMP（`windowDiagnostics:true`），但 `--attach` 不采集窗口诊断，且仍不生成 Node 同构的完整渲染诊断（`renderDiagnostics:false` 边界保留）。
 
