@@ -25,10 +25,12 @@
 - `scripts/*.test.mjs` 通配必须确实展开；新增或删除测试后按实际文件列表核对，不要把数量写死在执行脚本中。只跑单个文件不能代表全量通过。
 - PowerShell 可显式展开后执行：`$testFiles = @(Get-ChildItem -LiteralPath scripts -Filter '*.test.mjs' -File | Sort-Object Name | Select-Object -ExpandProperty FullName); $testFiles.Count; node --test @testFiles`。
 - 测试数量对不上时，先确认通配展开、再确认是否漏跑——不要凭"看起来都过了"下结论。
+- CDP 重连历史统计回归须在宿主可观察的 bundle 完成信号后触发断连；发送 `Runtime.evaluate` 响应不等于宿主已更新计数。注入中断与注入完成后的断连分别验证，禁止用固定延时替代同步信号或削弱原有计数、重连及退出码断言。
 - 修改运行时代码或扩展入口后，还要运行 `npm run build`；浏览器弹窗、iframe 与层级问题必须做实际浏览器回归，不能只靠源码字符串断言。
 - 项目类型检查使用 TypeScript 7；测试脚本若需 `transpileModule`，从 `@typescript/typescript6` 导入。测试中的单文件 CommonJS 编译统一经 `scripts/test-helpers/tsc-compat.mjs`，不得直接调用 TypeScript 7 CLI（它不提供旧 API，也不支持原有的 `moduleResolution=node` 参数）。
 - 汇报命令、退出码和原始结果摘要；明确区分自动化模拟页面验证与真实超星课程页面验证，未做真实课程验证时如实说明。
 - 真实客户端自动化改动须运行 `windows-client-entry`、`windows-client-dialog`、`windows-client-input`、`windows-client-ime-readiness`、`windows-real-client-cleanup` 回归。全屏 `ExamCheckHintUI` 的扫描只限中央确认区域，不能扫描遮罩后的入口；先置前本次客户端窗口再取屏幕像素。输入法安装记录不能代替匹配 HKL 的非空 IMM 描述。现场上传须包含 `.txt`，保留 `input.txt` 与 SHA256 清单；无客户端日志及提前失败也必须继续完成清理，不得以诊断收尾异常覆盖原始失败。
+- 搜狗安装等待须每三秒探测实际 IMM，非空描述即继续，不要求安装器退出，也不得为结束等待而终止安装器。启动器退出 0 不能代替 IMM 就绪；超时仍运行时停止后续安装来源，避免并发重复安装。
 - `dist/` 是构建产物且已被 `.gitignore` 忽略，**不要手工改 `dist/`**。
 - 测试编译与临时截图目录统一通过 `scripts/test-helpers/temp-directory.mjs` 的 `createTestDirectory(label)` 创建：固定锚定仓库根，使用 `.tmp-tests-<label>-<随机后缀>` 独占目录，不得改回固定目录或依赖调用方工作目录。默认在测试结束时删除，并为顶层异常及显式进程退出提供同步兜底；强杀、系统崩溃或文件持续占用不保证清理。`CX_TEST_KEEP_TEMP=1` 仅显式保留此 helper 管理的目录，并输出实际路径；排障后须取消该变量。现有扩展浏览器夹具保留先关浏览器、再删独占目录的清理顺序。新增生命周期行为须运行 `node --test scripts/test-temp-directories.test.mjs`，全量测试后核对没有新增 `.tmp-tests-*` 目录或文件。命令输出日志应放系统临时目录，不要写仓库根的 `.tmp-tests-*.log`；helper 不接管 shell 重定向文件。`.gitignore` 只忽略产物，不负责删除，禁止通过前缀扫描自动删除其它进程或历史目录。
 
