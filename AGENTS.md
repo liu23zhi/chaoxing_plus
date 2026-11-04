@@ -93,6 +93,7 @@
 
 - **普通搜题保留 7 个兼容字段**：`qid` / `question` / `options` / `type` / `courseName` / `extra` / `skipCache`。
   开启深度思考时，异步和旧同步普通搜题均额外传 `deepThinking: true`；关闭时省略该字段。
+  可选 `questionEvidence` 保存有序 `stemImages` / `optionImages`，每项为 `url` / `alt` / `index`；章节与作业普通搜题、AI 兜底均透传，缺失时兼容旧请求。客户端缓存身份及同轮并发去重键必须包含该证据，不能合并相同文字但图片/alt 不同的题。
   `plat` **已彻底移除**（服务端把它删了：该字段所有调用方恒为 `-1`、没有区分度）。
   不要因为看到历史文档或旧日志里有 `plat: -1` 就加回去。
 - 鉴权用 `Authorization: Bearer <key>`（`createTikuAdapterAuthorizationHeader`），密钥不拼进 URL。
@@ -113,9 +114,10 @@
 | `multiple`                         | 1                |
 | `judgement`                        | 3                |
 | `completion` / `fill` / `line` | 2                |
-| 其它（含`reader`、`unknown`）    | **4**      |
+| 显式文本题型 `reader`              | 4                |
+| 未识别（含 `unknown` / 缺失）    | **-1**           |
 
-注意最后一行是**兜底**：识别不出的题型会落到 4（简答/阅读理解），不会被丢弃。
+未知题型保留 `-1`，不能伪装成 4（简答/阅读理解）；明确的 `reader` 等文本题型继续使用 4。题型优先读取平台字段，缺失时只接受保守结构证据，证据不足则保持未知。
 服务端按 `type` 决定答案判定方式，因此**类型传错会直接导致答案错乱**（例如把 `type=3` 当 `type=0`）。
 
 ### `skipCache` 语义
