@@ -96,9 +96,11 @@ hosted `windows-latest` 只有 en-US（`Language.Basic~~~zh-CN = NotPresent`）�
 - 手写 `E0xx` 布局后 `LoadKeyboardLayoutW` 返回 `1419 ERROR_HOTKEY_NOT_REGISTERED`；
 - 即使先用 `KLF_ACTIVATE` 载入 `00000804` 基础布局也无济于事（缺的是语言载荷，不是布局键）。
 
-这不是脚本缺陷。job 会先查 `Language.Basic~~~zh-CN`，不是 `Installed` 就打 warning 并跳过安装/复核
-（`CX_FAKE_IME_HOST=0`）；想真验证就把仓库变量 `FAKE_IME_RUNNER` 指向带 zh-CN 的 self-hosted runner，例如
-`["self-hosted","windows","zh-cn"]`。桌面准备遇到同一限制时记录 `stand-in-host-unavailable`。
+这不是脚本缺陷。job 会先用 `Add-WindowsCapability -Online -Name Language.Basic~~~zh-CN~0.0.1.0` **尝试安装**
+语言载荷（后台作业、300 秒上限，超时只告警），装不上再查 `Language.Basic~~~zh-CN`：不是 `Installed` 就打
+warning 并跳过安装/复核（`CX_FAKE_IME_HOST=0`）；想真验证就把仓库变量 `FAKE_IME_RUNNER` 指向带 zh-CN 的
+self-hosted runner，例如 `["self-hosted","windows","zh-cn"]`。桌面准备遇到同一限制时记录
+`stand-in-host-unavailable`。
 
 本机只读验证过：
 
