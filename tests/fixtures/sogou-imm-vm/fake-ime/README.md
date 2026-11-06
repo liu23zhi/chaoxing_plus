@@ -22,6 +22,11 @@
 本目录提供的就是这个最小模块 `cxime.ime`（16 个 IME32 导出，全部惰性实现，
 不合成任何文字），外加注册/验证/卸载脚本。
 
+模块必须带 VERSIONINFO 资源（`cxime.rc`，由 `build-cxime.ps1` 编译进 DLL）：缺版本资源时
+`LoadKeyboardLayoutW` 返回 `1813 ERROR_RESOURCE_TYPE_NOT_FOUND` —— 注册表看着完全正常，
+布局却加载不进会话。KLID 也不再写死：默认按系统默认输入语言取末四位（`E0F0` + 语言），
+zh-CN 机器得到 `E0F00804`，纯英文 runner 得到 `E0F00409`，这样同一套脚本在两种镜像上都能就绪。
+
 ## 文件
 
 | 文件 | 说明 |
@@ -52,12 +57,12 @@ pwsh -File .\Install-FakeInputMethod.ps1 -Uninstall
 
 安装做的事：
 
-1. 备份到 `%TEMP%\cx-fake-ime-e0f00804.json`；
+1. 备份到 `%TEMP%\cx-fake-ime-<klid>.json`；
 2. 复制 `cxime32.dll` → `%WINDIR%\SysWOW64\cxime.ime`，`cxime64.dll` → `%WINDIR%\System32\cxime.ime`；
-3. 写 `HKLM\SYSTEM\CurrentControlSet\Control\Keyboard Layouts\E0F00804`：
+3. 写 `HKLM\SYSTEM\CurrentControlSet\Control\Keyboard Layouts\E0F0<语言>`：
    `Layout File=kbdus.dll`、`Layout Text=<DisplayName>`、`IME file=cxime.ime`；
 4. 在 `HKCU\Keyboard Layout\Preload` 追加一项（下次登录仍然在）；
-5. `LoadKeyboardLayoutW("E0F00804", 0)`，把布局加载进当前会话（其它进程立刻可见）；
+5. `LoadKeyboardLayoutW(KLID, 0)`（失败再试 `KLF_SUBSTITUTE_OK`），把布局加载进当前会话；
 6. 默认把该布局设为默认输入语言（`-NoDefault` 可跳过）；
 7. 用 `GetKeyboardLayoutList` + `ImmGetDescriptionW` 复核，输出 `RESULT=IME_READY`。
 
@@ -65,7 +70,7 @@ pwsh -File .\Install-FakeInputMethod.ps1 -Uninstall
 
 | 参数 | 作用 |
 | --- | --- |
-| `-Klid` | 布局 KLID，必须 `E0xxxxxx`，末四位是语言（默认 `E0F00804`） |
+| `-Klid` | 布局 KLID，必须 `E0xxxxxx`；默认空 = 按系统默认输入语言推导（`E0F0` + 末四位，zh-CN 得 `E0F00804`，纯英文 runner 得 `E0F00409`） |
 | `-DisplayName` | `Layout Text`，就是客户端读到的描述（默认 `ExamInput`） |
 | `-ImeFile` | IME 模块名或已有模块（如 `SogouPY.ime`），默认 `cxime.ime` |
 | `-Verify` | 只读探测，退出码 0=就绪，1=未就绪 |
@@ -100,4 +105,4 @@ CI（`.github/workflows/ci.yml` 的 `windows-fake-ime` job）在管理员 `windo
 
 `-Uninstall` 会删除注册表项、Preload 项和 `SysWOW64\cxime.ime` / `System32\cxime.ime`。
 默认输入语言若已被改成该布局，请在「设置 → 时间和语言 → 语言」里改回，或重新登录。
-备份文件 `%TEMP%\cx-fake-ime-e0f00804.json` 记录安装前的键值与 Preload 快照。
+备份文件 `%TEMP%\cx-fake-ime-<klid>.json` 记录安装前的键值与 Preload 快照。
