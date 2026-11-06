@@ -76,7 +76,8 @@ pwsh -File .\Install-FakeInputMethod.ps1 -Uninstall
 ## 已验证 / 未验证
 
 CI（`.github/workflows/ci.yml` 的 `windows-fake-ime` job）在管理员 `windows-latest` 上执行完整链路：
-编译 → 安装 → 64 位复核 → **32 位 PowerShell 复核（与 `CXExam.exe` 同位数）** → 卸载 → 确认回退到未就绪。
+编译 → 记录安装前基线 → 安装 → 64 位复核 → **32 位 PowerShell 复核（与 `CXExam.exe` 同位数）** → 卸载 →
+确认探针结果与安装前基线一致（runner 自带 IMM 输入法时不会是“未就绪”）。
 本机只读验证过：
 
 - `GetKeyboardLayoutList` 返回的是**会话级共享**列表：一个进程 `LoadKeyboardLayoutW`
