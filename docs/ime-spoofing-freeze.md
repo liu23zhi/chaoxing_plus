@@ -75,7 +75,40 @@
 4. 不要在 CI 里安装语言包：改为使用系统自带的语言支持，或指向自托管 runner；
 5. 具体实现细节见本文第 2 节的事实清单，不要重复已验证失败的写法。
 
-## 7. 相关提交
+## 7. 当前情况（截至 2026-11-06）
+
+运行环境与实测结论，逐条记录，避免以后重复投入：
+
+1. **CI 机器缺语言环境**：GitHub hosted `windows-latest` 是 Windows Server 2025（build 26100），
+   但只有 en-US，`Get-WindowsCapability -Online -Name Language.Basic~~~zh-CN~0.0.1.0` 初始为 `NotPresent`。
+   没有 zh-CN 语言支持，legacy IMM 的 IME 管理器根本不会工作。
+2. **语言包可以离线装，但装了也不够**：用仓库内置的
+   `WinSrv2025-zhCN-LanguagePack.zip`（已删除，约 222 MB）解压后跑厂商的
+   `Install-zhCN-Language.ps1 -NoReboot`，`dism /Add-Package` + `dism /Add-Capability … /Source … /LimitAccess`
+   能把状态变成 `Language.Basic~~~zh-CN = Installed`（run 42241562100 已验证），
+   但同一会话里 IME 仍然不可用。
+3. **安装必须重启才生效**：语言包改的是系统区域设置（ACP）与语言组，这些值在**启动时**初始化：
+   - `Set-WinSystemLocale zh-CN` 写入 `HKLM\SYSTEM\CurrentControlSet\Control\Nls\CodePage` 的 `ACP=936`，
+     本次启动内 `GetACP()` 仍是 1252；
+   - 用户语言列表（`Set-WinUserLanguageList`）要重新登录才完整生效，DISM 自己也提示
+     "If the Windows Display Language has changed, it will take effect after the next sign-in"。
+4. **hosted runner 不能重启后继续**：一 job 一台一次性 VM，`shutdown /r` 会杀掉 runner 与 job 进程，
+   GitHub 没有"重启后续跑同一 job"的机制；把安装与验证拆成两个 job 也拿不到同一台机器。
+5. **同一会话里的具体表现**（可复现）：
+   - `activated built-in zh-CN layout 0x08040804` —— 基础布局能进会话；
+   - `ImmInstallIMEW failed (error 0: The operation completed successfully.)` —— 官方安装入口返回 `NULL`；
+   - 手写 `E0F00804` 布局后 `LoadKeyboardLayoutW failed (error 1419: Hot key is not registered.)`；
+   - `GetKeyboardLayoutList` 里始终没有 `E0xxxxxx` 布局，`ImmGetDescriptionW` 自然读不到描述。
+6. **本机也没能验证成功路径**：开发机是 zh-CN（不需要语言包），但当前会话**不是管理员**，
+   写 `HKLM` 与 `SysWOW64` 会返回退出码 2，因此"zh-CN + 管理员 + 已重启"下的真实结果
+   **尚未取得证据**，不能写成"已验证可用"。
+7. **CI 现在的行为**：不再安装语言包、不再安装/验证输入法；`windows-fake-ime` job 已删除，
+   桌面准备只做只读 IMM 探针并记 `stand-in-frozen`，客户端提示"未检测到支持的输入法"时按确认框流程继续。
+
+结论：**在当前可控环境（hosted runner + 无管理员本机）里，这条路走不通**；要复活必须换
+"已装 zh-CN 且已重启"的机器，见第 6 节。
+
+## 8. 相关提交
 
 ```
 git log --oneline --grep 伪装输入法
