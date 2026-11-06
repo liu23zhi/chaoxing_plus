@@ -34,7 +34,9 @@ zh-CN 机器得到 `E0F00804`，纯英文 runner 得到 `E0F00409`，这样同�
 | `cxime.c` | 最小 IME32 模块源码（x86 / x64 通用） |
 | `cxime.def` | 导出表，保证导出名不带 stdcall 修饰 |
 | `build-cxime.ps1` | 用 MSVC 编译 `build\cxime32.dll`、`build\cxime64.dll`（仓库不携带预编译产物，CI 现场编译） |
+| `cxime.rc` | VERSIONINFO 资源（缺它 `LoadKeyboardLayoutW` 会返回 1813） |
 | `Install-FakeInputMethod.ps1` | 安装 / 验证 / 卸载 |
+| `langpack/WinSrv2025-zhCN-LanguagePack.zip` | Windows Server 2025 zh-CN 语言包（Git LFS，~222 MB）：CI 用它装东亚语言支持 |
 
 ## 使用
 
@@ -83,24 +85,22 @@ pwsh -File .\Install-FakeInputMethod.ps1 -Uninstall
 CI（`.github/workflows/ci.yml` 的 `windows-fake-ime` job）在管理员 runner 上执行完整链路：
 编译 → **上传 `cx-fake-ime-modules` artifact** → 记录安装前基线 → 安装 → 64 位复核 →
 **32 位 PowerShell 复核（与 `CXExam.exe` 同位数）** → 卸载 → 确认探针结果与安装前基线一致。
-真实客户端 job 用 `actions/download-artifact` 把该 artifact 解到 `fake-ime/build`，直接复用现成模块，
+真实客户端 job 用 `actions/download-artifact` 把该 artifact 解到 `tools/fake-ime/build`，直接复用现成模块，
 不再重复编译；artifact 缺失时才由准备脚本现场编译兜底。
 
 ### legacy IMM 需要东亚语言支持
 
 MSDN 对 [`ImmInstallIMEW`](https://learn.microsoft.com/en-us/windows/win32/api/imm/nf-imm-imminstallimew)
 的最低要求写的是 “Windows XP [desktop apps only], **East Asian language support installed**”。
-hosted `windows-latest` 只有 en-US（`Language.Basic~~~zh-CN = NotPresent`），因此在它上面：
+hosted `windows-latest` 只有 en-US（`Language.Basic~~~zh-CN = NotPresent`）。job 会用仓库内置的 `langpack/WinSrv2025-zhCN-LanguagePack.zip` 解压后按内置安装脚本的顺序执行 `dism /Add-Package` 与 `dism /Add-Capability ... /Source:<repo> /LimitAccess`（各自 900 秒上限），仍然不可用时才降级；在没装成功的机器上：
 
 - `ImmInstallIMEW` 返回 `NULL` 且 `GetLastError()=0`；
 - 手写 `E0xx` 布局后 `LoadKeyboardLayoutW` 返回 `1419 ERROR_HOTKEY_NOT_REGISTERED`；
 - 即使先用 `KLF_ACTIVATE` 载入 `00000804` 基础布局也无济于事（缺的是语言载荷，不是布局键）。
 
-这不是脚本缺陷。job 会先用 `Add-WindowsCapability -Online -Name Language.Basic~~~zh-CN~0.0.1.0` **尝试安装**
-语言载荷（后台作业、300 秒上限，超时只告警），装不上再查 `Language.Basic~~~zh-CN`：不是 `Installed` 就打
-warning 并跳过安装/复核（`CX_FAKE_IME_HOST=0`）；想真验证就把仓库变量 `FAKE_IME_RUNNER` 指向带 zh-CN 的
-self-hosted runner，例如 `["self-hosted","windows","zh-cn"]`。桌面准备遇到同一限制时记录
-`stand-in-host-unavailable`。
+这不是脚本缺陷：装完语言包再查 `Language.Basic~~~zh-CN`，仍不是 `Installed` 就打 warning 并跳过安装/复核
+（`CX_FAKE_IME_HOST=0`）。想真验证也可以把仓库变量 `FAKE_IME_RUNNER` 指向带 zh-CN 的 self-hosted runner，
+例如 `["self-hosted","windows","zh-cn"]`。桌面准备遇到同一限制时记录 `stand-in-host-unavailable`。
 
 本机只读验证过：
 

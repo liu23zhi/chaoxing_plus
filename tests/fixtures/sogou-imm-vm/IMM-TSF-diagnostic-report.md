@@ -116,7 +116,7 @@ TSF profile 的 `Enable` 值。
 
 结论：可行，但不能只写注册表。
 
-最小可行组合（本目录 `fake-ime/` 已实现）：
+最小可行组合（`tools/fake-ime/` 已实现）：
 
 1. 一个导出完整 IME32 接口、`ImeInquire` 返回 TRUE 的模块（`cxime.ime`，x86 给客户端，
    x64 给系统；也可用现成的 `SogouPY.ime`）；
@@ -132,7 +132,7 @@ TSF profile 的 `Enable` 值。
 - 只建注册表项、`IME file` 指向不存在的文件：`ImmGetImeInfoEx` → `ImmLoadLayout` 失败；
 - 把 `imm32.dll` 放到客户端目录：`imm32` 在 KnownDLLs 名单里，永远从 System32 加载。
 
-用法与回滚见 `fake-ime/README.md`；`Install-FakeInputMethod.ps1 -Verify` 可只读复核，
+用法与回滚见 `tools/fake-ime/README.md`；`Install-FakeInputMethod.ps1 -Verify` 可只读复核，
 安装/卸载需要管理员（写 `HKLM`、`SysWOW64`、`System32`）。
 
 ## 七、本报告的验证边界
