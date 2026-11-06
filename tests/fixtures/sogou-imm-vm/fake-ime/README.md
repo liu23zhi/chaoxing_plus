@@ -28,7 +28,7 @@
 | --- | --- |
 | `cxime.c` | 最小 IME32 模块源码（x86 / x64 通用） |
 | `cxime.def` | 导出表，保证导出名不带 stdcall 修饰 |
-| `build-cxime.ps1` | 用 MSVC 编译 `build\cxime32.dll`、`build\cxime64.dll` |
+| `build-cxime.ps1` | 用 MSVC 编译 `build\cxime32.dll`、`build\cxime64.dll`（仓库不携带预编译产物，CI 现场编译） |
 | `Install-FakeInputMethod.ps1` | 安装 / 验证 / 卸载 |
 
 ## 使用
@@ -76,8 +76,10 @@ pwsh -File .\Install-FakeInputMethod.ps1 -Uninstall
 ## 已验证 / 未验证
 
 CI（`.github/workflows/ci.yml` 的 `windows-fake-ime` job）在管理员 `windows-latest` 上执行完整链路：
-编译 → 记录安装前基线 → 安装 → 64 位复核 → **32 位 PowerShell 复核（与 `CXExam.exe` 同位数）** → 卸载 →
-确认探针结果与安装前基线一致（runner 自带 IMM 输入法时不会是“未就绪”）。
+编译 → **上传 `cx-fake-ime-modules` artifact** → 记录安装前基线 → 安装 → 64 位复核 →
+**32 位 PowerShell 复核（与 `CXExam.exe` 同位数）** → 卸载 → 确认探针结果与安装前基线一致。
+真实客户端 job 用 `actions/download-artifact` 把该 artifact 解到 `fake-ime/build`，直接复用现成模块，
+不再重复编译；artifact 缺失时才由准备脚本现场编译兜底。
 本机只读验证过：
 
 - `GetKeyboardLayoutList` 返回的是**会话级共享**列表：一个进程 `LoadKeyboardLayoutW`
