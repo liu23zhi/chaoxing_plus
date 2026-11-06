@@ -493,7 +493,7 @@ WinForms 窗口在 `Shown` 时显式调用 `ShowWindow` 并请求前台显示：
 | `--inject-mode auto\|cdp-port\|cdp-pipe\|dll-proxy\|input` | `auto` | 选择注入方式。显式 `--inject-mode auto` 时若客户端目录存在我们安装的代理（`cxhook-proxy.marker`），自动改走 `dll-proxy`；不传 `--inject-mode` 等同于 `cdp-port`；`cdp-pipe` 已与端口通道对齐（bootstrap + bundle + 配置同步），`input` 已于 2026-10-30 按用户决定放弃开发，仅保留拒绝行为，不再规划实现。 |
 | `--inject-proxy-dir <dir>` | 客户端目录 | `dll-proxy` 模式检查 `winmm.dll` 的目录；缺失时提示放置路径，已就位时说明进程内 hook 尚未驱动。 |
 | `--show-inject-reasons` | 关闭 | 选择窗口在注入方式被灰化时显示具体原因（加壳 / 非 x86 / 目录不可写 / 无载体 / 缺代理 DLL）。默认不显示，避免正常启动时被提示行干扰；调试入口 `start-windows-debug.cmd` 已带上这个参数。 |
-| `--panel-all-pages` | 关闭 | 非考试页也挂载悬浮面板，用于确认注入是否生效；默认仍只在考试路径显示。 |
+| `--panel-all-pages` | 关闭 | 非考试页也挂载悬浮面板，用于确认注入是否生效；默认仍只在考试路径显示。宿主在每次 bootstrap 注入后补 `Runtime.evaluate("window.__CX_WIN_PANEL_ALL_PAGES__=true")`（`cdp-pipe` 与 `cdp-port` 两条链路都覆盖）。真实客户端 CI 的注入脚本默认带 `-PanelAllPages`：`CXExam.exe` 在考试窗口初始化时调用 `SetWindowDisplayAffinity(hwnd, WDA_MONITOR)`（IG5：`0x44d510` / 调用者 `0x4d1120`，关闭路径 `0x44d550`），进入考试后的 GDI 拷屏必为纯黑，人工确认只能依赖受保护之前的页面。 |
 | `--pipe-test` | 关闭 | 诊断：用匿名管道启动 `cmd /c echo` 并读回 stdout，验证宿主可继承句柄启动子进程。 |
 | `--install-proxy [--proxy-source <winmm.dll>]` | 关闭 | 把 winmm 代理安装到 `--client` 推导出的客户端目录；源默认取宿主同目录 `winmm.dll`。`auto` 检测到代理后会自动改走"代理追加调试开关"的注入链路。 |
 | `--uninstall-proxy` | 关闭 | 仅当客户端目录存在安装标记 `cxhook-proxy.marker` 时删除 `winmm.dll` 与标记，避免误删第三方同名 DLL。 |
@@ -532,7 +532,7 @@ CDP 断开时关闭旧页面会话；target 仍存在则在下一轮枚举重新
 | `--panel-width <px>` | `460`，`320-800` | 设置面板宽度。 |
 | `--panel-theme <name>` | `pink` | 内置浅色主题：`pink`（默认）/`blue`/`green`。业务面板与 bootstrap 折叠壳使用同一色板并在共享设置热更新后重绘；未知名称回退 `pink`，自定义 CSS 不生效。 |
 | `--answer-mode auto\|manual` | `auto` | 自动模式按页面设置流程运行；manual 由快捷键为题目处理发放许可。 |
-| `--answer-key <shortcut>` | `F8` | 手动模式快捷键；示例 `Ctrl+Alt+Shift+S`。仅支持一个基础按键，可组合 Ctrl/Alt/Shift/Win。方向键推荐使用 `ArrowUp` / `ArrowDown` / `ArrowLeft` / `ArrowRight`，同时兼容 `Up` / `Down` / `Left` / `Right`。 |
+| `--answer-key <shortcut>` | `F8` | 手动模式快捷键；示例 `Ctrl+Alt+Shift+S`。仅支持一个基础按键，可组合 Ctrl/Alt/Shift/Win。**不能用客户端键盘钩子会吞掉的组合**（IG5 v4.1.4.25389：`FUN_00476d30` 安装会话级 `WH_KEYBOARD_LL`，`FUN_004774b0` 处理）：`Escape`（含 `Ctrl+Esc`/`Alt+Esc`）、`Ctrl+W`、`Alt+Tab`/`Ctrl+Alt+Tab`、`Alt+Space`、`Alt+F1`–`Alt+F24`、任何含 `Win` 的组合——这些按键在到达页面之前就被拦下，配了也按不动，宿主/生成器会直接拒绝。方向键推荐使用 `ArrowUp` / `ArrowDown` / `ArrowLeft` / `ArrowRight`，同时兼容 `Up` / `Down` / `Left` / `Right`。 |
 | `--answer-threads <n>` | `4`，`1-4` | 每次手动许可放行/并行处理的题目数量；超出范围或非整数直接报错。同一分页任务保留未用许可，新建重答任务不继承旧批次余量。 |
 | `--answer-countdown <sec>` | `5`，整数 `0-3600` | 自动模式开始前的倒计时秒数；`0` 不自动倒计时，等待用户确认。 |
 | `--answer-retry <n>` | 默认 `3`，`0-20` | 设置单题额外重试次数；必须为整数，`0` 表示不额外重试。 |
