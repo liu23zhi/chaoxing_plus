@@ -80,11 +80,26 @@ pwsh -File .\Install-FakeInputMethod.ps1 -Uninstall
 
 ## 已验证 / 未验证
 
-CI（`.github/workflows/ci.yml` 的 `windows-fake-ime` job）在管理员 `windows-latest` 上执行完整链路：
+CI（`.github/workflows/ci.yml` 的 `windows-fake-ime` job）在管理员 runner 上执行完整链路：
 编译 → **上传 `cx-fake-ime-modules` artifact** → 记录安装前基线 → 安装 → 64 位复核 →
 **32 位 PowerShell 复核（与 `CXExam.exe` 同位数）** → 卸载 → 确认探针结果与安装前基线一致。
 真实客户端 job 用 `actions/download-artifact` 把该 artifact 解到 `fake-ime/build`，直接复用现成模块，
 不再重复编译；artifact 缺失时才由准备脚本现场编译兜底。
+
+### legacy IMM 需要东亚语言支持
+
+MSDN 对 [`ImmInstallIMEW`](https://learn.microsoft.com/en-us/windows/win32/api/imm/nf-imm-imminstallimew)
+的最低要求写的是 “Windows XP [desktop apps only], **East Asian language support installed**”。
+hosted `windows-latest` 只有 en-US（`Language.Basic~~~zh-CN = NotPresent`），因此在它上面：
+
+- `ImmInstallIMEW` 返回 `NULL` 且 `GetLastError()=0`；
+- 手写 `E0xx` 布局后 `LoadKeyboardLayoutW` 返回 `1419 ERROR_HOTKEY_NOT_REGISTERED`；
+- 即使先用 `KLF_ACTIVATE` 载入 `00000804` 基础布局也无济于事（缺的是语言载荷，不是布局键）。
+
+这不是脚本缺陷。job 会先查 `Language.Basic~~~zh-CN`，不是 `Installed` 就打 warning 并跳过安装/复核
+（`CX_FAKE_IME_HOST=0`）；想真验证就把仓库变量 `FAKE_IME_RUNNER` 指向带 zh-CN 的 self-hosted runner，例如
+`["self-hosted","windows","zh-cn"]`。桌面准备遇到同一限制时记录 `stand-in-host-unavailable`。
+
 本机只读验证过：
 
 - `GetKeyboardLayoutList` 返回的是**会话级共享**列表：一个进程 `LoadKeyboardLayoutW`
